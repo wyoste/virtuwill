@@ -1,0 +1,35 @@
+<h2>VirtuWill</h2>
+<p class="muted">Local-first chat → FastAPI (localhost:8001) → Ollama LLaVA (localhost).</p>
+
+<div class="chat card" style="padding:30px 20px;">
+  <div class="chat-header">
+    <div class="status" id="status">placeholder for api status</div>
+    <div id="messages" class="messages" aria-label="Chat messages"></div>
+    <div id="filechips" class="filechips" aria-label="Attachments"></div>
+
+  </div>
+
+  <div id="messages" class="messages" aria-label="Chat messages"></div>
+
+  <form id="composer" class="composer" autocomplete="off">
+    <label class="attach">
+      <input id="file" type="file"
+        accept=".jpg,.jpeg,.png,.txt,.csv,.docx"
+        multiple />
+      Attach
+    </label>
+
+    <textarea
+      id="input"
+      rows="4"
+      placeholder="Message VirtuWill…">
+        
+      </textarea>
+    <button type="submit">Send</button>
+  </form>
+
+  <div class="muted" style="padding:10px 14px; font-size:12px;">
+    Attachments: jpg/jpeg/png/txt/csv/docx • Images can be interpreted by LLaVA; docs/text will be sent as extracted text (backend).
+  </div>
+</div>
+

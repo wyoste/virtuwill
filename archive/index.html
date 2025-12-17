@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Yoste</title>
+
+  <style>
+    :root { color-scheme: light dark; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      background: #0b0c10;
+      color: #e8e8e8;
+    }
+
+    /* ===== Sticky Banner + Nav ===== */
+    .banner {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: rgba(10, 12, 16, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255,255,255,.12);
+    }
+
+    .banner-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .title {
+      font-size: 20px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin: 0;
+    }
+
+    nav {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    nav button {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,.18);
+      color: inherit;
+      padding: 6px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 13px;
+      opacity: 0.85;
+    }
+
+    nav button.active,
+    nav button:hover {
+      background: rgba(255,255,255,.12);
+      opacity: 1;
+    }
+
+    /* ===== Page Layout ===== */
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 20px 16px;
+    }
+
+    .page {
+      display: none;
+      animation: fade 0.15s ease-in;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    @keyframes fade {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ===== Chat Styles ===== */
+    .chat {
+      height: calc(100vh - 170px);
+      min-height: 520px;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .bubble {
+      max-width: 85%;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.25);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .me { align-self: flex-end; background: rgba(99,102,241,.22); }
+    .ai { align-self: flex-start; background: rgba(34,197,94,.14); }
+
+    .composer {
+      display: flex;
+      gap: 10px;
+      padding: 12px;
+      border-top: 1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.20);
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: inherit;
+      outline: none;
+    }
+
+    .composer button {
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.10);
+      color: inherit;
+      cursor: pointer;
+    }
+
+    /* ===== Simple Content Styling ===== */
+    h2 { margin-top: 0; }
+    .muted { opacity: .75; }
+  </style>
+</head>
+
+<body>
+
+  <!-- ===== Banner + Navigation ===== -->
+  <header class="banner">
+    <div class="banner-inner">
+      <h1 class="title">Yoste</h1>
+      <nav>
+        <button data-page="home" class="active">Home</button>
+        <button data-page="music">Music</button>
+        <button data-page="travel">Travel</button>
+        <button data-page="resume">Resume</button>
+        <button data-page="garden">Garden</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ===== Pages ===== -->
+  <main class="wrap">
+
+    <!-- Home / Chat -->
+    <section id="home" class="page active">
+      <h2>VirtuWill</h2>
+      <p class="muted">Local-first creative assistant powered by your journals and LLaVA.</p>
+
+      <div class="chat">
+        <div id="messages" class="messages"></div>
+        <form id="composer" class="composer" autocomplete="off">
+          <input id="input" type="text" placeholder="Ask something…" />
+          <button type="submit">Send</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Music -->
+    <section id="music" class="page">
+      <h2>Music</h2>
+      <p>Albums, demos, lyrics, and works in progress.</p>
+      <ul>
+        <li>Song drafts</li>
+        <li>Lyric notebooks</li>
+        <li>Future releases</li>
+      </ul>
+    </section>
+
+    <!-- Travel -->
+    <section id="travel" class="page">
+      <h2>Travel</h2>
+      <p>Trips, reflections, photos, and journals.</p>
+    </section>
+
+    <!-- Resume -->
+    <section id="resume" class="page">
+      <h2>Resume</h2>
+      <p>Professional experience, projects, and skills.</p>
+      <p class="muted">(Later: PDF embed or structured resume)</p>
+    </section>
+
+    <!-- Garden -->
+    <section id="garden" class="page">
+      <h2>Garden</h2>
+      <p>Zone 8b garden plans, experiments, and progress notes.</p>
+    </section>
+
+  </main>
+
+  <!-- ===== JS ===== -->
+  <script>
+    const pages = document.querySelectorAll(".page");
+    const buttons = document.querySelectorAll("nav button");
+
+    buttons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        buttons.forEach(b => b.classList.remove("active"));
+        pages.forEach(p => p.classList.remove("active"));
+
+        btn.classList.add("active");
+        document.getElementById(btn.dataset.page).classList.add("active");
+      });
+    });
+
+    /* ---- Minimal local chat stub (wire to backend later) ---- */
+    const messagesEl = document.getElementById("messages");
+    const form = document.getElementById("composer");
+    const input = document.getElementById("input");
+
+    function addBubble(text, who) {
+      const div = document.createElement("div");
+      div.className = `bubble ${who}`;
+      div.textContent = text;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    addBubble(
+      "Welcome to VirtuWill.\nAsk about music, memories, or ideas.",
+      "ai"
+    );
+
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      addBubble(text, "me");
+      setTimeout(() => {
+        addBubble("Response placeholder (wire to LLaVA backend next).", "ai");
+      }, 300);
+    });
+  </script>
+
+</body>
+</html>

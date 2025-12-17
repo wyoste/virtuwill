@@ -1,0 +1,225 @@
+:root { color-scheme: light dark; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  background: #0b0c10;
+  color: #e8e8e8;
+}
+
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: rgba(10, 12, 16, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+
+.banner-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.title {
+  font-size: 20px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.nav {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.nav button {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.18);
+  color: inherit;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.nav button.active,
+.nav button:hover {
+  background: rgba(255,255,255,.12);
+  opacity: 1;
+}
+
+.wrap {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 20px 16px 60px;
+}
+
+.page { animation: fade .15s ease-in; }
+@keyframes fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+h2 { margin-top: 0; }
+.muted { opacity: .75; }
+
+.attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.10);
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+}
+.attach:hover { background: rgba(255,255,255,.14); }
+.attach input { display: none; }
+
+/* ===============================
+   VirtuWill Chat Card (Pinned Composer)
+   Matches DOM:
+   <div class="chat card">
+     <div class="chat-header">
+       <div id="status" class="status"></div>
+       <div id="messages" class="messages"></div>
+       <div id="filechips" class="filechips"></div>
+     </div>
+     <form id="composer" class="composer">
+       <label class="attach"><input .../></label>
+       <textarea id="input"></textarea>
+       <button type="submit">Send</button>
+     </form>
+     <div class="muted">...</div>
+   </div>
+   =============================== */
+
+/* The central black square */
+.chat.card{
+  position: relative;
+  width: 800px;
+  height: 500px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.35);
+  overflow: hidden;
+}
+
+/* Header area that contains status + messages + chips */
+.chat.card .chat-header{
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Status line */
+.chat.card .status{
+  padding: 14px 16px 8px;
+  opacity: .85;
+  font-size: 14px;
+}
+
+/* Scrollable messages area (make room for pinned composer) */
+.chat.card .messages{
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 16px 170px; /* IMPORTANT: space so messages don't hide behind composer */
+}
+
+/* Optional attachments row (chips) */
+.chat.card .filechips{
+  padding: 6px 16px 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Composer pinned to the bottom of the card */
+.chat.card .composer{
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: end;
+
+  padding: 14px 16px;
+  border-top: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(12px);
+}
+
+/* Attach button */
+.chat.card .composer .attach{
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  font-size: 13px;
+}
+.chat.card .composer .attach:hover{
+  background: rgba(255,255,255,.16);
+}
+.chat.card .composer .attach input{
+  display: none;
+}
+
+/* Text input */
+.chat.card .composer textarea{
+  width: 100%;
+  min-height: 96px;
+  max-height: 180px;
+  resize: none;
+
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+
+  color: inherit;
+  font-size: 15px;
+  line-height: 1.45;
+  outline: none;
+}
+.chat.card .composer textarea::placeholder{
+  opacity: .55;
+}
+
+/* Send button */
+.chat.card .composer button{
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.10);
+  cursor: pointer;
+  font-size: 14px;
+}
+.chat.card .composer button:hover{
+  background: rgba(255,255,255,.16);
+}
+
+/* Optional: footer text under the card (your "Attachments: ..." line)
+   If this is INSIDE .chat.card, it will overlap—so keep it outside, or hide it. */
+.chat.card .muted{
+  display: none;
+}

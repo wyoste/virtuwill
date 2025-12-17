@@ -1,0 +1,18 @@
+#ReadMe
+
+virtuwill/
+  index.html  This is the shell
+  pages/
+    home.html
+    music.html
+    travel.html
+    resume.html
+    garden.html
+    journal.html
+  assets/
+    css/
+      base.css
+      journal.css
+    js/
+      app.js
+      journal.js

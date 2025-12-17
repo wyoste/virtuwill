@@ -1,0 +1,166 @@
+/* Journal page only */
+.journal-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 12px 0 16px;
+}
+
+.journal-actions button,
+.journal-actions input[type="date"]{
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.10);
+  color: inherit;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.journal-actions input[type="date"]{
+  background: rgba(255,255,255,.06);
+}
+
+.timeline{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+/* Card */
+.card{
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.06);
+  border-radius:16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.25);
+  overflow:hidden;
+}
+
+.card-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:14px 16px;
+  border-bottom:1px solid rgba(255,255,255,.10);
+  cursor:pointer;
+  user-select:none;
+}
+.card-header:hover{ background:rgba(255,255,255,.04); }
+
+.date{ font-weight:600; letter-spacing:.2px; }
+
+.meta{
+  display:flex; gap:10px; align-items:center;
+  opacity:.8; font-size:12px;
+}
+.pill{
+  padding:4px 8px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(0,0,0,.18);
+  opacity:.9;
+}
+
+.card-body{
+  display:none;
+  padding:16px;
+  gap:14px;
+}
+.card.open .card-body{ display:grid; }
+
+.section-title{
+  margin:0 0 8px 0;
+  font-size:13px;
+  opacity:.85;
+  letter-spacing:.2px;
+  text-transform:uppercase;
+}
+
+/* Quote */
+.quote{
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(0,0,0,.20);
+  border-radius:14px;
+  padding:12px;
+}
+.quote-edit{
+  min-height:44px;
+  font-size:16px;
+  font-style:italic;
+  line-height:1.35;
+  outline:none;
+  white-space:pre-wrap;
+}
+.placeholder:empty:before{ content: attr(data-placeholder); opacity:.45; }
+
+/* Meals */
+.meals{
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(0,0,0,.20);
+  border-radius:14px;
+  padding:12px;
+}
+.meals table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+  overflow:hidden;
+  border-radius:12px;
+}
+.meals th, .meals td{
+  border:1px solid rgba(255,255,255,.14);
+  padding:10px;
+  text-align:left;
+  vertical-align:top;
+  font-size:13px;
+}
+.meals th{ background:rgba(255,255,255,.06); width:33.33%; }
+.meals td{ background:rgba(0,0,0,.12); }
+.cell-edit{ min-height:38px; outline:none; white-space:pre-wrap; }
+
+/* Editor */
+.entry{
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(0,0,0,.20);
+  border-radius:14px;
+  overflow:hidden;
+}
+.ribbon{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px;
+  border-bottom:1px solid rgba(255,255,255,.10);
+  background:rgba(0,0,0,.15);
+  flex-wrap:wrap;
+}
+.btn-group{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.tool{
+  padding:8px 10px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,.16);
+  background:rgba(255,255,255,.08);
+  font-size:12px;
+  cursor:pointer;
+}
+.tool:hover{ background:rgba(255,255,255,.12); }
+.tool.active{ background:rgba(99,102,241,.20); border-color:rgba(99,102,241,.35); }
+
+.editor-area{ padding:12px; }
+.editor{
+  min-height:160px;
+  outline:none;
+  line-height:1.45;
+  font-size:14px;
+  white-space:pre-wrap;
+}
+
+/* Column modes */
+.cols-1 .editor{ column-count:1; column-gap:18px; }
+.cols-2 .editor{ column-count:2; column-gap:18px; }
+.cols-3 .editor{ column-count:3; column-gap:18px; }
+@media (max-width:820px){
+  .cols-2 .editor, .cols-3 .editor{ column-count:1; }
+}
