@@ -1,3 +1,4 @@
+import { initChatPage, teardownChatPage } from "./chat.js";
 import { initJournalPage, teardownJournalPage } from "./journal.js";
 
 const pageEl = document.getElementById("page");
@@ -10,8 +11,9 @@ function setActive(route) {
 }
 
 async function loadPage(route) {
-  // cleanup (journal has listeners/state)
+  // cleanup
   if (currentRoute === "journal") teardownJournalPage();
+  if (currentRoute === "home") teardownChatPage();
 
   currentRoute = route;
   setActive(route);
@@ -25,6 +27,7 @@ async function loadPage(route) {
 
   // initialize page-specific logic
   if (route === "journal") initJournalPage();
+  if (route === "home") initChatPage();
 }
 
 function routeFromHash() {

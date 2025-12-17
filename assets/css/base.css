@@ -154,7 +154,7 @@ h2 { margin-top: 0; }
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 12px;
-  align-items: end;
+  align-items: stretch;
 
   padding: 14px 16px;
   border-top: 1px solid rgba(255,255,255,.10);
@@ -185,7 +185,6 @@ h2 { margin-top: 0; }
 
 /* Text input */
 .chat.card .composer textarea{
-  width: 100%;
   min-height: 96px;
   max-height: 180px;
   resize: none;
@@ -207,12 +206,14 @@ h2 { margin-top: 0; }
 /* Send button */
 .chat.card .composer button{
   height: 44px;
-  padding: 0 18px;
+  padding-right: 18px;
+  padding-left: 18px;
   border-radius: 14px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(255,255,255,.10);
   cursor: pointer;
   font-size: 14px;
+  align-items: right;
 }
 .chat.card .composer button:hover{
   background: rgba(255,255,255,.16);
