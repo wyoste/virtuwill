@@ -789,5 +789,11 @@ def acct_template_post():
 
 # ── Run ────────────────────────────────────────────────────────────────────────
 
+
 if __name__ == "__main__":
-    app.run(debug=config.FLASK_DEBUG, host="0.0.0.0", port=5000)
+    port = int(os.getenv("DATABRICKS_APP_PORT", 5000))
+    app.run(
+        debug=config.FLASK_DEBUG,
+        host="0.0.0.0",
+        port=port
+    )
