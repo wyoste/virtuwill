@@ -332,6 +332,56 @@ window.VW.Admin = (() => {
     }
   }
 
+  async function setMusicPublished(trackId, published, title = '', src = '', album = '') {
+    try {
+      const r = await fetch('/api/music/catalog');
+      const data = await r.json();
+      const catalogTracks = data.tracks || data || [];
+      const id = trackId || src || title;
+      const idx = catalogTracks.findIndex(t =>
+        t.id === id ||
+        (src && t.src === src) ||
+        ((t.title || '').toLowerCase() === (title || '').toLowerCase())
+      );
+
+      if (idx >= 0) {
+        catalogTracks[idx] = { ...catalogTracks[idx], published };
+      } else {
+        catalogTracks.push({
+          id: id || ('t' + Date.now()),
+          title: title || 'Untitled',
+          year: new Date().getFullYear(),
+          genre: 'Acoustic',
+          story: '',
+          location: '',
+          key: '',
+          bpm: null,
+          sections: [],
+          chords: '',
+          lyrics: '',
+          tabs: '',
+          published,
+          src: src || null,
+          album: album || '',
+        });
+      }
+
+      const save = await fetch('/api/music/catalog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracks: catalogTracks }),
+      });
+      if (!save.ok) throw new Error('Save failed');
+
+      _loadMusicSection();
+      _fetchMusicCount();
+      window.toast?.(published ? 'Song set live' : 'Song moved to draft', 'success', 1800);
+    } catch {
+      window.toast?.('Could not update publish status', 'error');
+      _loadMusicSection();
+    }
+  }
+
   // ════════════════════════════════════════════════════════════
   //  SECTION: Portfolio
   // ════════════════════════════════════════════════════════════
@@ -668,6 +718,7 @@ window.VW.Admin = (() => {
     const chords  = t.chords   || '';
     const tabs    = t.tabs     || '';
     const lyrics  = t.lyrics   || '';
+    const published = t.published !== false;
 
     // "Behind the Music" only shown if at least one field has content
     const hasBehind = story || location || chords || tabs || lyrics;
@@ -681,6 +732,10 @@ window.VW.Admin = (() => {
     ].filter(Boolean).join('');
 
     const behindId = 'btm-' + id;
+    const jsId = _js(id);
+    const jsTitle = _js(t.title || t.name || '');
+    const jsSrc = _js(t.url || t.src || '');
+    const jsAlbum = _js(t._album || '');
 
     return `
       <div class="adm-mu-card">
@@ -696,6 +751,13 @@ window.VW.Admin = (() => {
             </div>
           </div>
           <div class="adm-mu-actions">
+            <label class="adm-toggle-label adm-mu-publish-toggle"
+              title="${published ? 'Live — visible to site visitors' : 'Draft — hidden from site visitors'}">
+              <input type="checkbox" class="adm-toggle-cb" ${published ? 'checked' : ''}
+                onchange="VW.Admin.setMusicPublished('${jsId}', this.checked, '${jsTitle}', '${jsSrc}', '${jsAlbum}')"/>
+              <span class="adm-toggle-track"></span>
+              <span class="adm-toggle-text">${published ? 'Live' : 'Draft'}</span>
+            </label>
             ${hasBehind ? `
             <button class="adm-mu-btm-toggle" onclick="VW.Admin.toggleBtm('${behindId}')"
               id="toggle-${behindId}" aria-expanded="false">
@@ -703,10 +765,7 @@ window.VW.Admin = (() => {
               <span class="adm-mu-chev">›</span>
             </button>` : ''}
             <button class="adm-icon-btn" title="Edit song"
-              onclick="${t._hasCatalogEntry
-                ? `VW.Music.openEditModal('${id}')`
-                : `VW.Music.openEditForTrack('${_esc(t.title||t.name||'')}','${_esc(t.url||t.src||'')}','${_esc(t._album||'')}')`
-              }">✏️</button>
+              onclick="VW.Music.openAdminEditor('${jsId}', '${jsTitle}', '${jsSrc}', '${jsAlbum}')">✏️</button>
             ${t._hasCatalogEntry ? `<button class="adm-icon-btn danger" onclick="VW.Music.deleteTrack('${id}')" title="Delete song">🗑</button>` : ''}
           </div>
         </div>
@@ -766,6 +825,7 @@ window.VW.Admin = (() => {
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   const _esc = window.VW?.esc || (s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'));
+  const _js = s => _esc(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, '\\n');
 
 
   // ── Account template management ──────────────────────────────────────────────
@@ -907,6 +967,7 @@ window.VW.Admin = (() => {
     _tmplDragStart, _tmplDragOver, _tmplDrop, _tmplDragEnd,
     addTravelPlace, addMapPin, deletePin,
     deletePortfolioItem, markNoteRead,
+    setMusicPublished,
     loadThread,
     _loadNotes, _loadChatHistory, _loadMusicSection, _loadPortfolioSection,
   };

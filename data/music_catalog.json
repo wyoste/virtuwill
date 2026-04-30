@@ -29,29 +29,63 @@
       "year": 2019
     },
     {
-      "id": "t1776994588911",
-      "title": "Ramen",
-      "year": 2026,
-      "genre": "Acoustic",
-      "story": "",
-      "location": "",
-      "key": "",
       "bpm": null,
+      "chords": "Verse 1:\nB-A-E x3\nCm-A-E",
+      "genre": "Acoustic",
+      "id": "t1776994588911",
+      "key": "",
+      "location": "",
+      "lyrics": "",
+      "published": false,
       "sections": [
         {
-          "id": "sec-1776994547938",
-          "type": "verse",
-          "label": "Verse 1",
           "chords": "B-A-E x3\nCm-A-E",
+          "id": "sec-1776994547938",
+          "label": "Verse 1",
           "lyrics": "",
-          "tabs": ""
+          "tabs": "",
+          "type": "verse"
         }
       ],
-      "chords": "Verse 1:\nB-A-E x3\nCm-A-E",
-      "lyrics": "",
+      "src": null,
+      "story": "",
       "tabs": "",
+      "title": "Ramen",
+      "year": 2026
+    },
+    {
+      "album": "",
+      "bpm": null,
+      "chords": "",
+      "genre": "Acoustic",
+      "id": "/static/audio/State of Mind - 9:1:19, 11.59 AM.mp3",
+      "key": "",
+      "location": "",
+      "lyrics": "",
       "published": false,
-      "src": null
+      "sections": [],
+      "src": "/static/audio/State of Mind - 9:1:19, 11.59 AM.mp3",
+      "story": "",
+      "tabs": "",
+      "title": "State of Mind - 9:1:19, 11.59 AM",
+      "year": 2026
+    },
+    {
+      "album": "",
+      "bpm": null,
+      "chords": "",
+      "genre": "Acoustic",
+      "id": "/static/audio/This life.mp3",
+      "key": "",
+      "location": "",
+      "lyrics": "",
+      "published": false,
+      "sections": [],
+      "src": "/static/audio/This life.mp3",
+      "story": "",
+      "tabs": "",
+      "title": "This life",
+      "year": 2026
     }
   ]
 }

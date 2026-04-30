@@ -738,6 +738,10 @@
   gap: 6px;
   flex-shrink: 0;
 }
+.adm-mu-publish-toggle {
+  margin-right: 4px;
+  white-space: nowrap;
+}
 
 /* Behind the Music toggle button */
 .adm-mu-btm-toggle {

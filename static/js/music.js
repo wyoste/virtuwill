@@ -192,14 +192,25 @@ window.VW.Music = (() => {
   function _isPublished(slide) {
     if (slide.kind === 'single') {
       const m = slide.meta;
-      return !m || !!m.published;  // no catalog entry → legacy track, show it
+      return !m || m.published !== false;  // no catalog entry/legacy metadata -> show it
     }
     if (slide.kind === 'album') {
       const cats = (slide.tracks || [])
         .map(t => _matchTrackMeta(t, slide.name)).filter(Boolean);
-      return cats.length === 0 || cats.some(t => t.published);
+      return cats.length === 0 || cats.some(t => t.published !== false);
     }
     return true;
+  }
+
+  function _isTrackPublished(track, albumName) {
+    const meta = _matchTrackMeta(track, albumName);
+    return !meta || meta.published !== false;
+  }
+
+  function _visibleAlbumTracks(slide) {
+    const all = slide.tracks || [];
+    if (window.VW?.Auth?.isAdmin?.()) return all;
+    return all.filter(t => _isTrackPublished(t, slide.name));
   }
 
   // ── Public entry point — applies auth filter ───────────────────────────────
@@ -230,7 +241,7 @@ window.VW.Music = (() => {
     const slides = _buildSlides();
     slides.forEach((slide, si) => {
       if (slide.kind === 'album') {
-        slide.tracks.forEach((t, ti) => {
+        _visibleAlbumTracks(slide).forEach((t, ti) => {
           if (!t.url) return;
           const meta  = _matchTrackMeta(t, slide.name);
           queue.push({
@@ -274,33 +285,7 @@ window.VW.Music = (() => {
     const n      = slides.length;
 
     const adminBar = isAdmin ? (() => {
-      // Show draft indicator if the current slide is unpublished
-      const isDraft = (() => {
-        if (slide.kind === 'single') {
-          const m = slide.meta;
-          return m && !m.published;
-        }
-        if (slide.kind === 'album') {
-          const cats = (slide.tracks || []).map(t => _matchTrackMeta(t, slide.name)).filter(Boolean);
-          return cats.length > 0 && cats.every(t => !t.published);
-        }
-        return false;
-      // ── Register dirty state ─────────────────────────────────────────────────────
-window.VW?.Dirty?.register?.('music', {
-  label: 'Music editor',
-  isDirty: () => {
-    const modal = document.getElementById('mu-upload-modal');
-    return modal?.classList.contains('open') ?? false;
-  },
-  save: async () => {
-    const modal = document.getElementById('mu-upload-modal');
-    if (modal?.classList.contains('open')) await window.VW.Music.saveTrackForm();
-  },
-});
-
-})();
       return `<div class="mu-admin-bar">
-        ${isDraft ? '<span class="mu-draft-badge">⚪ Draft — hidden from visitors</span>' : '<span class="mu-pub-badge">🟢 Published</span>'}
         <span style="font-size:12px;color:rgba(255,255,255,.5)">${n} release${n!==1?'s':''}</span>
         <button class="mu-add-btn" onclick="VW.Music.openUploadModal()">+ Upload</button>
       </div>`;
@@ -356,9 +341,10 @@ window.VW?.Dirty?.register?.('music', {
       overlayUrl   = slide.url;
       overlayTitle = _esc(meta?.title || slide.name);
     } else if (slide.kind === 'album' && slide.tracks?.length) {
-      const firstMeta = _matchTrackMeta(slide.tracks[0], slide.name);
-      overlayUrl   = slide.tracks[0].url;
-      overlayTitle = _esc(firstMeta?.title || slide.tracks[0].title);
+      const firstTrack = _visibleAlbumTracks(slide)[0];
+      const firstMeta = firstTrack ? _matchTrackMeta(firstTrack, slide.name) : null;
+      overlayUrl   = firstTrack?.url || '';
+      overlayTitle = _esc(firstMeta?.title || firstTrack?.title || '');
       overlayAlbum = _esc(slide.name);
     }
     const overlayPlaying = overlayUrl && currentTrack?.url === overlayUrl && isPlaying;
@@ -389,7 +375,8 @@ window.VW?.Dirty?.register?.('music', {
     if (!slide) return '';
 
     if (slide.kind === 'album') {
-      const rows = slide.tracks.map((t, ti) => {
+      const visibleTracks = _visibleAlbumTracks(slide);
+      const rows = visibleTracks.map((t, ti) => {
         const meta         = _matchTrackMeta(t, slide.name);
         const displayTitle = meta?.title || t.title;
         const hasBehind    = meta && (meta.story || meta.location || meta.chords || meta.tabs || meta.lyrics);
@@ -428,7 +415,7 @@ window.VW?.Dirty?.register?.('music', {
         <div class="mu-fan-info-hd">
           <div class="mu-car-kind">Album</div>
           <div class="mu-car-name">${_esc(slide.name)}</div>
-          <div class="mu-car-track-count">${slide.tracks.length} track${slide.tracks.length!==1?'s':''}</div>
+          <div class="mu-car-track-count">${visibleTracks.length} track${visibleTracks.length!==1?'s':''}</div>
           ${isAdmin ? `<button class="mu-edit-btn" onclick="VW.Music.openUploadModal()" style="margin-top:8px">+ Add track</button>` : ''}
         </div>
         <div class="mu-tracklist">${rows}</div>`;
@@ -585,14 +572,8 @@ window.VW?.Dirty?.register?.('music', {
     const hasBehind  = t.story || t.location || t.chords || t.tabs || t.lyrics;
     const btmId      = 'mu-btm-' + t.id;
 
-    const pub   = !!t.published;
     const admin = isAdmin ? `
       <div class="mu-track-admin" onclick="event.stopPropagation()">
-        <label class="mu-tc-pub-toggle" title="${pub ? 'Published — click to unpublish' : 'Draft — click to publish'}"
-          onclick="event.stopPropagation();VW.Music.togglePublish('${t.id}')">
-          <span class="mu-tc-pub-dot ${pub ? 'published' : 'draft'}"></span>
-          <span class="mu-tc-pub-lbl">${pub ? 'Published' : 'Draft'}</span>
-        </label>
         <button class="mu-edit-btn" onclick="VW.Music.openEditModal('${t.id}')">✏ Edit</button>
         <button class="mu-del-btn"  onclick="VW.Music.deleteTrack('${t.id}')">🗑</button>
       </div>` : '';
@@ -951,6 +932,19 @@ window.VW?.Dirty?.register?.('music', {
     _fillForm(t);
     document.getElementById('mu-modal-title').textContent = 'Edit Track';
     document.getElementById('mu-upload-modal')?.classList.add('open');
+  }
+
+  async function openAdminEditor(id = '', title = '', src = '', album = '') {
+    await _loadCatalog();
+    const wantedTitle = (title || '').toLowerCase();
+    const t = tracks.find(t => t.id === id) ||
+              tracks.find(t => src && t.src === src) ||
+              tracks.find(t => wantedTitle && (t.title || '').toLowerCase() === wantedTitle);
+    if (t) {
+      openEditModal(t.id);
+    } else {
+      openEditForTrack(title, src, album);
+    }
   }
 
   // Open modal pre-filled for a filesystem track with no catalog entry yet.
@@ -1365,10 +1359,6 @@ window.VW?.Dirty?.register?.('music', {
     if (lbl) lbl.textContent = 'No file chosen';
     const artLbl = document.getElementById('mu-f-art-lbl');
     if (artLbl) artLbl.textContent = 'No image chosen';
-    const pub = document.getElementById('mu-f-published');
-    if (pub) pub.checked = false;
-    const pubLbl = document.getElementById('mu-publish-lbl');
-    if (pubLbl) pubLbl.textContent = 'Draft';
     _sections = [];
     _renderSectionsList();
   }
@@ -1389,10 +1379,6 @@ window.VW?.Dirty?.register?.('music', {
     });
     const lbl = document.getElementById('mu-f-audio-lbl');
     if (lbl) lbl.textContent = t.src ? '✓ Audio on file' : 'No file chosen';
-    const pub = document.getElementById('mu-f-published');
-    if (pub) pub.checked = !!t.published;
-    const pubLbl = document.getElementById('mu-publish-lbl');
-    if (pubLbl) pubLbl.textContent = t.published ? 'Published' : 'Draft';
     // Load sections (migrating legacy flat strings if needed)
     _sections = _trackToSections(t);
     _renderSectionsList();
@@ -1453,7 +1439,8 @@ window.VW?.Dirty?.register?.('music', {
     // Build backward-compat flat fields for BTM display
     const flatFields = _sectionsToFlat(_sections);
 
-    const published = document.getElementById('mu-f-published')?.checked ?? false;
+    const previous = _editingId ? tracks.find(t => t.id === _editingId) : null;
+    const published = previous?.published !== false;
 
     const track = {
       id:          _editingId || ('t' + Date.now()),
@@ -1479,18 +1466,21 @@ window.VW?.Dirty?.register?.('music', {
       tracks.push(track);
     }
 
+    const wasEdit = !!_editingId;
     await _saveCatalog();
     closeUploadModal();
     _renderSection(activeSection);
-    window.toast?.(_editingId ? 'Track updated ✓' : 'Track added ✓', 'success');
+    window.VW?.Admin?._loadMusicSection?.();
+    window.toast?.(wasEdit ? 'Track updated ✓' : 'Track added ✓', 'success');
   }
 
-  function deleteTrack(id) {
+  async function deleteTrack(id) {
     if (!confirm('Delete this track? This cannot be undone.')) return;
     tracks = tracks.filter(t => t.id !== id);
     if (currentTrack?.id === id) { audioEl?.pause(); currentTrack = null; }
-    _saveCatalog();
+    await _saveCatalog();
     _renderSection(activeSection);
+    window.VW?.Admin?._loadMusicSection?.();
     window.toast?.('Track deleted', 'success');
   }
 
@@ -1598,6 +1588,7 @@ window.VW?.Dirty?.register?.('music', {
     closeMini,
     openUploadModal,
     openEditModal,
+    openAdminEditor,
     openEditForTrack,
     identifyChord,
     _identifyIntoSection,
