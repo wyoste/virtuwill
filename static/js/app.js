@@ -351,8 +351,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const gate    = document.getElementById('adminGate');
     const octoNav = document.getElementById('nav-octo-btn');
     const oct     = document.getElementById('footerOctopus');
-    const trigger = octoNav || oct;
-    if (gate && trigger && !gate.contains(e.target) && !trigger.contains(e.target) && _gateOpen) closeGate();
+    const mobileTrigger = document.getElementById('nmd-admin-login');
+    const triggers = [octoNav, oct, mobileTrigger].filter(Boolean);
+    const clickedTrigger = triggers.some(trigger => trigger.contains(e.target));
+    if (gate && !gate.contains(e.target) && !clickedTrigger && _gateOpen) closeGate();
   });
 
   // ── Browser back/forward ──────────────────────────────────────────────────

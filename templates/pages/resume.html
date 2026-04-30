@@ -6,29 +6,37 @@
       <div class="rs-profile">
         <div class="rs-avatar">WY</div>
         <div class="rs-name">Will Yoste</div>
-        <div class="rs-role">Enterprise Data Product Owner<br/>Greystar Real Estate Partners</div>
+        <div class="rs-role">Enterprise Data Product Owner<br/>Greystar</div>
         <a class="rs-download-btn" href="/static/will_yoste_resume.pdf" download="Will_Yoste_Resume.pdf">
           &#11123; Download PDF
         </a>
       </div>
 
-      <div class="rs-section">Navigate</div>
-      <div class="rs-item on" data-tab="ethos"      onclick="VW.Resume.setTab('ethos');    this.closest('aside').querySelectorAll('.rs-item').forEach(x=>x.classList.remove('on')); this.classList.add('on')"><div class="rs-dot"></div>Ethos</div>
-      <div class="rs-item"    data-tab="experience" onclick="VW.Resume.setTab('experience');this.closest('aside').querySelectorAll('.rs-item').forEach(x=>x.classList.remove('on')); this.classList.add('on')"><div class="rs-dot"></div>Experience</div>
-      <div class="rs-item"    data-tab="skills"     onclick="VW.Resume.setTab('skills');   this.closest('aside').querySelectorAll('.rs-item').forEach(x=>x.classList.remove('on')); this.classList.add('on')"><div class="rs-dot"></div>Skills</div>
-      <div class="rs-item"    data-tab="education"  onclick="VW.Resume.setTab('education'); this.closest('aside').querySelectorAll('.rs-item').forEach(x=>x.classList.remove('on')); this.classList.add('on')"><div class="rs-dot"></div>Education</div>
+      <button class="rs-mobile-toggle" onclick="VW.Resume.toggleMobileMenu()" aria-expanded="false" aria-controls="rs-mobile-menu">
+        <span>Resume menu</span>
+        <span class="rs-mobile-current" id="rs-mobile-current">Ethos</span>
+        <span class="rs-mobile-chevron">⌄</span>
+      </button>
 
-      <div class="rs-section" style="margin-top:8px">Portfolio</div>
-      <div class="portfolio-btn" id="portfolio-btn" onclick="VW.Resume.showPortfolio()">
-        &#128196; Project walkthroughs <span class="pb-arrow">›</span>
-      </div>
+      <div class="rs-menu-body" id="rs-mobile-menu">
+        <div class="rs-section">Navigate</div>
+        <div class="rs-item on" data-tab="ethos"      onclick="VW.Resume.setTab('ethos');    this.closest('aside').querySelectorAll('.rs-item').forEach(x=>x.classList.remove('on')); this.classList.add('on')"><div class="rs-dot"></div>Ethos</div>
+        <div class="rs-item"    data-tab="experience" onclick="VW.Resume.setTab('experience');this.closest('aside').querySelectorAll('.rs-item').forEach(x=>x.classList.remove('on')); this.classList.add('on')"><div class="rs-dot"></div>Experience</div>
+        <div class="rs-item"    data-tab="skills"     onclick="VW.Resume.setTab('skills');   this.closest('aside').querySelectorAll('.rs-item').forEach(x=>x.classList.remove('on')); this.classList.add('on')"><div class="rs-dot"></div>Skills</div>
+        <div class="rs-item"    data-tab="education"  onclick="VW.Resume.setTab('education'); this.closest('aside').querySelectorAll('.rs-item').forEach(x=>x.classList.remove('on')); this.classList.add('on')"><div class="rs-dot"></div>Education</div>
 
-      <div class="rs-section" style="margin-top:12px">Contact</div>
-      <div class="rs-contact">
-        <div class="rs-contact-item">&#128205; Plano, TX</div>
-        <div class="rs-contact-item">&#128231; willyoste@gmail.com</div>
-        <div class="rs-contact-item">&#128222; 972.754.6273</div>
-        <div class="rs-contact-item"><a href="https://linkedin.com/in/williamyoste" target="_blank" style="color:#5bc8f5;text-decoration:none">&#128279; LinkedIn</a></div>
+        <div class="rs-section" style="margin-top:8px">Portfolio</div>
+        <div class="portfolio-btn" id="portfolio-btn" onclick="VW.Resume.showPortfolio()">
+          &#128196; Project walkthroughs <span class="pb-arrow">›</span>
+        </div>
+
+        <div class="rs-section" style="margin-top:12px">Contact</div>
+        <div class="rs-contact">
+          <div class="rs-contact-item">&#128205; Plano, TX</div>
+          <div class="rs-contact-item">&#128231; willyoste@gmail.com</div>
+          <div class="rs-contact-item">&#128222; 972.754.6273</div>
+          <div class="rs-contact-item"><a href="https://linkedin.com/in/williamyoste" target="_blank" style="color:#5bc8f5;text-decoration:none">&#128279; LinkedIn</a></div>
+        </div>
       </div>
     </aside>
 

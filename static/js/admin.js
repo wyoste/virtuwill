@@ -14,6 +14,7 @@ window.VW.Admin = (() => {
 
   let _activeSection = 'overview';
   let _inited        = false;
+  let _musicTrackCache = {};
 
   const SECTIONS = ['overview','garden','music','portfolio','travel','notes','blog','chat','accounts'];
 
@@ -313,6 +314,8 @@ window.VW.Admin = (() => {
         }
       });
 
+      _musicTrackCache = {};
+
       el.innerHTML = `
         <div class="adm-section-actions">
           <button class="adm-btn-primary" onclick="VW.Music.openUploadModal()">🎵 Add new song</button>
@@ -324,12 +327,37 @@ window.VW.Admin = (() => {
             <div class="adm-subsec-title">Song catalog <span class="adm-badge">${tracks.length}</span></div>
           </div>
           ${tracks.length
-            ? tracks.map(t => _musicTrackCard(t)).join('')
+            ? tracks.map((t, i) => _musicTrackCard(t, i)).join('')
             : `<div class="adm-empty">No songs yet. Click "Add new song" to get started.</div>`}
         </div>`;
     } catch {
       el.innerHTML = `<div class="adm-error">Failed to load music catalog.</div>`;
     }
+  }
+
+  function _musicTrackPayload(trackKey) {
+    const t = _musicTrackCache[trackKey] || {};
+    return {
+      id: t.id || '',
+      title: t.title || t.name || '',
+      src: t.url || t.src || '',
+      album: t._album || '',
+    };
+  }
+
+  function editMusicTrack(trackKey) {
+    const t = _musicTrackPayload(trackKey);
+    window.VW?.Music?.openAdminEditor?.(t.id, t.title, t.src, t.album);
+  }
+
+  function publishMusicTrack(trackKey, published) {
+    const t = _musicTrackPayload(trackKey);
+    setMusicPublished(t.id, published, t.title, t.src, t.album);
+  }
+
+  function deleteMusicTrack(trackKey) {
+    const t = _musicTrackPayload(trackKey);
+    if (t.id) window.VW?.Music?.deleteTrack?.(t.id);
   }
 
   async function setMusicPublished(trackId, published, title = '', src = '', album = '') {
@@ -706,7 +734,7 @@ window.VW.Admin = (() => {
   //  Music track card with collapsible "Behind the Music"
   // ════════════════════════════════════════════════════════════
 
-  function _musicTrackCard(t) {
+  function _musicTrackCard(t, idx) {
     const id      = t.id || '';
     const title   = _esc(t.title || t.name || 'Untitled');
     const year    = t.year  || '';
@@ -731,11 +759,9 @@ window.VW.Admin = (() => {
       bpm   ? `<span class="adm-mu-pill">♩ ${_esc(String(bpm))} bpm</span>` : '',
     ].filter(Boolean).join('');
 
-    const behindId = 'btm-' + id;
-    const jsId = _js(id);
-    const jsTitle = _js(t.title || t.name || '');
-    const jsSrc = _js(t.url || t.src || '');
-    const jsAlbum = _js(t._album || '');
+    const trackKey = 'track-' + idx;
+    _musicTrackCache[trackKey] = t;
+    const behindId = 'btm-' + trackKey;
 
     return `
       <div class="adm-mu-card">
@@ -754,7 +780,7 @@ window.VW.Admin = (() => {
             <label class="adm-toggle-label adm-mu-publish-toggle"
               title="${published ? 'Live — visible to site visitors' : 'Draft — hidden from site visitors'}">
               <input type="checkbox" class="adm-toggle-cb" ${published ? 'checked' : ''}
-                onchange="VW.Admin.setMusicPublished('${jsId}', this.checked, '${jsTitle}', '${jsSrc}', '${jsAlbum}')"/>
+                onchange="VW.Admin.publishMusicTrack('${trackKey}', this.checked)"/>
               <span class="adm-toggle-track"></span>
               <span class="adm-toggle-text">${published ? 'Live' : 'Draft'}</span>
             </label>
@@ -765,8 +791,8 @@ window.VW.Admin = (() => {
               <span class="adm-mu-chev">›</span>
             </button>` : ''}
             <button class="adm-icon-btn" title="Edit song"
-              onclick="VW.Music.openAdminEditor('${jsId}', '${jsTitle}', '${jsSrc}', '${jsAlbum}')">✏️</button>
-            ${t._hasCatalogEntry ? `<button class="adm-icon-btn danger" onclick="VW.Music.deleteTrack('${id}')" title="Delete song">🗑</button>` : ''}
+              onclick="VW.Admin.editMusicTrack('${trackKey}')">✏️</button>
+            ${t._hasCatalogEntry ? `<button class="adm-icon-btn danger" onclick="VW.Admin.deleteMusicTrack('${trackKey}')" title="Delete song">🗑</button>` : ''}
           </div>
         </div>
 
@@ -825,7 +851,6 @@ window.VW.Admin = (() => {
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   const _esc = window.VW?.esc || (s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'));
-  const _js = s => _esc(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, '\\n');
 
 
   // ── Account template management ──────────────────────────────────────────────
@@ -861,12 +886,12 @@ window.VW.Admin = (() => {
         <td class="j-fin-td">
           <input class="j-fin-input" value="${_esc(t.institution || '')}"
             placeholder="e.g. Chase"
-            onchange="VW.Admin._tmplUpdate(${i},'institution',this.value)"/>
+            oninput="VW.Admin._tmplUpdate(${i},'institution',this.value)"/>
         </td>
         <td class="j-fin-td">
           <input class="j-fin-input" value="${_esc(t.name || '')}"
             placeholder="e.g. Checking"
-            onchange="VW.Admin._tmplUpdate(${i},'name',this.value)"/>
+            oninput="VW.Admin._tmplUpdate(${i},'name',this.value)"/>
         </td>
         <td class="j-fin-td j-fin-td-del">
           <button class="j-fin-del-btn" onclick="VW.Admin._tmplDelete(${i})">✕</button>
@@ -874,7 +899,17 @@ window.VW.Admin = (() => {
       </tr>`).join('');
   }
 
+  function _syncTemplateFromDom() {
+    document.querySelectorAll('#adm-tmpl-body .j-fin-row').forEach((row, i) => {
+      const inputs = row.querySelectorAll('.j-fin-input');
+      if (!_tmpl[i]) _tmpl[i] = { institution: '', name: '' };
+      _tmpl[i].institution = inputs[0]?.value || '';
+      _tmpl[i].name = inputs[1]?.value || '';
+    });
+  }
+
   function addTemplateAccount() {
+    _syncTemplateFromDom();
     _tmpl.push({ institution: '', name: '' });
     _renderTemplate();
     const inputs = document.querySelectorAll('#adm-tmpl-body .j-fin-input');
@@ -888,6 +923,7 @@ window.VW.Admin = (() => {
   }
 
   function _tmplDelete(idx) {
+    _syncTemplateFromDom();
     _tmpl.splice(idx, 1);
     _renderTemplate();
     _markUnsaved();
@@ -901,6 +937,7 @@ window.VW.Admin = (() => {
   }
 
   async function saveTemplate() {
+    _syncTemplateFromDom();
     const btn = document.getElementById('adm-tmpl-save-btn');
     if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
     try {
@@ -941,6 +978,7 @@ window.VW.Admin = (() => {
 
   function _tmplDrop(e, toIdx) {
     e.preventDefault();
+    _syncTemplateFromDom();
     document.querySelectorAll('.j-fin-drop-above,.j-fin-drop-below')
       .forEach(n => n.classList.remove('j-fin-drop-above','j-fin-drop-below'));
     if (_tmplDragIdx === null || _tmplDragIdx === toIdx) return;
@@ -961,36 +999,34 @@ window.VW.Admin = (() => {
       .forEach(n => n.classList.remove('j-fin-dragging','j-fin-drop-above','j-fin-drop-below'));
   }
 
+  window.VW?.Dirty?.register?.('admin', {
+    label: 'Account template',
+    isDirty: () => {
+      const compose = document.getElementById('adm-blog-compose');
+      if (compose?.style.display === 'flex') {
+        return !!document.getElementById('adm-blog-title-input')?.value?.trim();
+      }
+      return !!_tmplUnsaved;
+    },
+    save: async () => {
+      const compose = document.getElementById('adm-blog-compose');
+      if (compose?.style.display === 'flex') {
+        window.VW.Blog?.saveDraft?.();
+      } else {
+        await saveTemplate();
+      }
+    },
+  });
+
   return {
     init, onAuthChange, showSection, toggleBtm,
     addTemplateAccount, saveTemplate,
     _tmplDragStart, _tmplDragOver, _tmplDrop, _tmplDragEnd,
     addTravelPlace, addMapPin, deletePin,
     deletePortfolioItem, markNoteRead,
-    setMusicPublished,
+    setMusicPublished, editMusicTrack, publishMusicTrack, deleteMusicTrack,
     loadThread,
     _loadNotes, _loadChatHistory, _loadMusicSection, _loadPortfolioSection,
   };
-
-// ── Register dirty state for accounts template ────────────────────────────────
-window.VW?.Dirty?.register?.('admin', {
-  label: 'Account template',
-  isDirty: () => {
-    // Blog compose open with content takes priority
-    const compose = document.getElementById('adm-blog-compose');
-    if (compose?.style.display === 'flex') {
-      return !!document.getElementById('adm-blog-title-input')?.value?.trim();
-    }
-    return !!window._tmplUnsaved;
-  },
-  save: async () => {
-    const compose = document.getElementById('adm-blog-compose');
-    if (compose?.style.display === 'flex') {
-      window.VW.Blog?.saveDraft?.();
-    } else {
-      await window.VW.Admin.saveTemplate();
-    }
-  },
-});
 
 })();

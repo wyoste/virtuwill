@@ -37,6 +37,18 @@
     .jg-btn { width: 100%; padding: 9px; border: none; border-radius: 7px; background: var(--blue); color: #fff; font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; transition: background .15s; }
     .jg-btn:hover { background: var(--blue-dk); }
     .jg-err { font-size: 11px; color: var(--red); margin-top: 6px; min-height: 14px; }
+    @media (max-width: 640px) {
+      .journal-gate {
+        left: 50%;
+        right: auto;
+        top: calc(var(--nav-h) + 18px);
+        bottom: auto;
+        width: min(320px, calc(100vw - 32px));
+        transform: translateX(-50%);
+        z-index: 950;
+        animation: none;
+      }
+    }
 
     /* ── Home page layout ──────────────────────────────────────────── */
     #page-home.active { display: block; }
@@ -128,7 +140,8 @@
   </div>
   <!-- Octopus auth in drawer -->
   <div class="nav-drawer-hr"></div>
-  <button class="nav-drawer-link" onclick="openAdminGate();VW.Nav.closeMobile()"
+  <button class="nav-drawer-link" id="nmd-admin-login"
+    onclick="event.stopPropagation();VW.Nav.closeMobile();openAdminGate()"
     style="color:var(--text3);font-size:13px;">🐙 Admin login</button>
 </div>
 

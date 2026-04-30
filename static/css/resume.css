@@ -54,6 +54,7 @@
   text-transform: uppercase;
   color: var(--sidebar-text3);
 }
+.rs-mobile-toggle { display: none; }
 .rs-item {
   display: flex;
   align-items: center;
@@ -338,6 +339,93 @@
   .ethos-pillars      { grid-template-columns: 1fr; }
   .ethos-impact-strip { grid-template-columns: repeat(2,1fr); }
   .ethos-what-grid    { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 700px) {
+  #page-resume.active { display: block !important; }
+  .resume-layout {
+    display: block;
+    min-height: 0;
+  }
+  .resume-sidebar {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    max-height: none;
+    position: sticky;
+    top: var(--nav-h);
+    z-index: 40;
+    padding: 10px 0;
+    overflow: visible;
+    box-shadow: 0 8px 18px rgba(0,0,0,.12);
+  }
+  .rs-profile {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    column-gap: 10px;
+    align-items: center;
+    padding: 0 14px 10px;
+  }
+  .rs-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+    margin: 0;
+    grid-row: span 2;
+  }
+  .rs-name { margin-bottom: 1px; }
+  .rs-role { font-size: 10px; line-height: 1.25; }
+  .rs-download-btn {
+    grid-column: 1 / -1;
+    margin-top: 8px;
+    min-height: 38px;
+    padding: 8px 12px;
+  }
+  .rs-mobile-toggle {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    width: calc(100% - 28px);
+    margin: 0 14px;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 0.5px solid rgba(255,255,255,.12);
+    border-radius: 8px;
+    background: rgba(255,255,255,.06);
+    color: #fff;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .rs-mobile-current {
+    color: var(--blue-light);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .rs-mobile-chevron {
+    font-size: 16px;
+    line-height: 1;
+    transition: transform .16s;
+  }
+  .resume-sidebar.menu-open .rs-mobile-chevron { transform: rotate(180deg); }
+  .rs-menu-body {
+    display: none;
+    max-height: calc(100svh - var(--nav-h) - 118px);
+    overflow-y: auto;
+    padding-bottom: 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .resume-sidebar.menu-open .rs-menu-body { display: block; }
+  .rs-section { padding: 12px 18px 5px; }
+  .rs-item { padding: 10px 18px; min-height: 40px; }
+  .portfolio-btn { margin: 0 12px 4px; min-height: 40px; }
+  .rs-contact { padding-bottom: 8px; }
+  .resume-main {
+    padding: 20px 18px 28px;
+    overflow: visible;
+  }
 }
 
 /* ── Portfolio admin controls ─────────────────────── */

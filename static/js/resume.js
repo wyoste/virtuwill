@@ -325,6 +325,33 @@ window.VW.Resume = (() => {
   }
 
   // ── Resume sidebar tabs ─────────────────────────────────────────────────────
+  const TAB_LABELS = {
+    ethos: 'Ethos',
+    experience: 'Experience',
+    skills: 'Skills',
+    education: 'Education',
+  };
+
+  function _setMobileMenuLabel(label) {
+    const el = document.getElementById('rs-mobile-current');
+    if (el) el.textContent = label;
+  }
+
+  function _closeMobileMenu() {
+    const sidebar = document.querySelector('.resume-sidebar');
+    const btn = document.querySelector('.rs-mobile-toggle');
+    sidebar?.classList.remove('menu-open');
+    btn?.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleMobileMenu() {
+    const sidebar = document.querySelector('.resume-sidebar');
+    const btn = document.querySelector('.rs-mobile-toggle');
+    const open = !sidebar?.classList.contains('menu-open');
+    sidebar?.classList.toggle('menu-open', open);
+    btn?.setAttribute('aria-expanded', String(open));
+  }
+
   function setTab(tab) {
     _activeTab = tab;
     document.querySelectorAll('.rs-content-section').forEach(el => {
@@ -333,11 +360,15 @@ window.VW.Resume = (() => {
     document.querySelectorAll('.rs-item[data-tab]').forEach(el => {
       el.classList.toggle('on', el.dataset.tab === tab);
     });
+    _setMobileMenuLabel(TAB_LABELS[tab] || 'Resume');
+    if (window.matchMedia?.('(max-width: 700px)').matches) _closeMobileMenu();
   }
 
   function showPortfolio() {
     window.go('portfolio');
     document.getElementById('portfolio-btn')?.classList.add('on');
+    _setMobileMenuLabel('Portfolio');
+    if (window.matchMedia?.('(max-width: 700px)').matches) _closeMobileMenu();
     _setBreadcrumb(['Resume', 'Portfolio']);
     // Render grid when navigating to portfolio
     requestAnimationFrame(renderPortfolio);
@@ -433,6 +464,7 @@ window.VW.Resume = (() => {
   // ── Public API ──────────────────────────────────────────────────────────────
   return {
     setTab,
+    toggleMobileMenu,
     showPortfolio,
     showProject,
     showUploadedProject,
