@@ -298,21 +298,21 @@ def resume_download():
 # Audio files saved to static/audio/
 # Gallery photos saved to static/music/photos/
 
-MUSIC_CATALOG_FILE = "data/music_catalog.json"
-MUSIC_AUDIO_DIR    = "static/audio"
-MUSIC_PHOTOS_DIR   = "static/music/photos"
+MUSIC_CATALOG_FILE = DATA_DIR / "music_catalog.json"
+MUSIC_AUDIO_DIR    = Path(__file__).parent / "static" / "audio"
+MUSIC_PHOTOS_DIR   = Path(__file__).parent / "static" / "music" / "photos"
 
 def load_music_catalog():
     try:
-        with open(MUSIC_CATALOG_FILE) as f:
+        with open(MUSIC_CATALOG_FILE, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {"tracks": []}
 
 def save_music_catalog(data):
-    os.makedirs("data", exist_ok=True)
-    with open(MUSIC_CATALOG_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(MUSIC_CATALOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 @app.route("/api/music/catalog")
 def music_catalog_get():
@@ -406,7 +406,7 @@ def music_library_scan():
         for ext in image_exts:
             p = os.path.join(search_dir, stem + ext)
             if os.path.isfile(p):
-                rel = os.path.relpath(p, "static")
+                rel = os.path.relpath(p, Path(__file__).parent / "static")
                 return "/static/" + rel.replace("\\", "/")
         return None
 
