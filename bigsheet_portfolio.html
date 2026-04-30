@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bigsheet Converter &amp; QA Studio — Portfolio</title>
+<style>
+:root {
+  --navy:      #1B2A4A;
+  --navy-mid:  #253B63;
+  --navy-lt:   #3A5078;
+  --white:     #FFFFFF;
+  --grey-bg:   #F6F7F9;
+  --grey-lt:   #E8EAF0;
+  --grey-bd:   #D0D4DF;
+  --steel:     #6B7A99;
+  --blue:      #4A6FA5;
+  --blue-lt:   #EBF0F8;
+  --ok:        #1E7A3E;
+  --ok-bg:     #E8F5ED;
+  --ok-bd:     #A8D5B5;
+  --warn:      #B07B00;
+  --warn-bg:   #FEF9E7;
+  --danger:    #C0392B;
+  --danger-bg: #FDEDEC;
+  --accent:    #4A6FA5;
+  --text:      #1B2A4A;
+  --text-sub:  #4A5568;
+  --mono: 'Consolas','Lucida Console',monospace;
+  --sans: 'Segoe UI','Helvetica Neue',Arial,sans-serif;
+  --max: 960px;
+  --radius: 8px;
+  --shadow: 0 2px 8px rgba(27,42,74,.10);
+  --shadow-md: 0 4px 20px rgba(27,42,74,.13);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--sans);
+  background: var(--grey-bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+/* ── NAV ─────────────────────────────────── */
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--navy);
+  border-bottom: 2px solid var(--navy-lt);
+}
+.nav-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 52px;
+}
+.nav-brand {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  color: #fff;
+  text-transform: uppercase;
+  margin-right: auto;
+  white-space: nowrap;
+}
+.nav-brand span { color: #7A9AC8; font-weight: 400; }
+.nav-links { display: flex; gap: 4px; }
+.nav-links a {
+  color: #9AB0CC;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 4px;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.nav-links a:hover { background: var(--navy-lt); color: #fff; }
+
+/* ── HERO ────────────────────────────────── */
+.hero {
+  background: var(--navy);
+  color: #fff;
+  padding: 72px 24px 60px;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 80% 50%, rgba(74,111,165,.25) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+.hero-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #7AB8E8;
+  background: rgba(74,111,165,.2);
+  border: 1px solid rgba(74,111,165,.35);
+  padding: 4px 12px;
+  border-radius: 20px;
+  margin-bottom: 20px;
+}
+.hero h1 {
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 700;
+  line-height: 1.15;
+  margin-bottom: 16px;
+  letter-spacing: -.02em;
+}
+.hero h1 em { color: #7AB8E8; font-style: normal; }
+.hero-sub {
+  font-size: 17px;
+  color: #B0C4DC;
+  max-width: 620px;
+  line-height: 1.6;
+  margin-bottom: 32px;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 13px;
+  border-radius: 20px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.chip-blue { background: rgba(74,111,165,.2); border-color: rgba(74,111,165,.4); color: #90BADF; }
+.chip-green { background: rgba(30,122,62,.2); border-color: rgba(30,122,62,.35); color: #7DD8A0; }
+.chip-warn  { background: rgba(176,123,0,.2); border-color: rgba(176,123,0,.35); color: #E5C070; }
+
+/* ── LAYOUT ──────────────────────────────── */
+main { max-width: var(--max); margin: 0 auto; padding: 0 24px 80px; }
+
+section { padding: 60px 0 0; }
+
+.section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin-bottom: 8px;
+}
+.section-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 6px;
+  letter-spacing: -.01em;
+}
+.section-sub {
+  font-size: 15px;
+  color: var(--steel);
+  max-width: 640px;
+  margin-bottom: 32px;
+  line-height: 1.6;
+}
+
+/* ── PROBLEM STRIP ───────────────────────── */
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.problem-card {
+  background: var(--white);
+  border: 1px solid var(--grey-bd);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.problem-card .p-icon {
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+.problem-card h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 6px;
+}
+.problem-card p {
+  font-size: 13px;
+  color: var(--text-sub);
+  line-height: 1.55;
+}
+.problem-card.danger { border-left: 3px solid var(--danger); }
+.problem-card.warn   { border-left: 3px solid var(--warn); }
+.problem-card.blue   { border-left: 3px solid var(--blue); }
+
+/* ── TIMELINE / BEFORE-AFTER ─────────────── */
+.before-after {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.ba-card {
+  background: var(--white);
+  border: 1px solid var(--grey-bd);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+.ba-card h4 {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ba-before h4 { color: var(--danger); }
+.ba-after  h4 { color: var(--ok); }
+.ba-card ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.ba-card li {
+  font-size: 13px;
+  color: var(--text-sub);
+  padding-left: 18px;
+  position: relative;
+  line-height: 1.5;
+}
+.ba-before li::before { content: '✕'; position: absolute; left: 0; color: var(--danger); font-size: 11px; top: 2px; }
+.ba-after  li::before { content: '✓'; position: absolute; left: 0; color: var(--ok); font-size: 11px; top: 2px; }
+
+/* ── SOLUTION CARDS ──────────────────────── */
+.solution-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.sol-card {
+  background: var(--white);
+  border: 1px solid var(--grey-bd);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+.sol-card.featured {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: start;
+  border-top: 3px solid var(--blue);
+}
+.sol-number {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin-bottom: 8px;
+}
+.sol-card h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 10px;
+  line-height: 1.3;
+}
+.sol-card p {
+  font-size: 13px;
+  color: var(--text-sub);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.sol-card p:last-child { margin-bottom: 0; }
+
+.tech-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.tech-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: var(--blue-lt);
+  color: var(--blue);
+  border: 1px solid #C8D8EE;
+  font-family: var(--mono);
+}
+
+/* ── METRICS STRIP ───────────────────────── */
+.metrics-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 32px 0;
+}
+.metric {
+  background: var(--white);
+  border: 1px solid var(--grey-bd);
+  border-radius: var(--radius);
+  padding: 20px 16px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.metric-val {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--navy);
+  font-family: var(--mono);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.metric-val.ok { color: var(--ok); }
+.metric-val.blue { color: var(--blue); }
+.metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--steel);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+/* ── QA DETAIL ───────────────────────────── */
+.qa-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.qa-step {
+  background: var(--white);
+  border: 1px solid var(--grey-bd);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  box-shadow: var(--shadow);
+}
+.qa-step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.qa-step h4 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 4px;
+}
+.qa-step p {
+  font-size: 13px;
+  color: var(--text-sub);
+  line-height: 1.5;
+}
+
+/* ── ITERATION TABLE ─────────────────────── */
+.iter-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border: 1px solid var(--grey-bd);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
+  font-size: 13px;
+}
+.iter-table th {
+  background: var(--navy);
+  color: #fff;
+  padding: 11px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.iter-table td {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--grey-lt);
+  color: var(--text-sub);
+}
+.iter-table tr:last-child td { border-bottom: none; }
+.iter-table tr:hover td { background: var(--blue-lt); }
+.iter-table td:first-child { font-weight: 700; color: var(--navy); font-family: var(--mono); }
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.badge-danger { background: var(--danger-bg); color: var(--danger); }
+.badge-warn   { background: var(--warn-bg);   color: var(--warn); }
+.badge-ok     { background: var(--ok-bg);     color: var(--ok); }
+
+/* ── RISK CALLOUT ────────────────────────── */
+.risk-block {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-bd, #F0C040);
+  border-left: 4px solid var(--warn);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin: 24px 0;
+}
+.risk-block h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--warn);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.risk-block p {
+  font-size: 13px;
+  color: #6B5400;
+  line-height: 1.6;
+}
+
+/* ── SKILLS ──────────────────────────────── */
+.skills-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.skill-group {
+  background: var(--white);
+  border: 1px solid var(--grey-bd);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.skill-group h4 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--blue);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--grey-lt);
+}
+.skill-group ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.skill-group li {
+  font-size: 13px;
+  color: var(--text-sub);
+  padding-left: 14px;
+  position: relative;
+}
+.skill-group li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: var(--blue);
+  font-size: 11px;
+}
+
+/* ── FOOTER ──────────────────────────────── */
+footer {
+  background: var(--navy);
+  color: #7A9AC8;
+  text-align: center;
+  padding: 32px 24px;
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 60px;
+}
+footer strong { color: #fff; }
+
+/* ── DIVIDER ─────────────────────────────── */
+.divider {
+  height: 1px;
+  background: var(--grey-bd);
+  margin: 56px 0 0;
+}
+
+/* ── CALLOUT ─────────────────────────────── */
+.callout {
+  background: var(--blue-lt);
+  border: 1px solid #C8D8EE;
+  border-left: 4px solid var(--blue);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  font-size: 13px;
+  color: var(--navy-mid);
+  line-height: 1.6;
+  margin: 20px 0;
+}
+.callout strong { color: var(--navy); }
+
+/* ── RESPONSIVE ──────────────────────────── */
+@media (max-width: 700px) {
+  .problem-grid, .skills-grid { grid-template-columns: 1fr; }
+  .before-after, .solution-grid { grid-template-columns: 1fr; }
+  .metrics-strip { grid-template-columns: repeat(2, 1fr); }
+  .sol-card.featured { grid-template-columns: 1fr; }
+  .nav-links { display: none; }
+}
+
+/* ── PRINT ───────────────────────────────── */
+@media print {
+  nav { position: static; }
+  .hero { background: var(--navy) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-size: 12px; }
+  .metrics-strip { grid-template-columns: repeat(4, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand">Greystar <span>/ DataMarketplace</span></div>
+    <div class="nav-links">
+      <a href="#problem">Problem</a>
+      <a href="#solution">Solution</a>
+      <a href="#qa">QA Engine</a>
+      <a href="#results">Results</a>
+      <a href="#risk">Risk</a>
+      <a href="#skills">Capabilities</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-tag">DataMarketplace · Data Engineering · 2025–2026</div>
+    <h1>Bigsheet Converter<br><em>&amp; QA Studio</em></h1>
+    <p class="hero-sub">
+      Automating the conversion and quality assurance of a complex, manually authored financial workbook 
+      into a warehouse-ready flat CSV — replacing weeks of error-prone manipulation with a 
+      repeatable, auditable, single-tool workflow.
+    </p>
+    <div class="chips">
+      <span class="chip chip-blue">Data Engineering</span>
+      <span class="chip chip-blue">ETL / Conversion</span>
+      <span class="chip chip-blue">Data Quality</span>
+      <span class="chip chip-green">Iterative Delivery</span>
+      <span class="chip chip-green">AI-Assisted Development</span>
+      <span class="chip chip-warn">Cross-functional Impact</span>
+    </div>
+  </div>
+</div>
+
+<main>
+
+  <!-- ═══ SECTION: PROBLEM ═══ -->
+  <section id="problem">
+    <div class="section-label">The Challenge</div>
+    <div class="section-title">A business-critical file with no reliable path to the warehouse</div>
+    <p class="section-sub">
+      The Bigsheet is Greystar's semi-annual revaluation workbook — a months-long, manually authored Excel file 
+      that captures actual financial performance and refreshed forecasts across every venture in the portfolio. 
+      Getting it from business document to data warehouse had never been solved.
+    </p>
+
+    <div class="problem-grid">
+      <div class="problem-card danger">
+        <div class="p-icon">📅</div>
+        <h4>Months of work, weeks more to ingest</h4>
+        <p>After a multi-month revaluation cycle, converting the Bigsheet into a warehouse-ready format 
+        historically required several additional weeks of manual file manipulation — data that business teams 
+        needed was unavailable long after the source was complete.</p>
+      </div>
+      <div class="problem-card warn">
+        <div class="p-icon">⚠️</div>
+        <h4>Data quality was an afterthought</h4>
+        <p>The Bigsheet is built for financial analysis and distribution, not for system ingestion. 
+        Merged cells, multi-row headers, fund-level section breaks, embedded formula errors, and 
+        mixed data types all had to be manually resolved — with inconsistent results each cycle.</p>
+      </div>
+      <div class="problem-card blue">
+        <div class="p-icon">🔁</div>
+        <h4>Repeated loads and double work</h4>
+        <p>DQ issues would surface only after ingestion into DMP, requiring additional rounds of manual 
+        manipulation, re-extraction, and re-loading — compounding the delay and eroding confidence in 
+        the data among analytics consumers.</p>
+      </div>
+    </div>
+
+    <div class="before-after">
+      <div class="ba-card ba-before">
+        <h4>⬛ Before — Manual Process</h4>
+        <ul>
+          <li>Weeks of manual cell-by-cell reformatting after months of reval work</li>
+          <li>No consistent column naming or section boundary detection</li>
+          <li>Float precision errors, embedded newlines, formula error strings left in data</li>
+          <li>Scientific notation vs. decimal notation mismatches discovered post-load</li>
+          <li>DQ issues caught only after warehouse ingestion</li>
+          <li>Multiple reloads required per reval cycle</li>
+          <li>No audit trail linking field-level issues to source cells</li>
+        </ul>
+      </div>
+      <div class="ba-card ba-after">
+        <h4>✅ After — Automated Tool</h4>
+        <ul>
+          <li>Conversion in seconds — drop XLSX, click convert, download CSV</li>
+          <li>Consistent, validated column naming across all 127 fields</li>
+          <li>Precision cleaning, newline normalisation, formula errors blanked automatically</li>
+          <li>Full decimal notation — no scientific notation artifacts</li>
+          <li>Cell-level QA before any warehouse load</li>
+          <li>Structured DQ issue export: venture, reval_id, field, source value, converted value</li>
+          <li>Iterative rule refinement loop — issues drive converter improvements</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ═══ SECTION: SOLUTION ═══ -->
+  <section id="solution">
+    <div class="section-label">The Solution</div>
+    <div class="section-title">A unified Converter &amp; QA Studio</div>
+    <p class="section-sub">
+      Built iteratively using Claude Code, the tool combines a browser-based XLSX converter 
+      with a granular, cell-level QA engine in a single HTML file — no infrastructure, 
+      no dependencies, no installs.
+    </p>
+
+    <div class="solution-grid">
+      <div class="sol-card featured">
+        <div>
+          <div class="sol-number">Core Capability 1</div>
+          <h3>Bigsheet Converter</h3>
+          <p>Reads the complex fund-structured XLSX directly in the browser using SheetJS. 
+          Detects fund section boundaries, parses per-fund header rows, and flattens 
+          1,024 records across 85 fund sections and 127 columns into a clean flat CSV.</p>
+          <p>Every conversion rule was developed through a test-and-refine cycle against the 
+          real source file, ensuring correctness rather than assumption.</p>
+          <div class="tech-tags">
+            <span class="tech-tag">SheetJS / XLSX.js</span>
+            <span class="tech-tag">Python openpyxl</span>
+            <span class="tech-tag">15 sig-fig precision</span>
+            <span class="tech-tag">Fixed-point notation</span>
+            <span class="tech-tag">Date whitelisting</span>
+            <span class="tech-tag">Multiplier handling</span>
+            <span class="tech-tag">Currency normalisation</span>
+          </div>
+        </div>
+        <div>
+          <div class="sol-number">Conversion Rules Applied</div>
+          <div class="qa-flow" style="margin-bottom:0">
+            <div class="qa-step">
+              <div class="qa-step-num">1</div>
+              <div>
+                <h4>Section boundary detection</h4>
+                <p>Identifies fund name rows ("Revaluation Summary: …") to delimit sections; reads master header rows (rows 10–11) to build the canonical column map across all 85 fund instances.</p>
+              </div>
+            </div>
+            <div class="qa-step">
+              <div class="qa-step-num">2</div>
+              <div>
+                <h4>Header normalisation</h4>
+                <p>Applies <code>{SectionName}_{ColumnName}</code> convention; strips quotes; maps <code>%→pct</code>, <code>#→num</code>; collapses whitespace and special characters to underscores.</p>
+              </div>
+            </div>
+            <div class="qa-step">
+              <div class="qa-step-num">3</div>
+              <div>
+                <h4>Numeric precision cleaning</h4>
+                <p>Rounds to 15 significant figures to eliminate IEEE 754 binary noise (e.g. <code>32020746.040000003 → 32020746.04</code>). Always outputs full decimal notation — never scientific notation.</p>
+              </div>
+            </div>
+            <div class="qa-step">
+              <div class="qa-step-num">4</div>
+              <div>
+                <h4>Edge case handling</h4>
+                <p>Strips trailing <code>x</code> from multiplier fields; normalises currency prefixes (<code>€2,336,068 → 2336068</code>); blanks formula error strings (<code>#DIV/0!</code>, <code>#VALUE!</code>); converts empty date-formatted cells (serial 0) to blank rather than <code>1899-12-30</code>.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sol-card">
+        <div class="sol-number">Core Capability 2</div>
+        <h3>Two-Frame QA Audit</h3>
+        <p>Load the source XLSX and the converted CSV side-by-side. The top frame surfaces 
+        a full quality summary — missing records, phantom records, field mismatch counts, 
+        and a DQ health chart ranking every field by percentage of clean records.</p>
+        <p>A resizable drag handle lets you expand either frame. The bottom frame allows fund-level 
+        drill-down: select any venture from a dropdown and inspect every field cell-by-cell, 
+        with source and converted values shown in-line.</p>
+        <div class="tech-tags">
+          <span class="tech-tag">Epsilon comparison</span>
+          <span class="tech-tag">Date normalisation</span>
+          <span class="tech-tag">DQ health %</span>
+        </div>
+      </div>
+
+      <div class="sol-card">
+        <div class="sol-number">Core Capability 3</div>
+        <h3>Structured DQ Issue Export</h3>
+        <p>Every mismatch — missing record, phantom record, or field-level difference — 
+        can be exported as a structured CSV capturing venture, reval_id, identifier, 
+        field name, issue category, the converted value, and the original source value.</p>
+        <p>This export drove the iterative refinement cycle: each issue file was analysed, 
+        root causes classified, and converter or comparison rules updated accordingly.</p>
+        <div class="tech-tags">
+          <span class="tech-tag">venture</span>
+          <span class="tech-tag">reval_id</span>
+          <span class="tech-tag">field</span>
+          <span class="tech-tag">issue_category</span>
+          <span class="tech-tag">csv_value</span>
+          <span class="tech-tag">xlsx_source</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ═══ SECTION: QA ENGINE ═══ -->
+  <section id="qa">
+    <div class="section-label">Engineering Depth</div>
+    <div class="section-title">Comparison rules built for financial data reality</div>
+    <p class="section-sub">
+      The QA comparison engine had to handle a wide range of representation differences 
+      that are mathematically equivalent but textually distinct — distinguishing genuine 
+      data errors from cosmetic format differences.
+    </p>
+
+    <div class="callout">
+      <strong>Design principle:</strong> The comparison engine never flags a difference that is cosmetically 
+      different but numerically identical. Scientific notation, exponent zero-padding, float precision drift, 
+      and multiplier suffix formats are all normalised before comparison. Only genuine value differences surface as issues.
+    </div>
+
+    <div class="iter-table-wrap">
+    <table class="iter-table">
+      <thead>
+        <tr>
+          <th>Rule</th>
+          <th>Source Pattern</th>
+          <th>Converted Output</th>
+          <th>Treatment</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Float precision noise</td>
+          <td><code>32020746.040000003</code></td>
+          <td><code>32020746.04</code></td>
+          <td>15 sig-fig rounding; relative epsilon 1e-9</td>
+        </tr>
+        <tr>
+          <td>Scientific notation</td>
+          <td><code>4.144e-05</code></td>
+          <td><code>0.0000414401292800903</code></td>
+          <td>Full decimal; e/E excluded from alpha guard in comparison</td>
+        </tr>
+        <tr>
+          <td>Near-zero residuals</td>
+          <td><code>-3.7252e-9</code></td>
+          <td><code>-0.00000000372529029846</code></td>
+          <td>Both sides &lt;1e-6: treated as equal</td>
+        </tr>
+        <tr>
+          <td>Multiplier suffix</td>
+          <td><code>1.82x</code></td>
+          <td><code>1.82</code></td>
+          <td>Strip trailing x/X before numeric comparison</td>
+        </tr>
+        <tr>
+          <td>Currency prefix</td>
+          <td><code>€2,336,068</code></td>
+          <td><code>2336068</code></td>
+          <td>Strip symbol and thousands separators</td>
+        </tr>
+        <tr>
+          <td>Empty date cells</td>
+          <td>Serial 0 → <code>1899-12-30</code></td>
+          <td><code>(empty)</code></td>
+          <td>Serial ≤1 treated as blank; 1899-12-30 equated to empty</td>
+        </tr>
+        <tr>
+          <td>Formula errors</td>
+          <td><code>#DIV/0!</code>, <code>#VALUE!</code></td>
+          <td><code>(empty)</code></td>
+          <td>Error strings blanked in converter; error cell type 'e' handled in QA</td>
+        </tr>
+        <tr>
+          <td>Phantom date artifacts</td>
+          <td>Error serial → <code>1900-01-06</code></td>
+          <td><code>(empty)</code></td>
+          <td>1900-01-01 through 1900-01-14 equated to empty</td>
+        </tr>
+        <tr>
+          <td>Embedded newlines</td>
+          <td><code>\nTownhomes/SFR</code></td>
+          <td><code>Townhomes/SFR</code></td>
+          <td>Stripped on both converter and QA xlsx parser sides</td>
+        </tr>
+        <tr>
+          <td>CRLF last-column bug</td>
+          <td><code>TVPI\r</code> in header</td>
+          <td>Correct header</td>
+          <td>parseLine() skips \r characters; all 915 TVPI values restored</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ═══ SECTION: RESULTS ═══ -->
+  <section id="results">
+    <div class="section-label">Outcomes</div>
+    <div class="section-title">From 11,048 issues to zero through iterative refinement</div>
+    <p class="section-sub">
+      The tool was developed and validated against the live 2H 2025 Bigsheet through multiple 
+      QA iterations, systematically eliminating every category of mismatch.
+    </p>
+
+    <div class="metrics-strip">
+      <div class="metric">
+        <div class="metric-val blue">1,024</div>
+        <div class="metric-label">Records converted</div>
+      </div>
+      <div class="metric">
+        <div class="metric-val blue">127</div>
+        <div class="metric-label">Columns mapped</div>
+      </div>
+      <div class="metric">
+        <div class="metric-val blue">85</div>
+        <div class="metric-label">Fund sections parsed</div>
+      </div>
+      <div class="metric">
+        <div class="metric-val ok">0</div>
+        <div class="metric-label">Field mismatches — final run</div>
+      </div>
+    </div>
+
+    <table class="iter-table">
+      <thead>
+        <tr>
+          <th>QA Run</th>
+          <th>Issues Found</th>
+          <th>Root Cause Category</th>
+          <th>Resolution</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Run 1</td>
+          <td><span class="badge badge-danger">11,048 fields</span></td>
+          <td>Precision truncation (15 sig-fig); false date on Equity_Funded_To_Date; TVPI empty (CRLF bug)</td>
+          <td>Precision fix; date column whitelist; parseLine() CRLF fix</td>
+        </tr>
+        <tr>
+          <td>Run 2</td>
+          <td><span class="badge badge-warn">1,001 fields</span></td>
+          <td>Old CSV used against new tool; TVPI still showing as empty</td>
+          <td>CRLF root cause identified; phantom record (GSA-0682) confirmed false positive</td>
+        </tr>
+        <tr>
+          <td>Run 3</td>
+          <td><span class="badge badge-warn">954 fields</span></td>
+          <td>TVPI CRLF resolved; remaining: sci notation e-09 vs e-9; near-zero epsilon; 1900-01-xx dates</td>
+          <td>e/E excluded from alpha guard; near-zero both-sides guard; phantom date regex extended</td>
+        </tr>
+        <tr>
+          <td>Run 4</td>
+          <td><span class="badge badge-warn">35 fields</span></td>
+          <td>Scientific notation cosmetic differences (all numerically identical)</td>
+          <td>Full decimal output in converter; float comparison resolves all</td>
+        </tr>
+        <tr>
+          <td>Run 5</td>
+          <td><span class="badge badge-warn">5 fields</span></td>
+          <td>Empty date cells written as 1899-12-30 by JS converter (serial 0 artifact)</td>
+          <td>Serial ≤1 guard added; 1899-12-30 equated to empty in QA comparator</td>
+        </tr>
+        <tr>
+          <td>Final</td>
+          <td><span class="badge badge-ok">0 issues</span></td>
+          <td>—</td>
+          <td>All 129,024 cells verified clean</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ═══ SECTION: RISK ═══ -->
+  <section id="risk">
+    <div class="section-label">Forward Risk</div>
+    <div class="section-title">The structural problem the tool cannot solve alone</div>
+
+    <div class="risk-block">
+      <h4>⚠ Format Instability Risk</h4>
+      <p>
+        The Bigsheet is a manually authored workbook with no enforced schema. The revals team has changed 
+        the file format across prior cycles — adding columns, restructuring sections, or shifting column positions. 
+        Each format change breaks the converter's column map and requires reconfiguration. 
+        Lack of consistent business processes prevents building once and maintaining; instead, the team faces 
+        potential rebuild effort every cycle for what is fundamentally a single-file ingestion.
+      </p>
+    </div>
+
+    <div class="callout">
+      <strong>Recommended mitigation:</strong> Establish a data contract with the revals team — a locked column 
+      schema, section naming convention, and change-control process for the Bigsheet. The converter can be 
+      extended with a schema validation step that detects format drift and alerts before conversion, 
+      rather than producing silently incorrect output. The QA Studio's DQ export provides the evidence base 
+      to negotiate and enforce that contract.
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ═══ SECTION: SKILLS ═══ -->
+  <section id="skills">
+    <div class="section-label">Capabilities Demonstrated</div>
+    <div class="section-title">Technical and product skills applied</div>
+    <p class="section-sub" style="margin-bottom:24px">
+      This project required integrating deep technical implementation with product thinking, 
+      iterative quality engineering, and cross-functional awareness of business process risk.
+    </p>
+
+    <div class="skills-grid">
+      <div class="skill-group">
+        <h4>Data Engineering</h4>
+        <ul>
+          <li>Complex XLSX parsing across nested structure</li>
+          <li>IEEE 754 float precision management</li>
+          <li>ETL rule design and validation</li>
+          <li>CSV output standards compliance</li>
+          <li>Edge case catalogue and resolution</li>
+        </ul>
+      </div>
+      <div class="skill-group">
+        <h4>Quality Engineering</h4>
+        <ul>
+          <li>Cell-level source vs. target comparison</li>
+          <li>Epsilon-based numeric equivalence</li>
+          <li>Structured DQ issue export design</li>
+          <li>Iterative root-cause classification</li>
+          <li>False positive identification and suppression</li>
+        </ul>
+      </div>
+      <div class="skill-group">
+        <h4>Product &amp; Tool Design</h4>
+        <ul>
+          <li>Unified single-file browser tool</li>
+          <li>Two-mode UX (Convert + QA Audit)</li>
+          <li>Resizable, two-frame audit interface</li>
+          <li>DQ health visualisation by field</li>
+          <li>No-infrastructure deployment</li>
+        </ul>
+      </div>
+      <div class="skill-group">
+        <h4>Technical Languages &amp; Tools</h4>
+        <ul>
+          <li>Python (openpyxl, csv, re, math)</li>
+          <li>JavaScript / SheetJS (XLSX.js)</li>
+          <li>HTML/CSS — fully self-contained</li>
+          <li>Claude Code — AI-assisted development</li>
+          <li>Greystar DataMarketplace platform</li>
+        </ul>
+      </div>
+      <div class="skill-group">
+        <h4>Business Process</h4>
+        <ul>
+          <li>Financial data domain (revaluation cycle)</li>
+          <li>Portfolio-wide venture structure</li>
+          <li>Data contract design and advocacy</li>
+          <li>Risk identification and mitigation framing</li>
+          <li>Stakeholder communication of DQ findings</li>
+        </ul>
+      </div>
+      <div class="skill-group">
+        <h4>Delivery Approach</h4>
+        <ul>
+          <li>Test-driven rule development</li>
+          <li>Evidence-based iteration (issues CSV → fix)</li>
+          <li>Scope management (cosmetic vs. genuine)</li>
+          <li>Incremental deployment from Python to browser</li>
+          <li>Documentation through the work itself</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <strong>Greystar DataMarketplace — Bigsheet Converter &amp; QA Studio</strong><br>
+  2H 2025 Revaluation Cycle · 1,024 records · 127 columns · 85 fund sections · 0 field mismatches on final QA run<br><br>
+  This page is a curated summary of selected work produced during the 2025–2026 reval ingestion initiative.
+</footer>
+
+</body>
+</html>

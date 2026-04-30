@@ -1,0 +1,407 @@
+/* ═══════════════════════════════════════════════════════
+   VirtuWill — components.css
+   Canonical shared UI components. Replaces the nine
+   per-module modal/card/badge/toggle implementations.
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Modal ─────────────────────────────────────────────
+   Usage: <div class="vw-modal-bg" onclick="if(event.target===this)close()">
+            <div class="vw-modal">
+              <div class="vw-modal-hd">…</div>
+              <div class="vw-modal-body">…</div>
+              <div class="vw-modal-ft">…</div>
+            </div>
+          </div>
+   ────────────────────────────────────────────────────── */
+.vw-modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.52);
+  z-index: 300;
+  display: none;          /* hidden by default — JS adds .open to show */
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: vwFadeIn .15s ease;
+}
+.vw-modal-bg.open {
+  display: flex;
+}
+.vw-modal {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: 16px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,.18);
+}
+.vw-modal-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 0.5px solid var(--border);
+  flex-shrink: 0;
+}
+.vw-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+.vw-modal-close {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 5px;
+  transition: all .12s;
+  line-height: 1;
+}
+.vw-modal-close:hover { background: var(--bg); color: var(--text); }
+.vw-modal-body {
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+.vw-modal-ft {
+  padding: 14px 20px;
+  border-top: 0.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+@keyframes vwFadeIn { from { opacity:0; } to { opacity:1; } }
+
+/* ── Badge / pill ──────────────────────────────────────
+   Usage: <span class="vw-badge vw-badge--green">Published</span>
+   ────────────────────────────────────────────────────── */
+.vw-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border: 0.5px solid transparent;
+  white-space: nowrap;
+}
+.vw-badge--green  { background: var(--green-lt);  color: var(--teal);    border-color: var(--green); }
+.vw-badge--amber  { background: var(--amber-lt);  color: var(--amber);   border-color: var(--amber); }
+.vw-badge--blue   { background: var(--blue-lt);   color: var(--blue);    border-color: var(--blue-md); }
+.vw-badge--red    { background: var(--red-lt);    color: var(--red);     border-color: var(--red); }
+.vw-badge--draft  { background: var(--surface2);  color: var(--text3);   border-color: var(--border-dk); }
+.vw-badge--dot    { width: 7px; height: 7px; border-radius: 50%;
+                    padding: 0; border: none; flex-shrink: 0; }
+.vw-badge--dot.vw-badge--green { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.vw-badge--dot.vw-badge--draft { background: var(--text3); box-shadow: none; }
+
+/* ── Toggle switch ─────────────────────────────────────
+   Usage: <label class="vw-toggle">
+            <input type="checkbox" />
+            <span class="vw-toggle-track"></span>
+            <span class="vw-toggle-lbl">Draft</span>
+          </label>
+   ────────────────────────────────────────────────────── */
+.vw-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  user-select: none;
+}
+.vw-toggle input { display: none; }
+.vw-toggle-track {
+  width: 34px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--border-dk);
+  border: 0.5px solid var(--border-dk);
+  position: relative;
+  transition: background .2s, border-color .2s;
+  flex-shrink: 0;
+}
+.vw-toggle-track::after {
+  content: '';
+  position: absolute;
+  left: 2px; top: 2px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--text3);
+  transition: transform .2s, background .2s;
+}
+.vw-toggle input:checked ~ .vw-toggle-track {
+  background: var(--green);
+  border-color: var(--green);
+}
+.vw-toggle input:checked ~ .vw-toggle-track::after {
+  transform: translateX(16px);
+  background: #fff;
+}
+.vw-toggle-lbl {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  transition: color .2s;
+  min-width: 52px;
+}
+.vw-toggle:has(input:checked) .vw-toggle-lbl { color: var(--teal); }
+
+/* ── Card ──────────────────────────────────────────────
+   Usage: <div class="vw-card">…</div>
+          <div class="vw-card vw-card--interactive">…</div>
+   ────────────────────────────────────────────────────── */
+.vw-card {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  transition: border-color .15s;
+}
+.vw-card--sm { border-radius: 7px; }
+.vw-card--interactive { cursor: pointer; }
+.vw-card--interactive:hover {
+  background: var(--surface2);
+  border-color: var(--border-dk);
+}
+
+/* ── Form field ────────────────────────────────────────
+   Usage: <div class="vw-field">
+            <label>Label</label>
+            <input class="vw-input" />
+          </div>
+   ────────────────────────────────────────────────────── */
+.vw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.vw-field > label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.vw-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0.5px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color .15s;
+}
+.vw-input:focus { outline: none; border-color: var(--blue); }
+
+/* ── Buttons ───────────────────────────────────────────
+   Usage: <button class="vw-btn vw-btn--primary">Save</button>
+   ────────────────────────────────────────────────────── */
+.vw-btn {
+  padding: 8px 16px;
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.vw-btn--primary  { background: var(--blue);  color: #fff; border: none; }
+.vw-btn--primary:hover  { background: var(--blue-dk); }
+.vw-btn--ghost    { background: none; color: var(--text2);
+                    border: 0.5px solid var(--border-dk); }
+.vw-btn--ghost:hover    { background: var(--bg); }
+.vw-btn--danger   { background: none; color: var(--red);
+                    border: 0.5px solid var(--red); }
+.vw-btn--danger:hover   { background: var(--red-lt); }
+.vw-btn--sm { padding: 5px 10px; font-size: 12px; border-radius: 5px; }
+
+/* ── Action row ────────────────────────────────────────
+   Usage: <div class="vw-action-row">
+            <div class="vw-action-row-left">…toggle…</div>
+            <button class="vw-btn vw-btn--ghost">Cancel</button>
+            <button class="vw-btn vw-btn--primary">Save</button>
+          </div>
+   ────────────────────────────────────────────────────── */
+.vw-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vw-action-row-left { flex: 1; }
+
+/* ── Section label (uppercase eyebrow) ─────────────────
+   Usage: <div class="vw-eyebrow">Section title</div>
+   ────────────────────────────────────────────────────── */
+.vw-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Component aliases — module classes that map to vw-* base styles.
+   Keeps existing HTML/JS IDs intact while unifying visual behaviour.
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Form fields ────────────────────────────────────────
+   mu-f-input, gdn-input, pm-input → extend vw-input base
+   ────────────────────────────────────────────────────── */
+.mu-f-input,
+.gdn-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0.5px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color .15s;
+  outline: none;
+}
+.mu-f-input:focus,
+.gdn-input:focus { border-color: var(--blue); }
+
+/* ── Form labels ────────────────────────────────────────
+   Canonical eyebrow label style
+   ────────────────────────────────────────────────────── */
+.mu-f-lbl,
+.pm-label,
+.gdn-field-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+/* ── Primary action buttons ─────────────────────────────
+   Modal save buttons → vw-btn--primary base
+   ────────────────────────────────────────────────────── */
+.mu-btn-save,
+.gal-btn-save,
+.gal-q-save,
+.gdn-save-btn,
+.adm-btn-primary {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 7px;
+  background: var(--blue);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.mu-btn-save:hover,
+.gal-btn-save:hover,
+.gal-q-save:hover,
+.gdn-save-btn:hover,
+.adm-btn-primary:hover { background: var(--blue-dk); }
+
+/* ── Ghost/cancel buttons ───────────────────────────────
+   Modal cancel buttons → vw-btn--ghost base
+   ────────────────────────────────────────────────────── */
+.mu-btn-cancel,
+.gal-btn-cancel,
+.gal-q-cancel,
+.adm-btn-secondary {
+  padding: 8px 16px;
+  border: 0.5px solid var(--border-dk);
+  border-radius: 7px;
+  background: none;
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+.mu-btn-cancel:hover,
+.gal-btn-cancel:hover,
+.gal-q-cancel:hover,
+.adm-btn-secondary:hover { background: var(--bg); }
+
+/* ── Danger buttons ─────────────────────────────────────
+   Delete/destructive actions → vw-btn--danger base
+   ────────────────────────────────────────────────────── */
+.gdn-confirm-delete-btn,
+.gdn-delete-bed-btn,
+.proj-delete-btn,
+.mu-del-btn {
+  padding: 7px 14px;
+  border: 0.5px solid var(--red);
+  border-radius: 7px;
+  background: none;
+  color: var(--red);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+.gdn-confirm-delete-btn:hover,
+.gdn-delete-bed-btn:hover,
+.proj-delete-btn:hover,
+.mu-del-btn:hover { background: var(--red-lt); }
+
+/* ── Interactive card base ──────────────────────────────
+   Shared surface+border+hover for card-like elements
+   ────────────────────────────────────────────────────── */
+.mu-track-card,
+.gdn-plant-card,
+.gdn-season-item,
+.adm-bed-card,
+.adm-mu-card {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  transition: border-color .15s, background .15s;
+}
+.mu-track-card:hover,
+.gdn-plant-card:hover,
+.gdn-season-item:hover,
+.adm-bed-card:hover { border-color: var(--border-dk); background: var(--surface2); }
+
+/* ── Status badges ──────────────────────────────────────
+   Shared vw-badge base without renaming HTML
+   ────────────────────────────────────────────────────── */
+.mu-tc-pub-dot.published { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.mu-tc-pub-dot.draft     { background: var(--text3); }
+.mu-draft-badge {
+  font-size: 11px; font-weight: 600;
+  color: var(--text3);
+  padding: 3px 8px; border-radius: 5px;
+  border: 0.5px solid var(--border-dk);
+  background: var(--surface2);
+}
+.mu-pub-badge {
+  font-size: 11px; font-weight: 600;
+  color: var(--teal);
+  padding: 3px 8px; border-radius: 5px;
+  border: 0.5px solid var(--green-lt);
+  background: var(--green-lt);
+}

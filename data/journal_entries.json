@@ -1,0 +1,206 @@
+[
+  {
+    "id": "e1777309219469",
+    "date": "2026-04-26",
+    "quote": "Tell me and I forget. Teach me and I remember. Involve me and I learn.",
+    "quoteAuthor": "Benjamin Franklin",
+    "meals": {
+      "B": "Overnight Oats with Whole Milk and Cinammon",
+      "L": "",
+      "D": "Impossible Tacos w/ Blackbeans and white corn"
+    },
+    "freeWrite": "<div><p class=\"b-qt qt_101477\" style=\"margin: 0px 0px 15px; line-height: 37px;\">\"The price of greatness is responsibility.\" -&nbsp;<a href=\"https://www.brainyquote.com/authors/winston-churchill-quotes\" class=\"qa_101477 oncl_a\" style=\"font-family: inherit;\">Winston Churchill</a></p><p class=\"b-qt qt_136947\" style=\"margin: 0px 0px 15px; line-height: 37px;\">\"If the path be beautiful, let us not ask where it leads.\" -&nbsp;<a href=\"https://www.brainyquote.com/authors/anatole-france-quotes\" class=\"qa_136947 oncl_a\" style=\"font-family: inherit;\">Anatole France</a></p></div><div>\n</div>I woke up at 8:00. I started a load of laundry and then I took the dogs on a brynnen walk. I was going to pick up trash along the way, but for the first half of the walk a woman was about 50 yards ahead of me doing the same, so I only had the occasional piece that she didn't see. \n\nI wanted to spend most of my day off of screens. I moved my laundry and started another load and then I just hung out in the back yard and started gardening after we got back from our walk. I started moving a bunch of plants around. I had 2 begonias shooting up on the back corner of the north wall bed. I moved those to the beds on either side of the hammock so they will get part-sun. I transpalnted the Marigold from the gas_meter bed to the Center Circle Bed on the northside. I moved several lilies from spots where they werent well placed to the north wall bed to beef up the existing spots wher I had lilies and started moving several of the daisies to that northwall close on the wall. I planted another group of gardenias on the west edge of the northwall bed and on the outside edges of the lilies I transplanted some Rudbeckia from the birdhouse bed. . I moved several plants from the back yard to the East wall bed outside my office window. I need to be better about water this bed a couple time a week. Its very sandy so it dries out often. \n\nI spent a long time finally pruning the holly tree in the back corner. It is going to stay off of the fence now and allow a lot more light to get to that bed. I brought it upa couple of feet and trimmed it back a few feet so it doesnt cover as much of that bed. I salvaged a whole pile of bigger branches into new sticks for Cash and lucy. every time I would lop one off I would throw it to the other side of the yard and they would chase after it. They were stoked. \n\nI chilled in the house for a bit, took a shower and laid around. I went to Mass at 5:00 at St Elizabeth. The Homily was about how we are all hearing voice, the voices that guide our actions, but we must choose to listen to the right voice and to live our calling to be like jesus. It was a good homily but Im always so distracted in mass. Im trying to listen to those voices. Im giving myself up. Im going to be a dad which is scary, but Im doing it because I want to make the world a better place. I want to have faith and I think that I can be a great dad and build a strong family with Madeleine. I am anxious about it though. Anxiously excited, but I know it will be challenging. Even if I am up for the challenge it will still not always be easy, but still I ride headfirst into the storm. \n\nAfter mass I went to Kroger. They sold all of the red salvia that I was considering buying. Probably for the best. I got groceries for the week and for future meals to make for Maddie and I. I got salads for lunch this week, tacos stuff for dinner, and some Jambalays for a new meal for maddie and I; I got some real andoullie and some vegan sausage to have a batch for both of us. Other than that I just got some more staple for the house: Fruit (Bananas, blueberries, cuties, and honeycrisp apples), eggs, Coffee (folgers and cafe bustelo for espresso), and as a treat I got some Microwavable Popcorn to keep at the house. \n\nI made impossible tacos for dinner. Maddie had already eaten. \n\nI talked to scott on the phone. HE is pretty stressed out with the baby and dottie. Potty training Dottie has not gone well. Its been about 9 months of struggling and she is withholding. HE also let me know that they are not going to be going to Spain any longer. He still hasn't told Caroline or Anne; He is worried how Anne is going to take it - I think because Anne and Kelsey have had some tension in the past. Im pretty disappointed that he won't be going. HE said they are worried about traveling with warren, but his reasoning seemed kind of irrational. Like they can't prove Warren is their son if he gets kidnapped overseas... \"uh.. what?!\" I thought it was kind of crazy but its his choice ultimately.. I think warren has just as much chance being abducted in gunterville as in spain, but thats just my opinion. \n\nI worked on my journal fine-tuning tool. I got it running finally and can now process data, but it is trying to write to a sqlite db which I dont have setup. I am going to refactor it to just write to JSON. I have a few other UX items to implement as well like the toggles not displaying correctly and the ability to attach the app to a folder and browse photos there directly from the gui, and process multiple photos at once to handle journal entries that span multiple days. \n\n",
+    "habits": {
+      "drink": false,
+      "guitar": true,
+      "lift": false,
+      "read": false,
+      "run": false,
+      "sexual": false,
+      "smoke": false
+    },
+    "tags": [],
+    "accounts": [
+      {
+        "balance": "",
+        "institution": "Fidelity",
+        "name": ""
+      },
+      {
+        "balance": "",
+        "institution": "USAA",
+        "name": ""
+      }
+    ],
+    "source": "manual",
+    "createdAt": "2026-04-27T17:00:19.469Z"
+  },
+  {
+    "id": "e1777165492387",
+    "date": "2026-04-25",
+    "quote": "“There is real magic in enthusiasm. It spells the difference between mediocrity and accomplishment.”",
+    "quoteAuthor": "Norman Vincent Peale",
+    "meals": {
+      "B": "Carne Asada, Coffee",
+      "L": "Banana",
+      "D": "PIzza"
+    },
+    "freeWrite": "Woke up at 7:30 and took the dogs for a walk. We walked to Rustic and I filled up a couple of grocery bags with trash. \n\nAfter the walk I had some more coffee and worked on the Ripple Monitor Slack integration for a while. \n\nClub Mayo had a masterclass and open mic. The master was on the 3NPS scales compared to CAGED. 3NPS is what Brian Bridger taught me back when I took lessons with him. The modes can also be referred to as \"Moods\". Learned some new 3NPS shapes to play and practice with as well as an arpeggio and interval drill. \n\nIn the open mic I played \"Its all happening\" the guys on the call were all very encouraging and complimented my playing. Charlie Ruiz played some flamenco and malaguena. His playing was really impressive, and Jake played Crazy Train. Those guys can really play. Each guy talked about having the shakes and being nervous playing in front of everybody. We all agreed we are our own biggest critics. Dan Irwin sent me a message after the open mic reiterating how well he thought I played.  I encouraged him to play next time.\n\nI mowed the grass, and then laid in the back yard for a bit. The garden is looking good. The daisies are not really working where they are planted right now. They are about 4 ft tall and I was thinking they would be 18-24\".... They are growing nicely but ruining the line of sight on the rest of the plants and crowding the day lilies out. I need to pull out the inner plants and replace them with the small blanket flowers. The blanket flower will balance the day lilies nicely and the daisies in the corner are much smaller and can probably stay. I moved several daisies to the alley. The alley is looking pretty good though. Lots of Larkspur blooming. The rose of sharon is growing well and I have some daisies, lantana, blackeyed susan, and salvia. I dropped abunch of zinnia and Sunflower seeds back there too. I think the garden will be exploding by the time our Spain Trip rolls around. \n\nI showered and laid in bed resting for a bit. Maddie and I had sex and then we decided to order some pizza. \n\n",
+    "source": "manual",
+    "createdAt": "2026-04-26T01:04:52.387Z"
+  },
+  {
+    "id": "e1",
+    "date": "2026-02-23",
+    "quote": "The present moment always will have been.",
+    "quoteAuthor": "Unknown",
+    "meals": {
+      "B": "Oatmeal, black coffee",
+      "L": "Caesar salad",
+      "D": "Pasta bolognese"
+    },
+    "freeWrite": "Today felt like a turning point. Something shifted in how I see things — a clarity I haven't had in months. Worked on the app most of the afternoon, then a long walk at dusk.",
+    "source": "manual",
+    "createdAt": "2026-02-23T08:00:00Z"
+  },
+  {
+    "id": "e2",
+    "date": "2026-02-20",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": {
+      "B": "",
+      "L": "",
+      "D": ""
+    },
+    "freeWrite": "Quiet day. Worked on the app mostly. Feeling good about the direction things are heading.",
+    "source": "manual",
+    "createdAt": "2026-02-20T09:00:00Z"
+  },
+  {
+    "id": "e3",
+    "date": "2026-02-14",
+    "quote": "Love is the answer.",
+    "quoteAuthor": "John Lennon",
+    "meals": {
+      "B": "Pancakes",
+      "L": "",
+      "D": "Steak and wine"
+    },
+    "freeWrite": "Valentine's Day. Cooked a nice dinner at home. Simple and good.",
+    "source": "photo",
+    "createdAt": "2026-02-14T20:00:00Z"
+  },
+  {
+    "id": "e4",
+    "date": "2026-02-01",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": {
+      "B": "",
+      "L": "",
+      "D": ""
+    },
+    "freeWrite": "February begins. New intentions.",
+    "source": "manual",
+    "createdAt": "2026-02-01T07:00:00Z"
+  },
+  {
+    "id": "e5",
+    "date": "2026-01-15",
+    "quote": "Begin anywhere.",
+    "quoteAuthor": "John Cage",
+    "meals": {
+      "B": "",
+      "L": "",
+      "D": ""
+    },
+    "freeWrite": "Mid-January check-in. Staying consistent.",
+    "source": "manual",
+    "createdAt": "2026-01-15T08:00:00Z"
+  },
+  {
+    "id": "e6",
+    "date": "2026-01-03",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": {
+      "B": "",
+      "L": "",
+      "D": ""
+    },
+    "freeWrite": "Back to routine after the holidays.",
+    "source": "manual",
+    "createdAt": "2026-01-03T09:00:00Z"
+  },
+  {
+    "id": "e7",
+    "date": "2025-12-31",
+    "quote": "Every ending is a beginning.",
+    "quoteAuthor": "Unknown",
+    "meals": {
+      "B": "",
+      "L": "Leftovers",
+      "D": "Champagne dinner"
+    },
+    "freeWrite": "New Year's Eve. Reflecting on the year — what I built, what I let go, what I want next.",
+    "source": "manual",
+    "createdAt": "2025-12-31T22:00:00Z"
+  },
+  {
+    "id": "e8",
+    "date": "2025-12-25",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": {
+      "B": "Cinnamon rolls",
+      "L": "",
+      "D": "Holiday feast"
+    },
+    "freeWrite": "Christmas. Family time. Grateful.",
+    "source": "photo",
+    "createdAt": "2025-12-25T18:00:00Z"
+  },
+  {
+    "id": "e9",
+    "date": "2025-11-28",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": {
+      "B": "",
+      "L": "",
+      "D": "Turkey, stuffing, pie"
+    },
+    "freeWrite": "Thanksgiving. Good food, good people.",
+    "source": "manual",
+    "createdAt": "2025-11-28T19:00:00Z"
+  },
+  {
+    "id": "e10",
+    "date": "2025-10-10",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": {
+      "B": "",
+      "L": "",
+      "D": ""
+    },
+    "freeWrite": "October morning. The air has changed.",
+    "source": "manual",
+    "createdAt": "2025-10-10T08:00:00Z"
+  },
+  {
+    "id": "e11",
+    "date": "2025-08-04",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": {
+      "B": "",
+      "L": "",
+      "D": ""
+    },
+    "freeWrite": "Long summer days. Making the most of the heat.",
+    "source": "manual",
+    "createdAt": "2025-08-04T07:00:00Z"
+  }
+]

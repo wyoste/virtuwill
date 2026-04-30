@@ -1,0 +1,107 @@
+<div class="page" id="page-travel">
+  <div class="travel-layout">
+
+    <!-- ── Sidebar ───────────────────────────────────────── -->
+    <aside class="travel-sidebar">
+      <div class="travel-sb-header">
+        <div class="travel-sb-title">&#9992; Will&#39;s World</div>
+        <div class="travel-sb-sub">
+          <span id="tv-visited-stats" class="tv-stats-inline"></span>
+        </div>
+      </div>
+
+      <!-- Sidebar tab switcher -->
+      <div class="tv-tabs">
+        <button class="tv-tab on" id="tv-tab-pins"    onclick="VW.Travel.showSidebarTab('pins')">&#128205; Pins</button>
+        <button class="tv-tab"    id="tv-tab-visited" onclick="VW.Travel.showSidebarTab('visited')">&#127758; Visited</button>
+      </div>
+
+      <!-- ── PINS PANEL ─────────────────────────────────── -->
+      <div id="tv-panel-pins">
+
+        <!-- Admin: add pin -->
+        <div id="travel-admin-bar" style="display:none">
+          <div class="travel-section-lbl">Add a pin</div>
+          <div class="travel-add-form">
+            <input id="tv-pin-name" class="tv-input" placeholder="Place name"/>
+            <input id="tv-pin-city" class="tv-input" placeholder="City, Country"/>
+            <select id="tv-pin-type" class="tv-input">
+              <option value="visited">&#9899; Visited</option>
+              <option value="recommend">&#11088; Recommend</option>
+              <option value="wishlist">&#127775; Wish list</option>
+            </select>
+            <textarea id="tv-pin-note" class="tv-input" rows="2" placeholder="Notes (optional)"></textarea>
+            <button class="tv-add-btn" onclick="VW.Travel.addPin()">+ Add Pin</button>
+          </div>
+        </div>
+
+        <!-- Admin: photo overlay -->
+        <div id="travel-photo-bar" style="display:none">
+          <div class="travel-section-lbl">Overlay a photo</div>
+          <div class="travel-add-form">
+            <input id="tv-photo-lat" class="tv-input" placeholder="Latitude (click map to fill)"/>
+            <input id="tv-photo-lng" class="tv-input" placeholder="Longitude"/>
+            <input id="tv-photo-caption" class="tv-input" placeholder="Caption"/>
+            <label class="tv-file-lbl">
+              <input type="file" accept="image/*" style="display:none" onchange="VW.Travel.uploadPhoto(this.files)"/>
+              &#128247; Choose photo
+            </label>
+          </div>
+        </div>
+
+        <!-- Pin list -->
+        <div class="travel-section-lbl">Pins</div>
+        <div class="travel-pin-list" id="travel-pin-list">
+          <div class="tv-empty">No pins yet.</div>
+        </div>
+
+        <!-- Google My Maps -->
+        <div class="travel-section-lbl" style="margin-top:12px">Google Lists</div>
+        <div class="tv-links">
+          <a class="tv-link" href="https://maps.google.com" target="_blank" rel="noopener">&#127759; Open Google Maps</a>
+          <div id="travel-maps-panel" style="display:none;margin-top:8px">
+            <iframe id="tv-gmaps-frame" src="" width="100%" height="180"
+              style="border-radius:8px;border:0.5px solid var(--border)" loading="lazy" allowfullscreen></iframe>
+          </div>
+          <div id="travel-gmaps-admin" style="display:none;margin-top:8px">
+            <input id="tv-gmaps-url" class="tv-input" placeholder="Google My Maps embed URL"/>
+            <button class="tv-add-btn" style="margin-top:6px" onclick="VW.Travel.embedGoogleMap()">Embed</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── VISITED PANEL ──────────────────────────────── -->
+      <div id="tv-panel-visited" style="display:none">
+
+        <!-- Admin: add country/state -->
+        <div id="travel-visited-admin" style="display:none">
+          <div class="travel-section-lbl">Mark as visited</div>
+          <div class="travel-add-form">
+            <select id="tv-visited-type" class="tv-input">
+              <option value="country">&#127758; Country</option>
+              <option value="state">&#127482;&#127480; US State</option>
+            </select>
+            <input id="tv-visited-input" class="tv-input" placeholder="Country name or US state"/>
+            <button class="tv-add-btn" onclick="VW.Travel.addVisitedPlace()">+ Add</button>
+          </div>
+          <div style="font-size:10px;color:var(--text3);padding:0 12px 10px;line-height:1.5">
+            &#9432; You can also click directly on a country or US state on the map to toggle it.
+          </div>
+        </div>
+
+        <!-- Stats + list -->
+        <div class="travel-section-lbl">Places visited</div>
+        <div class="travel-pin-list" id="tv-visited-list">
+          <div class="tv-empty">No places added yet.</div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ── Map ────────────────────────────────────────────── -->
+    <div class="travel-map-wrap">
+      <div id="travel-map"></div>
+    </div>
+
+  </div>
+</div>

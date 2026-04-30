@@ -1,0 +1,17 @@
+# VirtuWill Python dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+# Minimum install (mock data mode — no backend configuration required):
+#   pip install flask python-dotenv
+#
+# Full install (with OCR and production server):
+#   pip install -r requirements.txt
+
+# ── Core ────────────────────────────────────────────────────────────────────
+flask>=3.0.0
+python-dotenv>=1.0.0
+
+# ── Production server ────────────────────────────────────────────────────────
+gunicorn>=22.0.0
+
+# ── OCR (optional — comment out if not using photo transcription) ─────────
+anthropic>=0.28.0

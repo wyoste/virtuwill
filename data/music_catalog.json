@@ -1,0 +1,57 @@
+{
+  "tracks": [
+    {
+      "bpm": null,
+      "chords": "E-A7-D\nE-A-G-E",
+      "genre": "Garage Rock",
+      "id": "t1776835806482",
+      "key": "",
+      "location": "Oxford, MS",
+      "lyrics": "You were standing on the wall \nyou were calm had it all under control\nyou were smokin a cigarette\ncowboy killers, you knoow I never stood a chance\nI could tell you were cool\nI just knew by the way that you moved.\nfill my cup up to the brim\nyou I need all the help I can get. \n\nGirl wont you dance with me\nCome on and dance with me.",
+      "src": "/static/audio/dance_with_me_2025_version_-_12_29_25__6.50_PM.wav",
+      "story": "I wrote this song in 2020 during covid. I was stuck at home all the time. I had been playing the main little riff chord stum thing for a couple years now and never had lyrics but It had this vibe that I kept coming back to. I came up with the chords when I was listening to Twin Peaks in heavy rotation. I wanted the song to be cool, and to be upbeat and happy. So many songs Id written were sad and I just wanted a fun rock song that woulld make people move their body. \n\nI wrote it thinking about my history with women. I would see a girl who had this aura and who intimidated me but the urge to talk to her was usually stronger than my fear it might go south. \n\nPArtially about my first impression of my wife and then girlfriend MAddie. When I first saw her she worked at my company but wore all black and had skintight black jeans and black shirts, her dark hair, and stoic expression had me hooked. She wasnt like other girls I had dated and definitely like most of the other girls in Oxford. Our first date we went to a concert at proud larry's and spent the night dancing, and we have spent many nights isnce then dancing and listening to music together.",
+      "tabs": "",
+      "title": "Dance with me",
+      "year": 2020
+    },
+    {
+      "bpm": null,
+      "chords": "",
+      "genre": "Indie Pop",
+      "id": "t1776880575828",
+      "key": "",
+      "location": "Oxford, MS",
+      "lyrics": "",
+      "src": "/static/audio/YosteGoWiththeFlowMix1St1.wav",
+      "story": "",
+      "tabs": "",
+      "title": "Go with the Flow",
+      "year": 2019
+    },
+    {
+      "id": "t1776994588911",
+      "title": "Ramen",
+      "year": 2026,
+      "genre": "Acoustic",
+      "story": "",
+      "location": "",
+      "key": "",
+      "bpm": null,
+      "sections": [
+        {
+          "id": "sec-1776994547938",
+          "type": "verse",
+          "label": "Verse 1",
+          "chords": "B-A-E x3\nCm-A-E",
+          "lyrics": "",
+          "tabs": ""
+        }
+      ],
+      "chords": "Verse 1:\nB-A-E x3\nCm-A-E",
+      "lyrics": "",
+      "tabs": "",
+      "published": false,
+      "src": null
+    }
+  ]
+}

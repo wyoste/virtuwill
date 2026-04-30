@@ -1,0 +1,219 @@
+<div class="page" id="page-planner">
+  <div id="gdn-app" class="gdn-app">
+
+    <!-- ── Minimal top toolbar ─────────────────────────── -->
+    <div class="gdn-toolbar" id="gdn-admin-toolbar">
+      <div class="gdn-tb-left">
+        <button class="gb" onclick="go('admin')" title="Back to admin">&#8592; Admin</button>
+        <span class="gdn-toolbar-sep"></span>
+        <span class="gdn-tb-title">&#127807; Garden Planner</span>
+      </div>
+      <div class="gdn-tb-right">
+        <!-- Draw mode indicator shown during polygon/free-draw -->
+        <span class="gdn-draw-hint" id="gdn-draw-hint" style="display:none"></span>
+        <button class="gb" id="gdn-save-btn" onclick="gdn.save()">&#128190; Save</button>
+      </div>
+    </div>
+
+    <!-- ── Main body: canvas + right panel ─────────────── -->
+    <div class="gdn-body">
+
+      <!-- Canvas -->
+      <div class="gdn-canvas-panel">
+        <div id="gdn-cv-wrap" style="width:100%;height:100%;position:relative">
+          <canvas id="gdn-cv"></canvas>
+        </div>
+        <div class="gdn-zoom-ctrl">
+          <button onclick="gdn.zoomBy(1.25)" title="Zoom in">+</button>
+          <button onclick="gdn.resetView()" title="Fit" style="font-size:10px">&#9654;</button>
+          <button onclick="gdn.zoomBy(0.8)" title="Zoom out">&#8722;</button>
+        </div>
+      </div>
+
+      <!-- ── Right panel ─────────────────────────────────── -->
+      <aside class="gdn-panel" id="gdn-panel">
+
+        <!-- ── VIEW: Bed list (overview) ─────────────────── -->
+        <div class="gdn-panel-view" id="gdn-panel-overview">
+
+          <!-- Draw new bed -->
+          <div class="gdn-panel-section">
+            <div class="gdn-panel-section-lbl">New bed</div>
+            <div class="gdn-draw-btns">
+              <button class="gdn-draw-btn" onclick="gdn.addBed('rectangle')" title="Rectangular bed">
+                <span class="gdn-draw-icon">&#9645;</span>Rect
+              </button>
+              <button class="gdn-draw-btn" onclick="gdn.addBed('circle')" title="Circular bed">
+                <span class="gdn-draw-icon">&#9711;</span>Circle
+              </button>
+              <button class="gdn-draw-btn" onclick="gdn.addBed('polygon')" title="Click vertices, Enter to finish">
+                <span class="gdn-draw-icon">&#11040;</span>Polygon
+              </button>
+              <button class="gdn-draw-btn" id="gdn-btn-free-draw" onclick="gdn.addBed('free_draw')" title="Hold and drag to draw freehand">
+                <span class="gdn-draw-icon">&#9999;</span>Free draw
+              </button>
+            </div>
+          </div>
+
+          <!-- Bed list -->
+          <div class="gdn-panel-section gdn-panel-beds-section">
+            <div class="gdn-panel-section-lbl" style="display:flex;justify-content:space-between;align-items:center">
+              <span>Beds</span>
+              <span class="gdn-bed-count" id="gdn-bed-count"></span>
+            </div>
+            <div class="gdn-bed-list" id="gdn-bed-list">
+              <div class="gdn-no-beds">No beds yet — draw one above</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── VIEW: Bed editor ───────────────────────────── -->
+        <div class="gdn-panel-view" id="gdn-panel-edit" style="display:none">
+
+          <!-- Editor header -->
+          <div class="gdn-panel-edit-hd">
+            <button class="gdn-back-btn" onclick="gdn.goBack()">&#8592; All beds</button>
+            <div class="gdn-panel-edit-title" id="gdn-panel-edit-title">Edit bed</div>
+          </div>
+
+          <!-- Edit mode buttons -->
+          <div class="gdn-panel-section">
+            <div class="gdn-panel-section-lbl">Shape</div>
+            <div class="gdn-draw-btns">
+              <button class="gdn-draw-btn gdn-mode-btn on" id="gdn-btn-select"
+                onclick="gdn.setMode('select')">&#9654; Select</button>
+              <button class="gdn-draw-btn gdn-mode-btn" id="gdn-btn-reshape"
+                onclick="gdn.setMode('reshape')">&#8631; Reshape</button>
+            </div>
+          </div>
+
+          <!-- Bed info tab -->
+          <div class="gdn-panel-section" id="gdn-panel-info">
+            <div class="gdn-panel-section-lbl">Bed details</div>
+            <div class="gdn-field-lbl">Name</div>
+            <input class="vw-input gdn-panel-input" id="gdn-bed-name"
+              placeholder="Name this bed" onblur="gdn.saveBedMeta()"/>
+            <div id="gdn-dim-panel" style="margin-top:8px"></div>
+          </div>
+
+          <!-- Plants section -->
+          <div class="gdn-panel-section">
+            <div class="gdn-panel-section-lbl">Plants</div>
+            <div class="gdn-field-lbl">Add species</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+              <select class="vw-input gdn-panel-input" id="gdn-species-dropdown"
+                style="cursor:pointer;flex:1">
+                <option value="">— Choose species —</option>
+              </select>
+              <button class="gdn-draw-btn gdn-mode-btn" id="gdn-btn-place-plant"
+                onclick="gdn.setMode('place_plant')" title="Click grid point to place">
+                &#127807; Place
+              </button>
+            </div>
+            <div class="gdn-draw-btns" style="margin-bottom:8px">
+              <button class="gdn-draw-btn gdn-mode-btn" id="gdn-btn-erase"
+                onclick="gdn.setMode('erase')">&#9003; Erase</button>
+              <button class="gdn-draw-btn gdn-mode-btn" id="gdn-btn-pan"
+                onclick="gdn.setMode('pan')">&#8645; Pan</button>
+            </div>
+            <div class="gdn-field-lbl">Plants in this bed</div>
+            <div id="gdn-plant-list-panel"></div>
+          </div>
+
+          <!-- Footer actions -->
+          <div class="gdn-panel-edit-ft">
+            <button class="vw-btn vw-btn--danger vw-btn--sm" onclick="gdn.deleteCurrentBed()">
+              &#128465; Delete bed
+            </button>
+            <button class="vw-btn vw-btn--primary vw-btn--sm" onclick="gdn.save()">
+              &#128190; Save
+            </button>
+          </div>
+        </div>
+
+      </aside>
+    </div><!-- end gdn-body -->
+
+    <!-- ── Plant detail modal (vw-modal) ─────────────────── -->
+    <div class="vw-modal-bg" id="gdn-plant-modal"
+      onclick="if(event.target===this)gdn.closePlantModal()">
+      <div class="vw-modal">
+        <div class="vw-modal-hd">
+          <span class="vw-modal-title">&#127807; Plant details</span>
+          <button class="vw-modal-close" onclick="gdn.closePlantModal()">&#215;</button>
+        </div>
+        <div class="vw-modal-body">
+          <div class="pm-row">
+            <div class="pm-field">
+              <label class="pm-label">Display name</label>
+              <input class="vw-input" id="pm-name" placeholder="e.g. Rosa 'Mr. Lincoln'"/>
+            </div>
+            <div class="pm-field">
+              <label class="pm-label">Species ID</label>
+              <input class="vw-input" id="pm-species" placeholder="e.g. hybrid-tea-rose" readonly/>
+            </div>
+          </div>
+          <div class="pm-row">
+            <div class="pm-field">
+              <label class="pm-label">Age (years)</label>
+              <input class="vw-input" id="pm-age" type="number" min="0" step="0.5" placeholder="0"/>
+            </div>
+            <div class="pm-field">
+              <label class="pm-label">Health</label>
+              <input class="pm-health-slider" type="range" id="pm-health" min="0" max="4" step="1" value="2"
+                oninput="gdn.updateHealthLabel(this.value)"/>
+              <span id="pm-health-lbl" class="pm-health-lbl">&#127807; Growing</span>
+            </div>
+          </div>
+          <div class="pm-field">
+            <label class="pm-label">Notes</label>
+            <textarea class="vw-input" id="pm-notes" rows="3" style="resize:vertical"
+              placeholder="Care notes, observations…"></textarea>
+          </div>
+          <input type="hidden" id="pm-desc"/>
+          <input type="hidden" id="pm-fp" value="18"/>
+          <div class="pm-row" style="margin-top:4px">
+            <div class="pm-field">
+              <label class="pm-label">Display radius (ft)</label>
+              <input class="vw-input" id="pm-radius" type="number"
+                min="0.1" max="20" step="0.1" placeholder="e.g. 2.0"/>
+              <div id="pm-radius-hint" style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:3px"></div>
+            </div>
+          </div>
+        </div>
+        <div class="vw-modal-ft">
+          <button class="vw-btn vw-btn--ghost vw-btn--sm" onclick="gdn.closePlantModal()">Cancel</button>
+          <button class="vw-btn vw-btn--primary vw-btn--sm" onclick="gdn.savePlantDetail()">Save plant</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Delete bed confirmation modal ─────────────────── -->
+    <div class="vw-modal-bg" id="gdn-delete-confirm"
+      onclick="if(event.target===this)gdn.cancelDeleteBed()">
+      <div class="vw-modal" style="max-width:380px">
+        <div class="vw-modal-hd" style="justify-content:center;border-bottom:none">
+          <span style="font-size:32px">&#128465;</span>
+        </div>
+        <div class="vw-modal-body" style="text-align:center;padding-top:4px">
+          <div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px">Delete this bed?</div>
+          <div style="font-size:13px;color:rgba(255,255,255,.55);margin-bottom:4px">
+            You are about to permanently delete
+          </div>
+          <div style="font-size:15px;font-weight:600;color:#f87171;margin-bottom:16px"
+            id="gdn-delete-bed-name">this bed</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.4);margin-bottom:20px;line-height:1.5">
+            All plants inside it will be removed.<br/>This cannot be undone.
+          </div>
+          <div class="vw-action-row" style="justify-content:center">
+            <button class="vw-btn vw-btn--ghost vw-btn--sm" onclick="gdn.cancelDeleteBed()">Cancel</button>
+            <button class="vw-btn vw-btn--danger vw-btn--sm" onclick="gdn.confirmDeleteBed()">
+              &#128465; Yes, delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end gdn-app -->
+</div>

@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio — DMP Release Notes Automation | Will Yoste</title>
+<style>
+:root {
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --surface2: #f4f3ef;
+  --border: #e8e6e0;
+  --border-strong: #d4d0c8;
+  --text: #1a1916;
+  --text-muted: #6b6760;
+  --text-light: #9b978f;
+  --accent: #1d4ed8;
+  --accent-light: #eff6ff;
+  --accent-mid: #bfdbfe;
+  --green: #15803d;
+  --green-light: #f0fdf4;
+  --amber: #b45309;
+  --amber-light: #fffbeb;
+  --purple: #6d28d9;
+  --purple-light: #f5f3ff;
+  --mono: 'Courier New', Courier, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --serif: Georgia, 'Times New Roman', serif;
+  --max: 900px;
+  --radius: 8px;
+  --shadow: 0 1px 4px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.05);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,.08), 0 12px 40px rgba(0,0,0,.08);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── NAV ── */
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(250,250,248,.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+}
+.nav-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.nav-brand {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -.2px;
+}
+.nav-brand span { color: var(--text-muted); font-weight: 400; }
+.nav-links {
+  display: flex;
+  gap: 0;
+  list-style: none;
+}
+.nav-links a {
+  display: block;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: 6px;
+  transition: color .15s, background .15s;
+}
+.nav-links a:hover { color: var(--text); background: var(--surface2); }
+
+/* ── HERO ── */
+.hero {
+  background: var(--text);
+  color: #fff;
+  padding: 80px 24px 72px;
+}
+.hero-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.55);
+  margin-bottom: 20px;
+}
+.hero-eyebrow::before {
+  content: '';
+  display: block;
+  width: 24px;
+  height: 1px;
+  background: rgba(255,255,255,.35);
+}
+.hero h1 {
+  font-size: clamp(28px, 5vw, 42px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -.5px;
+  margin-bottom: 20px;
+  max-width: 680px;
+}
+.hero h1 em {
+  font-style: normal;
+  color: rgba(255,255,255,.65);
+}
+.hero-desc {
+  font-size: 16px;
+  color: rgba(255,255,255,.72);
+  max-width: 580px;
+  line-height: 1.7;
+  margin-bottom: 36px;
+}
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255,255,255,.85);
+}
+.hero-chip.accent { background: rgba(29,78,216,.35); border-color: rgba(96,165,250,.4); color: #93c5fd; }
+
+/* ── LAYOUT ── */
+.page { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+
+section { padding: 64px 0; border-bottom: 1px solid var(--border); }
+section:last-child { border-bottom: none; }
+
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.section-title {
+  font-size: clamp(20px, 3vw, 26px);
+  font-weight: 700;
+  letter-spacing: -.3px;
+  margin-bottom: 14px;
+  line-height: 1.2;
+}
+.section-lead {
+  font-size: 15px;
+  color: var(--text-muted);
+  max-width: 640px;
+  line-height: 1.7;
+  margin-bottom: 40px;
+}
+
+/* ── PROBLEM CARDS ── */
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+.problem-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.problem-card .icon {
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+.problem-card h4 {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.problem-card p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ── TIMELINE ── */
+.timeline { position: relative; padding-left: 28px; }
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: var(--border-strong);
+}
+.tl-item {
+  position: relative;
+  margin-bottom: 36px;
+}
+.tl-item:last-child { margin-bottom: 0; }
+.tl-dot {
+  position: absolute;
+  left: -25px;
+  top: 5px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+}
+.tl-item.done .tl-dot { background: var(--accent); }
+.tl-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-light);
+  margin-bottom: 4px;
+}
+.tl-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.tl-body {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.65;
+}
+.tl-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--mono);
+}
+.tag-blue { background: var(--accent-light); color: var(--accent); }
+.tag-green { background: var(--green-light); color: var(--green); }
+.tag-amber { background: var(--amber-light); color: var(--amber); }
+.tag-purple { background: var(--purple-light); color: var(--purple); }
+.tag-gray { background: var(--surface2); color: var(--text-muted); }
+
+/* ── FEATURE CARDS ── */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+.feature-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  transition: box-shadow .2s, transform .2s;
+}
+.feature-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+.feature-card .fc-icon {
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+.feature-card h4 {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.feature-card p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ── CALLOUT ── */
+.callout {
+  background: var(--accent-light);
+  border: 1px solid var(--accent-mid);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin: 32px 0;
+}
+.callout p {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.7;
+}
+.callout strong { color: var(--accent); }
+
+.callout-amber {
+  background: var(--amber-light);
+  border-color: #fde68a;
+  border-left-color: var(--amber);
+}
+.callout-amber p { color: #78350f; }
+
+.callout-green {
+  background: var(--green-light);
+  border-color: #bbf7d0;
+  border-left-color: var(--green);
+}
+.callout-green p { color: #14532d; }
+
+/* ── LEARNING CARDS ── */
+.learning-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+.learning-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+  box-shadow: var(--shadow);
+}
+.learning-card .lc-num {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+  font-family: var(--mono);
+}
+.learning-card h4 {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.learning-card p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ── ARTIFACT SHOWCASE ── */
+.artifact-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 24px 0;
+}
+@media(max-width: 600px) { .artifact-row { grid-template-columns: 1fr; } }
+.artifact-card {
+  background: var(--text);
+  border-radius: var(--radius);
+  padding: 22px;
+  color: rgba(255,255,255,.9);
+}
+.artifact-card .ac-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.45);
+  margin-bottom: 6px;
+  font-family: var(--mono);
+}
+.artifact-card h4 {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #fff;
+}
+.artifact-card p {
+  font-size: 12px;
+  color: rgba(255,255,255,.65);
+  line-height: 1.6;
+}
+.artifact-card .ac-size {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgba(255,255,255,.35);
+  margin-top: 10px;
+}
+
+/* ── IMPACT TABLE ── */
+.impact-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 24px 0;
+}
+.impact-table th {
+  background: var(--surface2);
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border-strong);
+}
+.impact-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  line-height: 1.55;
+}
+.impact-table tr:last-child td { border-bottom: none; }
+.impact-table tr:hover td { background: var(--surface2); }
+.impact-table td:first-child { font-weight: 600; color: var(--text); }
+.impact-table td:nth-child(2) { color: var(--text-muted); }
+.impact-table td:last-child { color: var(--green); font-weight: 600; font-size: 12px; }
+
+/* ── QUOTE ── */
+.quote-block {
+  border-left: 3px solid var(--accent);
+  padding: 4px 0 4px 24px;
+  margin: 32px 0;
+}
+.quote-block p {
+  font-size: 18px;
+  font-style: italic;
+  line-height: 1.6;
+  color: var(--text);
+  font-family: var(--serif);
+}
+.quote-block cite {
+  display: block;
+  font-size: 12px;
+  font-style: normal;
+  color: var(--text-muted);
+  margin-top: 10px;
+  font-weight: 500;
+}
+
+/* ── SKILLS ── */
+.skills-group { margin-bottom: 24px; }
+.skills-group h4 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.skills-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.skill-chip {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  transition: background .15s, border-color .15s;
+}
+.skill-chip:hover { background: var(--accent-light); border-color: var(--accent-mid); color: var(--accent); }
+
+/* ── FOOTER ── */
+footer {
+  background: var(--text);
+  color: rgba(255,255,255,.55);
+  padding: 40px 24px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.footer-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.footer-inner strong { color: rgba(255,255,255,.85); }
+
+/* ── UTILS ── */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media(max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+.text-accent { color: var(--accent); }
+.text-muted { color: var(--text-muted); }
+.mono { font-family: var(--mono); font-size: .9em; }
+.mb-0 { margin-bottom: 0; }
+.mt-24 { margin-top: 24px; }
+.mt-32 { margin-top: 32px; }
+
+/* ── PRINT ── */
+@media print {
+  nav { display: none; }
+  .hero { background: #1a1916 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  section { break-inside: avoid; }
+  .feature-card, .problem-card, .learning-card { break-inside: avoid; }
+  body { font-size: 12px; }
+}
+
+@media(max-width: 640px) {
+  .hero { padding: 48px 20px 44px; }
+  section { padding: 44px 0; }
+  .nav-links { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand">Will Yoste &nbsp;<span>· Portfolio</span></div>
+    <ul class="nav-links">
+      <li><a href="#problem">Problem</a></li>
+      <li><a href="#build">The Build</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#learnings">Learnings</a></li>
+      <li><a href="#skills">Skills</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">Case Study · Greystar DataMarketplace</div>
+    <h1>Turning a Weekly Chore Into a<br><em>One-Click Intelligence Product</em></h1>
+    <p class="hero-desc">
+      How an iterative collaboration with Claude transformed a slow, error-prone, manual process
+      into a fully interactive release management tool — complete with domain intelligence,
+      cross-release search, and Outlook-ready email drafting.
+    </p>
+    <div class="hero-meta">
+      <span class="hero-chip">📅 Recurring Weekly Workflow</span>
+      <span class="hero-chip">🔗 Azure DevOps Integration</span>
+      <span class="hero-chip">📧 Outlook Automation</span>
+      <span class="hero-chip accent">⚡ Built Iteratively with Claude</span>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<main class="page">
+
+  <!-- PROBLEM -->
+  <section id="problem">
+    <div class="section-label">The Problem</div>
+    <h2 class="section-title">Release Notes Were Slow, Manual, and Easy to Get Wrong</h2>
+    <p class="section-lead">
+      Every Tuesday, the DataMarketplace team ships a release to production. Before each deployment,
+      someone has to compile release notes and distribute them to over 30 stakeholders. What sounds
+      simple was anything but.
+    </p>
+
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="icon">🖱️</div>
+        <h4>Lots of Clicking</h4>
+        <p>Generating release notes meant navigating ADO, opening each work item individually,
+        and manually copying fields into a Word document — story by story.</p>
+      </div>
+      <div class="problem-card">
+        <div class="icon">🔀</div>
+        <h4>Constant Tab Switching</h4>
+        <p>Cross-referencing ADO, SharePoint, Outlook, and the release notes template required
+        constant context-switching. Easy to lose your place, easy to miss items.</p>
+      </div>
+      <div class="problem-card">
+        <div class="icon">🗂️</div>
+        <h4>Inconsistent Domain Classification</h4>
+        <p>Bucketing items into the correct business domain required manual knowledge of which
+        gold tables belong to which product area — a task that was inconsistently applied.</p>
+      </div>
+      <div class="problem-card">
+        <div class="icon">📧</div>
+        <h4>Manual Email Composition</h4>
+        <p>After building the notes, you still had to format them, compose a time-sensitive greeting,
+        recall 30+ recipient addresses, and send — every single week.</p>
+      </div>
+      <div class="problem-card">
+        <div class="icon">🔍</div>
+        <h4>No Search Across History</h4>
+        <p>Answering "when did we last change anything Anaplan-related?" required scrolling through
+        months of SharePoint documents with no structured way to search.</p>
+      </div>
+      <div class="problem-card">
+        <div class="icon">⏱️</div>
+        <h4>Disproportionate Time Cost</h4>
+        <p>A task that should take 10 minutes regularly consumed 30–45 minutes of a Product Owner's
+        time — and that was before any interruptions or off-schedule releases.</p>
+      </div>
+    </div>
+
+    <div class="callout-amber callout">
+      <p><strong>The core insight:</strong> The information already existed in ADO. The problem wasn't
+      access to data — it was the absence of a purpose-built tool that assembled it, classified it,
+      and put it in the right format for the right audience.</p>
+    </div>
+  </section>
+
+  <!-- THE BUILD -->
+  <section id="build">
+    <div class="section-label">The Build</div>
+    <h2 class="section-title">An Iterative Journey from Query to Product</h2>
+    <p class="section-lead">
+      The tool didn't start as a grand design. It started as a single question to Claude about
+      what was going to production that day — and grew from there through a series of deliberate,
+      compounding iterations.
+    </p>
+
+    <div class="timeline">
+
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Phase 1 · Discovery</div>
+        <div class="tl-title">The First Query</div>
+        <div class="tl-body">
+          Started by asking Claude a simple ADO question: <em>"Which items are scheduled to go to
+          production today where I'm the product contact?"</em> Claude used the existing ADO skill
+          to fetch the answer directly — no tab-switching, no manual filtering. The immediate value
+          of having an intelligent intermediary between the user and raw API data was clear.
+        </div>
+        <div class="tl-tags">
+          <span class="tag tag-blue">ADO WIQL</span>
+          <span class="tag tag-gray">First prototype</span>
+        </div>
+      </div>
+
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Phase 2 · MVP</div>
+        <div class="tl-title">"Let's Build a Release Notes Generator"</div>
+        <div class="tl-body">
+          The first request to create something real: a web-based app with a release calendar,
+          work item list, and a formatted output. Claude generated a full-featured HTML application
+          with embedded JavaScript making live ADO API calls — all in a single file. The browser
+          became the interface; ADO became the data source.
+        </div>
+        <div class="tl-tags">
+          <span class="tag tag-blue">Dynamic HTML app</span>
+          <span class="tag tag-blue">ADO REST API</span>
+          <span class="tag tag-amber">WIQL queries</span>
+        </div>
+      </div>
+
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Phase 3 · Intelligence</div>
+        <div class="tl-title">Domain Classification from SharePoint Source of Truth</div>
+        <div class="tl-body">
+          The release notes required bucketing items by business domain. Rather than hard-coding
+          guesses, Claude was directed to the authoritative source — Data Domains.xlsx in SharePoint.
+          The app now embeds an 87-entry table → domain mapping with longest-match logic, source
+          system overrides (Salesforce→Property, Anaplan→Financial Corp), and valid domain
+          validation against the official col D list.
+        </div>
+        <div class="tl-tags">
+          <span class="tag tag-green">SharePoint integration</span>
+          <span class="tag tag-blue">Domain classification</span>
+          <span class="tag tag-purple">Business rules encoding</span>
+        </div>
+      </div>
+
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Phase 4 · Communication</div>
+        <div class="tl-title">Outlook Integration and Email Automation</div>
+        <div class="tl-body">
+          Added a full email management system: a 31-person distribution list with bulk Outlook
+          paste import, a rich HTML email generator matching the manual Greystar format (with
+          time-aware greeting, DLT pipeline date calculation, and Calibri-styled bullet hierarchy),
+          and a one-click Open in Outlook that pre-fills recipients and subject — with rich HTML
+          pre-copied to clipboard for immediate paste.
+        </div>
+        <div class="tl-tags">
+          <span class="tag tag-blue">Outlook mailto integration</span>
+          <span class="tag tag-green">Rich HTML clipboard</span>
+          <span class="tag tag-amber">Email template engine</span>
+        </div>
+      </div>
+
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Phase 5 · Discoverability</div>
+        <div class="tl-title">Cross-Release Search with Calendar Highlighting</div>
+        <div class="tl-body">
+          Added the ability to search across all past and upcoming releases by keyword. Results
+          group by release ID, highlight matching terms, and visually mark those dates on the
+          calendar with amber outlines — making it trivial to answer "when did we last touch
+          anything related to Anaplan?" or "show all releases containing StarRez."
+        </div>
+        <div class="tl-tags">
+          <span class="tag tag-purple">Cross-release search</span>
+          <span class="tag tag-blue">Calendar intelligence</span>
+          <span class="tag tag-gray">WIQL CONTAINS</span>
+        </div>
+      </div>
+
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Phase 6 · Architecture Evolution</div>
+        <div class="tl-title">From Browser Fetch to MCP-Routed Claude App</div>
+        <div class="tl-body">
+          Direct ADO REST calls from the browser were blocked by a corporate network proxy.
+          The solution: route all ADO queries through Claude's MCP tools via the Anthropic API.
+          The app now sends natural language prompts to Claude, which calls
+          <span class="mono">ado:ado_wiql_query</span> and <span class="mono">ado:ado_batch_fetch</span>
+          on behalf of the UI — eliminating the proxy problem entirely while keeping all UI
+          logic, domain classification, and formatting intact.
+        </div>
+        <div class="tl-tags">
+          <span class="tag tag-blue">Anthropic API</span>
+          <span class="tag tag-purple">MCP tool orchestration</span>
+          <span class="tag tag-green">Proxy-resilient architecture</span>
+        </div>
+      </div>
+
+      <div class="tl-item done">
+        <div class="tl-dot"></div>
+        <div class="tl-label">Phase 7 · Reusability</div>
+        <div class="tl-title">Codified as Skills for the Team</div>
+        <div class="tl-body">
+          The patterns developed through iteration were distilled into reusable Claude skills:
+          a project-agnostic <em>ADO Backlog Analyst</em> (any org, any project, prompt-based PAT)
+          and a <em>DMP Release Notes</em> skill encoding the full formatting spec, domain map,
+          distribution list, and email template — so any team member can generate release notes
+          conversationally without opening the app.
+        </div>
+        <div class="tl-tags">
+          <span class="tag tag-green">Skill creation</span>
+          <span class="tag tag-amber">Knowledge transfer</span>
+          <span class="tag tag-purple">Reusable patterns</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="section-label">What Got Built</div>
+    <h2 class="section-title">A Central Release Intelligence Hub</h2>
+    <p class="section-lead">
+      Six major capability areas, each addressing a distinct pain point from the original manual process.
+    </p>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="fc-icon">📅</div>
+        <h4>Release Calendar</h4>
+        <p>Visual calendar with Tuesday release days highlighted. Green dots mark confirmed ADO
+        releases. Amber outlines show search matches. Default view auto-selects the current
+        week's release — or next Tuesday if it's Friday through Sunday.</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">🗂️</div>
+        <h4>Automatic Domain Classification</h4>
+        <p>Each work item is classified against an 87-entry gold table → domain lookup sourced
+        from the authoritative Data Domains SharePoint spreadsheet. Longest-match wins; source
+        system overrides handle Yardi, Salesforce, Anaplan, Oracle, and more.</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">📋</div>
+        <h4>Formatted Release Notes</h4>
+        <p>Generates the exact release notes document format matching the Greystar template:
+        correct section headings based on product group span, alphabetical domain sorting,
+        four-bullet item hierarchy, and Infrastructure Changes bucketing for Reference Data.</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">✉️</div>
+        <h4>Outlook-Ready Email</h4>
+        <p>Produces a rich HTML email matching the manual Greystar format. Time-aware greeting,
+        DLT pipeline date calculation, domain-bucketed content with correct bullet hierarchy.
+        One click copies to clipboard; another opens Outlook with recipients and subject pre-filled.</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">🔍</div>
+        <h4>Cross-Release Search</h4>
+        <p>Search across all POApproved DMP items by keyword in real time. Results group by
+        release, highlight matching terms, and mark all matching dates on the calendar —
+        making historical impact analysis instant.</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">👥</div>
+        <h4>Distribution List Management</h4>
+        <p>Persistent email recipient list with individual add/remove, bulk Outlook paste import
+        (Name &lt;email&gt; format), and duplicate detection. Works across sessions via localStorage.</p>
+      </div>
+    </div>
+
+    <div class="callout mt-32">
+      <p><strong>On the ReleaseNotes field:</strong> During development it was discovered that
+      <span class="mono">Custom.ReleaseNotes</span> in ADO contains internal DevOps deployment
+      instructions — not business-facing content. The field was explicitly excluded from all
+      data fetches and output paths, and a prohibition was encoded into the Claude system prompt
+      to prevent it from ever appearing in stakeholder-facing output.</p>
+    </div>
+
+    <div class="quote-block mt-32">
+      <p>"The most time-consuming part used to be the domain bucketing and formatting. Now I
+      load the release, verify the classifications, click send. What took 45 minutes is under 5."</p>
+      <cite>— Will Yoste, Technical Product Owner, Greystar DataMarketplace</cite>
+    </div>
+
+    <!-- ARTIFACTS -->
+    <div class="mt-32">
+      <h3 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:14px">Deliverables Produced</h3>
+      <div class="artifact-row">
+        <div class="artifact-card">
+          <div class="ac-label">Primary App</div>
+          <h4>dmp-release-notes.html</h4>
+          <p>Full-featured release notes generator with hardcoded PAT for personal use. Calendar,
+          domain classification, email generator, search, bulk import — all in a single HTML file.</p>
+          <span class="ac-size">~114 KB · ~3,100 lines</span>
+        </div>
+        <div class="artifact-card">
+          <div class="ac-label">Shared Version</div>
+          <h4>dmp-release-notes-shared.html</h4>
+          <p>Team-facing version with PAT prompt modal on first load. Includes step-by-step
+          instructions for generating an ADO personal access token.</p>
+          <span class="ac-size">~118 KB · Shareable</span>
+        </div>
+        <div class="artifact-card">
+          <div class="ac-label">Claude App Artifact</div>
+          <h4>dmp-release-notes-artifact.html</h4>
+          <p>Proxy-resilient version routing all ADO calls through the Anthropic API and ADO MCP
+          tools. Identical UI — different data transport layer. Runs inside Claude.ai.</p>
+          <span class="ac-size">~113 KB · MCP-native</span>
+        </div>
+        <div class="artifact-card">
+          <div class="ac-label">Reusable Skills</div>
+          <h4>ado-backlog-analyst + dmp-release-notes</h4>
+          <p>Two Claude skills encoding the ADO query patterns, domain classification logic,
+          email template, and distribution list — enabling conversational release notes generation
+          without opening the app.</p>
+          <span class="ac-size">2 skills · ~1,200 lines of spec</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- IMPACT -->
+  <section id="impact">
+    <div class="section-label">Impact</div>
+    <h2 class="section-title">Before and After</h2>
+    <p class="section-lead">
+      The measurable and observable differences between the manual process and the tool.
+    </p>
+
+    <table class="impact-table">
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Before</th>
+          <th>After</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Time to generate release notes</td>
+          <td>30–45 minutes of manual ADO browsing, copy-pasting, and Word formatting</td>
+          <td>Under 5 minutes — load, verify, send</td>
+        </tr>
+        <tr>
+          <td>Domain classification</td>
+          <td>Manual, knowledge-dependent, inconsistently applied across team members</td>
+          <td>Automated against SharePoint source of truth with override logic</td>
+        </tr>
+        <tr>
+          <td>Email composition</td>
+          <td>Manual formatting, manual recipient lookup, manual time-aware greeting</td>
+          <td>One click — rich HTML generated, recipients pre-filled, Outlook opened</td>
+        </tr>
+        <tr>
+          <td>Historical lookup</td>
+          <td>Manual scroll through SharePoint docs — no structured way to search</td>
+          <td>Cross-release keyword search with calendar highlighting in seconds</td>
+        </tr>
+        <tr>
+          <td>Off-schedule releases</td>
+          <td>Harder to spot and easy to miss in standard Tuesday calendar views</td>
+          <td>Any date is selectable; off-schedule dates are flagged with amber indicators</td>
+        </tr>
+        <tr>
+          <td>Shareability</td>
+          <td>Only the person who knew the process could generate release notes</td>
+          <td>Shared HTML version + Claude skills enable any team member to generate notes</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- LEARNINGS -->
+  <section id="learnings">
+    <div class="section-label">Learning Points</div>
+    <h2 class="section-title">What This Project Taught</h2>
+    <p class="section-lead">
+      Each iteration surfaced something new — about Claude's capabilities, about browser-based
+      application architecture, and about how to think about AI-assisted product development.
+    </p>
+
+    <div class="learning-grid">
+
+      <div class="learning-card">
+        <div class="lc-num">01</div>
+        <h4>ADO as a Data API, Not Just a UI</h4>
+        <p>Azure DevOps has a powerful REST API with WIQL — a SQL-like query language for work items.
+        Treating ADO as a proper data source rather than a UI to click through unlocks automation
+        that the native interface never enables. Building WIQL queries iteratively (and learning
+        that square brackets break them) was a foundational skill.</p>
+      </div>
+
+      <div class="learning-card">
+        <div class="lc-num">02</div>
+        <h4>Dynamic HTML Apps Are Underrated</h4>
+        <p>A single HTML file with embedded JavaScript can be a fully functional, distributable
+        application. No deployment pipeline, no hosting cost, no framework overhead. The browser
+        becomes the runtime. For internal tools serving a small team, this is often the right
+        architecture — especially when the alternative is a SharePoint form or a weekly spreadsheet.</p>
+      </div>
+
+      <div class="learning-card">
+        <div class="lc-num">03</div>
+        <h4>Iterative Prompt Development</h4>
+        <p>The prompt engineering here wasn't a one-shot spec — it was iterative refinement based
+        on observed failures. Discovering that <span class="mono">Custom.ReleaseNotes</span> was
+        leaking into output, then encoding that prohibition into the system prompt, is a concrete
+        example of how prompt development mirrors software development: test, observe failure,
+        fix, re-test.</p>
+      </div>
+
+      <div class="learning-card">
+        <div class="lc-num">04</div>
+        <h4>Microsoft Outlook Integration via Web Standards</h4>
+        <p>Integrating with desktop Outlook from a web page requires two steps that aren't
+        obvious: copy rich HTML to the clipboard using the <span class="mono">ClipboardItem</span>
+        API (so paste in Outlook preserves formatting), then open Outlook via a
+        <span class="mono">mailto:</span> link. The combination creates a seamless handoff
+        without requiring any Outlook add-in or COM automation.</p>
+      </div>
+
+      <div class="learning-card">
+        <div class="lc-num">05</div>
+        <h4>Network Architecture Matters</h4>
+        <p>Direct browser-to-ADO REST calls work in development but break behind a corporate
+        proxy. Rearchitecting to route data through the Anthropic API → MCP tools solved the
+        proxy problem while also making the tool authentication-agnostic. This pattern — using
+        Claude as a trusted intermediary — is broadly applicable to enterprise tooling.</p>
+      </div>
+
+      <div class="learning-card">
+        <div class="lc-num">06</div>
+        <h4>Business Logic Belongs in the Data Layer, Not the Presentation Layer</h4>
+        <p>Early versions of domain classification were ad hoc. Moving to a structured lookup
+        table sourced from SharePoint's authoritative Data Domains spreadsheet made the logic
+        auditable, correctable, and consistent. When the domain list changes, there's a clear
+        single place to update — a principle that applies well beyond this specific tool.</p>
+      </div>
+
+      <div class="learning-card">
+        <div class="lc-num">07</div>
+        <h4>Skills as Reusable Institutional Knowledge</h4>
+        <p>Distilling the tool's logic into Claude skills meant the work didn't stop at
+        "we have an app." The domain map, ADO query patterns, email format, and distribution
+        list are now captured as reusable prompts that any team member can invoke conversationally
+        — turning individual learning into organizational capability.</p>
+      </div>
+
+      <div class="learning-card">
+        <div class="lc-num">08</div>
+        <h4>Finding the Right Use Case Is the Hard Part</h4>
+        <p>The release notes workflow succeeded as an AI product because it had the right
+        ingredients: high-frequency recurrence, clear input data (ADO), well-defined output format
+        (the Greystar template), and a measurable time cost. Not every workflow meets these
+        criteria. The judgment of which problems to automate matters more than the automation itself.</p>
+      </div>
+
+    </div>
+
+    <div class="callout-green callout mt-32">
+      <p><strong>The meta-lesson:</strong> The best use cases for AI-assisted tooling are recurring,
+      structured tasks where the data already exists, the output format is well-defined, and the
+      manual version is tedious rather than genuinely difficult. The release notes process was
+      a perfect specimen of exactly this kind of problem.</p>
+    </div>
+  </section>
+
+  <!-- SKILLS -->
+  <section id="skills">
+    <div class="section-label">Capabilities Demonstrated</div>
+    <h2 class="section-title">Skills Applied Across This Project</h2>
+
+    <div class="two-col">
+      <div>
+        <div class="skills-group">
+          <h4>Product &amp; Technical Leadership</h4>
+          <div class="skills-chips">
+            <span class="skill-chip">Requirements articulation</span>
+            <span class="skill-chip">Iterative product development</span>
+            <span class="skill-chip">Use case identification</span>
+            <span class="skill-chip">Stakeholder-facing output design</span>
+            <span class="skill-chip">Edge case thinking</span>
+          </div>
+        </div>
+        <div class="skills-group">
+          <h4>Data &amp; APIs</h4>
+          <div class="skills-chips">
+            <span class="skill-chip">Azure DevOps REST API</span>
+            <span class="skill-chip">WIQL query authoring</span>
+            <span class="skill-chip">Batch API patterns</span>
+            <span class="skill-chip">SharePoint data sourcing</span>
+            <span class="skill-chip">MCP tool orchestration</span>
+          </div>
+        </div>
+        <div class="skills-group">
+          <h4>AI &amp; Prompting</h4>
+          <div class="skills-chips">
+            <span class="skill-chip">Iterative prompt engineering</span>
+            <span class="skill-chip">System prompt design</span>
+            <span class="skill-chip">Claude skill authoring</span>
+            <span class="skill-chip">Tool routing patterns</span>
+            <span class="skill-chip">Output format specification</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="skills-group">
+          <h4>Application Development</h4>
+          <div class="skills-chips">
+            <span class="skill-chip">Single-file HTML applications</span>
+            <span class="skill-chip">JavaScript async/await</span>
+            <span class="skill-chip">Browser Clipboard API</span>
+            <span class="skill-chip">localStorage persistence</span>
+            <span class="skill-chip">SPA tab architecture</span>
+          </div>
+        </div>
+        <div class="skills-group">
+          <h4>Integration &amp; Automation</h4>
+          <div class="skills-chips">
+            <span class="skill-chip">Outlook mailto integration</span>
+            <span class="skill-chip">Rich HTML email generation</span>
+            <span class="skill-chip">Corporate proxy patterns</span>
+            <span class="skill-chip">Authentication via PAT</span>
+            <span class="skill-chip">Bulk import parsing</span>
+          </div>
+        </div>
+        <div class="skills-group">
+          <h4>Domain Knowledge</h4>
+          <div class="skills-chips">
+            <span class="skill-chip">DMP data model</span>
+            <span class="skill-chip">Gold/Silver/Bronze architecture</span>
+            <span class="skill-chip">ADO agile process</span>
+            <span class="skill-chip">Greystar release workflow</span>
+            <span class="skill-chip">Stakeholder communication</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div>
+      <strong>Will Yoste</strong> — Technical Product Owner, Greystar DataMarketplace<br>
+      This page is a curated portfolio summary of the DMP Release Notes Automation project.
+    </div>
+    <div style="text-align:right">
+      Built iteratively with Claude · 2026<br>
+      Greystar Real Estate Partners
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

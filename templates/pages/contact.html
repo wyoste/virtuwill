@@ -1,0 +1,68 @@
+<div class="page" id="page-contact">
+  <div class="contact-wrap">
+
+    <!-- Hero -->
+    <div class="contact-hero">
+      <div class="contact-eyebrow">Get in touch</div>
+      <h2 class="contact-title">Leave a note for Will</h2>
+      <p class="contact-sub">Drop a message — questions, ideas, or just saying hi. I read everything.</p>
+    </div>
+
+    <!-- Form -->
+    <div class="contact-card" id="contact-form-wrap">
+      <div class="contact-field-group">
+        <label class="contact-lbl">Your name <span class="contact-req">*</span></label>
+        <input class="contact-input" id="cf-name" type="text" placeholder="First name or full name"/>
+      </div>
+
+      <div class="contact-field-group">
+        <label class="contact-lbl">How to reach you <span style="color:var(--text3);font-weight:400">(optional)</span></label>
+        <div class="contact-contact-row">
+          <select class="contact-select" id="cf-contact-type">
+            <option value="email">&#128231; Email</option>
+            <option value="phone">&#128222; Phone</option>
+            <option value="twitter">&#120143; Twitter / X</option>
+            <option value="instagram">&#128247; Instagram</option>
+            <option value="linkedin">&#128279; LinkedIn</option>
+            <option value="other">&#128100; Other</option>
+          </select>
+          <input class="contact-input" id="cf-contact-val" type="text"
+            placeholder="your@email.com"/>
+        </div>
+      </div>
+
+      <div class="contact-field-group">
+        <label class="contact-lbl">Message <span class="contact-req">*</span></label>
+        <textarea class="contact-input contact-textarea" id="cf-message"
+          placeholder="What&#39;s on your mind?" rows="5"></textarea>
+      </div>
+
+      <div class="contact-error" id="cf-error"></div>
+
+      <button class="contact-submit" id="cf-submit" onclick="VW.Contact.submit()">
+        Send note &#8594;
+      </button>
+    </div>
+
+    <!-- Success state -->
+    <div class="contact-success" id="contact-success" style="display:none">
+      <div class="contact-success-icon">&#10003;</div>
+      <div class="contact-success-title">Note sent!</div>
+      <div class="contact-success-sub">Thanks — I&#39;ll read it soon.</div>
+      <button class="contact-submit" style="margin-top:20px;max-width:200px"
+        onclick="VW.Contact.reset()">Send another</button>
+    </div>
+
+    <!-- Admin: message inbox (shown when logged in) -->
+    <div id="contact-inbox" style="display:none">
+      <div class="contact-inbox-hd">
+        <div class="contact-eyebrow" style="margin-bottom:0">Inbox</div>
+        <button class="contact-inbox-refresh" onclick="VW.Contact.loadInbox()">&#8635; Refresh</button>
+      </div>
+      <div id="contact-messages-list">
+        <div class="contact-empty">Loading…</div>
+      </div>
+    </div>
+
+  </div>
+</div>

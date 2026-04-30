@@ -1,0 +1,32 @@
+[
+  {
+    "id": "up_bigsheet_portfolio_html",
+    "filename": "bigsheet_portfolio.html",
+    "title": "Bigsheet Converter and Quality Assessment Tool",
+    "tag": "Data Platform",
+    "desc": "Tool to automate the conversion of business financial workbooks for bi-annual revals into a standard, data warehouse-friendly format. The tool incorporates a QA to validate that data is not materially changed from the source to DMP",
+    "url": "/static/portfolio/bigsheet_portfolio.html",
+    "uploaded": "2026-04-24",
+    "visible": true
+  },
+  {
+    "id": "up_virtuwill_portfolio_html",
+    "filename": "virtuwill_portfolio.html",
+    "title": "Virtuwill Portfolio",
+    "tag": "Personal",
+    "desc": "My personal app for capturing the digital snapshot of my life",
+    "url": "/static/portfolio/virtuwill_portfolio.html",
+    "uploaded": "2026-04-22",
+    "visible": true
+  },
+  {
+    "id": "up_portfolio-release-notes_html",
+    "filename": "portfolio-release-notes.html",
+    "title": "Release Notes Tool",
+    "tag": "Professional",
+    "desc": "Integrated release notes management tool for automating a task I procrastinate on each week because of tedious work and constant distractions.",
+    "url": "/static/portfolio/portfolio-release-notes.html",
+    "uploaded": "2026-04-22",
+    "visible": true
+  }
+]

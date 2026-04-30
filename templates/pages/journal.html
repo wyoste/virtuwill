@@ -1,0 +1,49 @@
+<div class="page flex-page" id="page-journal" style="display:none;">
+  <aside class="journal-sidebar">
+    <div style="padding:16px 16px 0;">
+      <div class="sb-stat-big" id="sbCount">—</div>
+      <div class="sb-stat-sm">Journal Entries</div>
+    </div>
+    <div class="sb-hr"></div>
+    <div class="sb-sec">Years</div>
+    <div class="sb-hr"></div>
+    <div class="sb-sec">Quick Add</div>
+    <div style="padding:0 12px;">
+      <input type="date" class="input" id="sbDate"
+        style="font-size:12px;padding:7px 10px;margin-bottom:8px;"/>
+      <button class="btn btn-primary"
+        style="width:100%;justify-content:center;font-size:12px;padding:7px;"
+        onclick="VW.Journal.addFromSb()">+ New Entry</button>
+    </div>
+    <div class="sb-hr" style="margin-top:12px;"></div>
+    <button class="sb-lock" onclick="VW.Journal.lock()">&#128274; Lock Journal</button>
+  </aside>
+
+  <div class="journal-main">
+    <div class="jm-hd">
+      <div>
+        <div class="jm-title">My Journal</div>
+        <div class="jm-sub">Click year or month to collapse · expand entry to edit</div>
+      </div>
+      <button class="btn btn-blue-soft" onclick="VW.Journal.openUpload()">&#128247; Upload Photo</button>
+    </div>
+    <div class="search-bar">
+      <div class="search-input-wrap">
+        <span class="search-icon">&#128269;</span>
+        <input type="text" class="input search-input" id="searchText"
+          placeholder="Search keywords, quotes, meals…"
+          oninput="VW.Journal.doSearch()"/>
+        <button class="search-clear" id="searchClear" onclick="VW.Journal.clearSearch()">&#215;</button>
+      </div>
+      <input type="date" class="input date-filter" id="searchDate"
+        onchange="VW.Journal.doSearch()" title="Filter by date"/>
+    </div>
+    <div class="search-results-info" id="searchInfo"></div>
+    <div class="stats-row">
+      <div class="sc blue"><div class="sc-val" id="stTotal">—</div><div class="sc-lbl">Total Entries</div></div>
+      <div class="sc"><div class="sc-val">2025</div><div class="sc-lbl">Writing Since</div></div>
+      <div class="sc"><div class="sc-val" id="stLatest">—</div><div class="sc-lbl">Latest Entry</div></div>
+    </div>
+    <div class="tl" id="timeline"></div>
+  </div>
+</div>

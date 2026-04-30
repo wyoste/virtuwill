@@ -1,0 +1,112 @@
+[
+  {
+    "id": "e1",
+    "date": "2026-02-23",
+    "quote": "The present moment always will have been.",
+    "quoteAuthor": "Unknown",
+    "meals": { "B": "Oatmeal, black coffee", "L": "Caesar salad", "D": "Pasta bolognese" },
+    "freeWrite": "Today felt like a turning point. Something shifted in how I see things — a clarity I haven't had in months. Worked on the app most of the afternoon, then a long walk at dusk.",
+    "source": "manual",
+    "createdAt": "2026-02-23T08:00:00Z"
+  },
+  {
+    "id": "e2",
+    "date": "2026-02-20",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": { "B": "", "L": "", "D": "" },
+    "freeWrite": "Quiet day. Worked on the app mostly. Feeling good about the direction things are heading.",
+    "source": "manual",
+    "createdAt": "2026-02-20T09:00:00Z"
+  },
+  {
+    "id": "e3",
+    "date": "2026-02-14",
+    "quote": "Love is the answer.",
+    "quoteAuthor": "John Lennon",
+    "meals": { "B": "Pancakes", "L": "", "D": "Steak and wine" },
+    "freeWrite": "Valentine's Day. Cooked a nice dinner at home. Simple and good.",
+    "source": "photo",
+    "createdAt": "2026-02-14T20:00:00Z"
+  },
+  {
+    "id": "e4",
+    "date": "2026-02-01",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": { "B": "", "L": "", "D": "" },
+    "freeWrite": "February begins. New intentions.",
+    "source": "manual",
+    "createdAt": "2026-02-01T07:00:00Z"
+  },
+  {
+    "id": "e5",
+    "date": "2026-01-15",
+    "quote": "Begin anywhere.",
+    "quoteAuthor": "John Cage",
+    "meals": { "B": "", "L": "", "D": "" },
+    "freeWrite": "Mid-January check-in. Staying consistent.",
+    "source": "manual",
+    "createdAt": "2026-01-15T08:00:00Z"
+  },
+  {
+    "id": "e6",
+    "date": "2026-01-03",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": { "B": "", "L": "", "D": "" },
+    "freeWrite": "Back to routine after the holidays.",
+    "source": "manual",
+    "createdAt": "2026-01-03T09:00:00Z"
+  },
+  {
+    "id": "e7",
+    "date": "2025-12-31",
+    "quote": "Every ending is a beginning.",
+    "quoteAuthor": "Unknown",
+    "meals": { "B": "", "L": "Leftovers", "D": "Champagne dinner" },
+    "freeWrite": "New Year's Eve. Reflecting on the year — what I built, what I let go, what I want next.",
+    "source": "manual",
+    "createdAt": "2025-12-31T22:00:00Z"
+  },
+  {
+    "id": "e8",
+    "date": "2025-12-25",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": { "B": "Cinnamon rolls", "L": "", "D": "Holiday feast" },
+    "freeWrite": "Christmas. Family time. Grateful.",
+    "source": "photo",
+    "createdAt": "2025-12-25T18:00:00Z"
+  },
+  {
+    "id": "e9",
+    "date": "2025-11-28",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": { "B": "", "L": "", "D": "Turkey, stuffing, pie" },
+    "freeWrite": "Thanksgiving. Good food, good people.",
+    "source": "manual",
+    "createdAt": "2025-11-28T19:00:00Z"
+  },
+  {
+    "id": "e10",
+    "date": "2025-10-10",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": { "B": "", "L": "", "D": "" },
+    "freeWrite": "October morning. The air has changed.",
+    "source": "manual",
+    "createdAt": "2025-10-10T08:00:00Z"
+  },
+  {
+    "id": "e11",
+    "date": "2025-08-04",
+    "quote": "",
+    "quoteAuthor": "",
+    "meals": { "B": "", "L": "", "D": "" },
+    "freeWrite": "Long summer days. Making the most of the heat.",
+    "source": "manual",
+    "createdAt": "2025-08-04T07:00:00Z"
+  }
+]
