@@ -30,6 +30,7 @@ window.VW.Auth = (() => {
 
   function setAdmin(val) {
     _admin = val;
+    if (!val) VW.Trackers?.clear?.();
     // Green admin banner across all pages
     const banner = document.getElementById('admin-banner');
     if (banner) banner.style.display = val ? 'flex' : 'none';
@@ -226,6 +227,7 @@ let _currentPage = 'home';
 let _navigating  = false;   // prevent pushState loop during popstate handling
 
 function go(page, { pushState: push = true, skipDirtyCheck: skipDirty = false } = {}) {
+  if (page === 'admin' && !VW.Auth.isAdmin()) { openAdminGate(); return; }
   // Journal requires admin auth
   if (page === 'journal' && !VW.Journal.isUnlocked()) {
     toggleGate(); return;

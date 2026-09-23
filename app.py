@@ -24,6 +24,17 @@ import config
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
 
+# Trackers use private storage, with no fallback to public mock data.
+from trackers import bp as trackers_blueprint
+app.config["TRACKER_DATA_DIR"] = os.environ.get("TRACKER_DATA_DIR", str(Path(__file__).parent / "data/private-trackers"))
+app.config["TRACKER_AUTH_CONFIGURED"] = (
+    config.SECRET_KEY != "dev-secret-change-in-production"
+    and len(config.SECRET_KEY) >= 32
+    and config.ADMIN_PASSWORD != "virtuwill2026"
+    and len(config.ADMIN_PASSWORD) >= 12
+)
+app.register_blueprint(trackers_blueprint)
+
 DATA_DIR = Path(__file__).parent / "data"
 MOCK_DIR = Path(__file__).parent / "mock_data"
 
@@ -87,6 +98,9 @@ def index(path):
     if path.startswith("static/"):
         from flask import abort
         abort(404)
+    if session.get("admin_logged_in"):
+        import secrets
+        session.setdefault("tracker_csrf", secrets.token_urlsafe(32))
     return render_template(
         "index.html",
         journal_unlocked=session.get("journal_unlocked", False),
@@ -252,6 +266,8 @@ def admin_login():
     admin_pass = config.ADMIN_PASSWORD
     if data.get("username") == admin_user and data.get("password") == admin_pass:
         session["admin_logged_in"] = True
+        import secrets
+        session["tracker_csrf"] = secrets.token_urlsafe(32)
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "Invalid credentials"}), 401
 
@@ -259,6 +275,7 @@ def admin_login():
 @app.route("/api/admin/logout", methods=["POST"])
 def admin_logout():
     session.pop("admin_logged_in", None)
+    session.pop("tracker_csrf", None)
     return jsonify({"ok": True})
 
 
