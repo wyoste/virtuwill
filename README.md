@@ -47,6 +47,17 @@ remain visible in the tracker until reload; closing or reloading while a save is
 pending triggers a warning. Existing browser-local data is not read automatically
 across origins or devices.
 
+### Deploying the trackers on Databricks Apps
+
+- Merging to GitHub does not update the app. Redeploy it (Apps UI → Deploy, or
+  `databricks apps deploy`) from the updated source, then hard-refresh the browser.
+- The Finance and Health tabs appear in the Admin sidebar only after signing in as admin.
+- Set `SECRET_KEY` and `ADMIN_PASSWORD` in `app.yaml` under `env:`, using `valueFrom`
+  with Databricks secret resources. Without them, the tracker tabs show a
+  configuration error.
+- The app's local filesystem does not persist across redeploys. Imported trackers
+  are lost unless `TRACKER_DATA_DIR` points to persistent storage.
+
 Validation:
 
 ```bash

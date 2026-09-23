@@ -90,6 +90,16 @@ class TrackerTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             self.assertNotIn('tracker_csrf', session)
 
+    def test_frame_uses_parent_origin_behind_tls_proxy(self):
+        token = self.login()
+        self.install(token)
+        boot = lambda r: json.loads(r.text.split('window.TRACKER_BOOT=', 1)[1].split(';\n', 1)[0])
+        proxied = {'X-Forwarded-Host': 'vw.databricksapps.com'}
+        r = self.client.get('/admin/trackers/finance/frame?origin=https://vw.databricksapps.com', headers=proxied)
+        self.assertEqual(boot(r)['origin'], 'https://vw.databricksapps.com')
+        r = self.client.get('/admin/trackers/finance/frame?origin=https://evil.example', headers=proxied)
+        self.assertEqual(boot(r)['origin'], 'http://localhost')
+
 
 if __name__ == '__main__':
     unittest.main()
