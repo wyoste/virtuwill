@@ -12,6 +12,8 @@
       </div>
 
       <nav class="adm-nav">
+        <button class="adm-nav-item" id="adm-nav-finance" onclick="VW.Admin.showSection('finance')"><span class="adm-nav-icon">💰</span><span>Finances</span></button>
+        <button class="adm-nav-item" id="adm-nav-health" onclick="VW.Admin.showSection('health')"><span class="adm-nav-icon">♥</span><span>Health goals</span></button>
         <button class="adm-nav-item on" id="adm-nav-overview"
           onclick="VW.Admin.showSection('overview')">
           <span class="adm-nav-icon">&#128202;</span>
@@ -85,6 +87,14 @@
         <div id="adm-overview-body"></div>
       </section>
 
+      <section class="adm-section hidden" id="adm-sec-finance">
+        <div class="adm-sec-hd"><h1 class="adm-sec-title">Finances</h1><div class="adm-sec-sub">Budget, spending, groceries, savings goals, and retirement</div></div>
+        <div id="adm-tracker-finance"></div>
+      </section>
+      <section class="adm-section hidden" id="adm-sec-health">
+        <div class="adm-sec-hd"><h1 class="adm-sec-title">Health goals</h1><div class="adm-sec-sub">Weight trends, meals, and five 45-minute workout days each week</div></div>
+        <div id="adm-tracker-health"></div>
+      </section>
       <!-- Garden -->
       <section class="adm-section hidden" id="adm-sec-garden">
         <div class="adm-sec-hd">

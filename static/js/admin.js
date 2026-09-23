@@ -16,7 +16,7 @@ window.VW.Admin = (() => {
   let _inited        = false;
   let _musicTrackCache = {};
 
-  const SECTIONS = ['overview','garden','music','portfolio','travel','notes','blog','chat','accounts'];
+  const SECTIONS = ['overview','garden','music','portfolio','travel','notes','blog','chat','accounts','finance','health'];
 
   // ── Init ────────────────────────────────────────────────────────────────────
   function init() {
@@ -38,11 +38,13 @@ window.VW.Admin = (() => {
 
   // ── Nav ──────────────────────────────────────────────────────────────────────
   function showSection(id) {
+    if (!window.VW?.Auth?.isAdmin?.() || !SECTIONS.includes(id)) return;
     _activeSection = id;
     SECTIONS.forEach(s => {
       document.getElementById('adm-sec-' + s)?.classList.toggle('hidden', s !== id);
       document.getElementById('adm-nav-' + s)?.classList.toggle('on', s === id);
     });
+    if (id === 'finance' || id === 'health') VW.Trackers?.open(id);
     // Lazy-load on first visit
     if (id === 'notes')    _loadNotes();
     if (id === 'blog')     VW.Blog?.initAdmin?.();
@@ -128,6 +130,8 @@ window.VW.Admin = (() => {
       <div class="adm-quicklinks">
         <div class="adm-ql-title">Quick actions</div>
         <div class="adm-ql-grid">
+          <button class="adm-ql-btn" onclick="VW.Admin.showSection('finance')"><span>💰</span> Finances &amp; savings goals</button>
+          <button class="adm-ql-btn" onclick="VW.Admin.showSection('health')"><span>♥</span> Health &amp; workout goals</button>
           <button class="adm-ql-btn" onclick="VW.Music.openUploadModal();go('music')">
             <span>🎵</span> Add song
           </button>

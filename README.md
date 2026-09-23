@@ -3,6 +3,58 @@
 A personal digital life dashboard — private journal, music portfolio, garden journal, and more.
 Built with Flask + modular vanilla JS. No build step required.
 
+## Private Finance and Health trackers
+
+Sign in to **Admin → Finances** or **Admin → Health goals**. These tabs host the
+existing Yoste tracker apps, preserving their full interfaces and import/export
+formats. The admin overview also links to both trackers. Updates save to the
+server automatically; a status bar confirms saves or explains failures.
+
+Before using these tabs, set `SECRET_KEY` to a random value of at least 32
+characters and `ADMIN_PASSWORD` to a unique value of at least 12 characters.
+The repository's documented development defaults cannot unlock tracker storage.
+The existing admin UI uses username `admin`. Use HTTPS for a deployed app.
+
+On first visit, upload the original **Yoste-Finance.html** and **Yoste-Health.html**
+into their respective tabs. Their embedded records, settings, food references,
+recipes, and calculations are preserved. If you have newer entries stored in the
+standalone apps' browser storage, export a JSON backup there and restore it in
+the corresponding admin tracker after uploading the HTML.
+
+Alternatively, import on the deployment host:
+
+```bash
+python scripts/import_trackers.py --finance /private/Yoste-Finance.html --health /private/Yoste-Health.html
+```
+
+Personal HTML and JSON state live in `data/private-trackers/trackers.sqlite3`,
+which is ignored by Git. Neither the source HTML nor private records are shipped
+in the public repository or public static assets. Do not add your original HTML
+files to `static/`, `templates/`, or the public portfolio uploader.
+
+Set `TRACKER_DATA_DIR` to a directory on a **persistent writable volume** when
+deploying. All workers must use the same local SQLite database. Separate replicas
+with separate disks are not supported; use a shared database implementation
+before scaling across hosts. Back up the private SQLite store and use the
+trackers' JSON exports for portable copies. Redeploys with ephemeral storage will
+lose imports and records.
+
+The imported apps run in sandboxed frames with no network or parent-page access.
+Admin-only endpoints, CSRF tokens, no-store responses, and revision checks protect
+the bridge to server storage. A stale tab cannot silently overwrite newer data:
+export its unsaved edits, reload, and reconcile using the backup. Failed saves
+remain visible in the tracker until reload; closing or reloading while a save is
+pending triggers a warning. Existing browser-local data is not read automatically
+across origins or devices.
+
+Validation:
+
+```bash
+python -m unittest discover -s tests -v
+node --check static/js/trackers.js
+node --check static/js/tracker-frame.js
+```
+
 ---
 
 ## Quick start

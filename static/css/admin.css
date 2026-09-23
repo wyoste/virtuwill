@@ -849,3 +849,12 @@
   border-radius: 6px;
   border: 0.5px solid var(--border);
 }
+
+/* Private goal trackers retain their own responsive layouts inside admin. */
+.tracker-toolbar { display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.tracker-status { color:var(--text3); font-size:12px; overflow-wrap:anywhere; }
+.tracker-error { color:var(--red, #b42318); }
+.tracker-frame { display:block; border:1px solid var(--border); border-radius:12px; width:100%; height:calc(100dvh - 245px); min-height:540px; background:#f6f4ee; }
+.tracker-setup { padding:24px; border:1px solid var(--border); border-radius:12px; line-height:1.6; }
+.tracker-setup input { max-width:100%; }
+@media(max-width:640px) { .tracker-frame { min-height:650px; height:calc(100dvh - 200px); } .tracker-toolbar { align-items:flex-start; } }

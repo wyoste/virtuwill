@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+.venv/
+data/private-trackers/
+*.sqlite3
+*.sqlite3-*
+test-results/
