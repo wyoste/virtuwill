@@ -52,9 +52,11 @@ across origins or devices.
 - Merging to GitHub does not update the app. Redeploy it (Apps UI → Deploy, or
   `databricks apps deploy`) from the updated source, then hard-refresh the browser.
 - The Finance and Health tabs appear in the Admin sidebar only after signing in as admin.
-- Set `SECRET_KEY` and `ADMIN_PASSWORD` in `app.yaml` under `env:`, using `valueFrom`
-  with Databricks secret resources. Without them, the tracker tabs show a
-  configuration error.
+- `app.yaml` reads `SECRET_KEY` and `ADMIN_PASSWORD` from app secret resources with
+  the resource keys `secret-key` and `admin-password` (app → Edit → Resources →
+  Secret). Deployment fails if either resource is missing. The admin password is
+  the `admin-password` secret value, and the trackers need `SECRET_KEY` of 32+
+  characters and `ADMIN_PASSWORD` of 12+ characters.
 - The app's local filesystem does not persist across redeploys. Imported trackers
   are lost unless `TRACKER_DATA_DIR` points to persistent storage.
 
