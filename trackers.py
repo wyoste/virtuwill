@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from functools import wraps
 from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from flask import Blueprint, current_app, jsonify, request, session, Response
 
@@ -110,6 +111,21 @@ class TrackerStore:
             return result.rowcount == 1
 
 
+def parent_origin():
+    """Origin the admin page is served from, for the frame's postMessage target.
+
+    Behind a TLS-terminating proxy (e.g. Databricks Apps) request.host_url is
+    http:// while the browser sees https://, so postMessage is silently dropped.
+    Accept the parent's reported origin only for the host we were reached on.
+    """
+    claimed = request.args.get("origin", "")
+    parts = urlsplit(claimed)
+    hosts = {request.host, request.headers.get("X-Forwarded-Host", "")} - {""}
+    if parts.scheme in ("http", "https") and parts.netloc in hosts and claimed == f"{parts.scheme}://{parts.netloc}":
+        return claimed
+    return request.host_url.rstrip("/")
+
+
 def store():
     return TrackerStore(current_app.config["TRACKER_DATA_DIR"])
 
@@ -182,7 +198,7 @@ def tracker_frame(kind):
     if not row:
         return jsonify(error="Import your tracker HTML first."), 404
     # Escape script delimiters in saved user text before embedding it in HTML.
-    bootstrap = json.dumps({"kind": kind, "key": KINDS[kind], "revision": row["revision"], "state": json.loads(row["state"]) if row["state"] else None, "origin": request.host_url.rstrip("/")}).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+    bootstrap = json.dumps({"kind": kind, "key": KINDS[kind], "revision": row["revision"], "state": json.loads(row["state"]) if row["state"] else None, "origin": parent_origin()}).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     bridge = (Path(__file__).parent / "static/js/tracker-frame.js").read_text()
     script = '<script id="vw-tracker-bridge">window.TRACKER_BOOT=' + bootstrap + ";\n" + bridge + "</script>"
     # Insert first: storage must be replaced before the imported app executes.

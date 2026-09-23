@@ -84,7 +84,7 @@ window.VW.Trackers = (() => {
       frame.setAttribute('sandbox', 'allow-scripts allow-downloads allow-modals allow-forms');
       frame.referrerPolicy = 'no-referrer';
       s.frame = frame;
-      frame.src = '/admin/trackers/' + kind + '/frame';
+      frame.src = '/admin/trackers/' + kind + '/frame?origin=' + encodeURIComponent(location.origin);
       frame.onload = () => { if (s.revision === null) status(kind, 'Tracker could not open. Reload or sign in again.', true); };
       host.append(frame);
     } catch (error) {

@@ -1,6 +1,13 @@
-# app.yaml
 command:
   - gunicorn
   - app:app
   - --bind
   - 0.0.0.0:$DATABRICKS_APP_PORT
+
+# Values come from secret resources attached to the Databricks app
+# (Edit → Resources), never from this file.
+env:
+  - name: SECRET_KEY
+    valueFrom: secret-key
+  - name: ADMIN_PASSWORD
+    valueFrom: admin-password
