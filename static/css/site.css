@@ -129,11 +129,8 @@ a.home-blog-card { color: inherit; text-decoration: none; display: block; }
 .pj-timeline li::before { content: ''; position: absolute; left: -7px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--blue); }
 .pj-period { font-size: 12.5px; color: var(--text3); font-weight: 600; }
 @media (max-width: 560px) { .pj-timeline li { grid-template-columns: 1fr; gap: 2px; } }
-#project-frame-wrap { flex: 1; display: flex; flex-direction: column; }
-#project-frame-wrap[hidden] { display: none; }
 .project-frame-bar { display: flex; gap: 16px; align-items: center; padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--border); font-size: 13.5px; }
 .project-frame-bar a { color: var(--blue); text-decoration: none; font-weight: 600; }
-#project-iframe { flex: 1; width: 100%; min-height: calc(100vh - 130px); border: 0; background: #fff; }
 
 /* ── Writing ──────────────────────────────────────────────────────────────── */
 .wr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }

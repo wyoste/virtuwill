@@ -22,6 +22,7 @@ module per schema. `virtuwill/migrate.py` moved the earlier Lakebase layout in o
 | `garden` | `settings`, `species`, `health_levels`, `beds`, `seasons`, `plantings`, `plant_observations`, `photos`, `photo_subjects` + 2 views | public read |
 | `music` | `albums`, `songs` (each with a URL `slug`), `song_sections`, `recordings`, `gallery_photos` + `public_catalog` view | published songs, and published recordings on published albums |
 | `content` | `blog_posts`, `portfolio_projects`, `project_metrics`, `project_timeline`, `site_text`, `messages` + `public_posts` view | posts/projects public; messages private |
+| `career` | `profile` (one row), `roles`, `education`, `skill_groups`, `highlights` (pillars, impact figures, strengths, certifications); `content.portfolio_projects.role_id` links each project to its role | public read |
 | `travel` | `places`, `place_photos`, `visited_regions` | public read |
 | `virtuwill` | `schema_versions`, `migrations`, `trackers` (Finance/Health tracker documents), `sync_reports` | private |
 
@@ -103,6 +104,7 @@ For credit cards and loans the balance is the amount owed, so charges raise it
 | `data/music_catalog.json`, `static/audio/` | `music.songs`, `song_sections` (legacy whole-song text → one `full` section), `albums` (audio folders), `recordings` (audio files) |
 | `data/blog.json`, `messages.json` | `content.blog_posts`, `content.messages` |
 | Built-in projects in `resume.js`, `portfolio_uploads.json`, `vw_portfolio_state` | `content.portfolio_projects`, `project_metrics`, `project_timeline` |
+| The CV written into the old Resume page (`db/seed/career.json`, loaded once) | `career.profile`, `roles`, `education`, `skill_groups`, `highlights` |
 | Garden gallery note/hero (`localStorage`) | `content.site_text` |
 | Travel pins/visited (`localStorage`) | `travel.places`, `place_photos`, `visited_regions` |
 | `data/accounts_template.json` | `finance.accounts.show_in_journal` / `journal_position` |

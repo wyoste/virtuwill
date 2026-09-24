@@ -261,7 +261,7 @@ def _project(conn, row, detail=False):
          "description": row["description"], "subtitle": row["subtitle"], "chips": row["chips"] or [],
          "builtin": row["is_builtin"], "visible": row["visible"], "position": row["position"],
          "url": media.url(row["path"]) if row["path"] else None,
-         "uploaded_on": row["uploaded_on"].isoformat() if row["uploaded_on"] else None}
+         "uploaded_on": row["uploaded_on"].isoformat() if row["uploaded_on"] else None, "role_id": row["role_id"]}
     if detail:
         p["overview"] = row["overview"]
         p["metrics"] = [{"value": m["value"], "label": m["label"]} for m in conn.execute(
@@ -321,6 +321,11 @@ def project_write_v1(project_id):
             fields["chips"] = [str(c).strip()[:60] for c in data["chips"] if str(c).strip()][:20]
         if "visible" in data:
             fields["visible"] = bool(data["visible"])
+        if "role_id" in data:
+            role = number(data["role_id"]) if data["role_id"] not in (None, "") else None
+            if role is not None and not conn.execute("SELECT 1 FROM career.roles WHERE role_id = %s", (int(role),)).fetchone():
+                return jsonify({"error": "No such role"}), 400
+            fields["role_id"] = int(role) if role is not None else None
         if "position" in data:
             fields["position"] = int(number(data["position"])) if number(data["position"]) is not None else None
         if fields.get("title") == "":

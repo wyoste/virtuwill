@@ -85,7 +85,7 @@ async function overview(view, ctx) {
         h('thead', {}, h('tr', {}, h('th', {}, 'Period'), h('th', { class: 'num' }, 'In'), h('th', { class: 'num' }, 'Spent'), h('th', { class: 'num' }, 'Card payments'), h('th', { class: 'num' }, 'Left'))),
         h('tbody', {}, d.cashFlow.map(c => {
           const left = (c.income_received || 0) - (c.spending || 0);
-          return h('tr', {}, h('td', {}, `${fmt.day(c.period_start)} – ${fmt.day(c.period_end)}`),
+          return h('tr', {}, h('td', { class: 'nowrap' }, `${shortDay(c.period_start)} – ${shortDay(c.period_end)}`),
             h('td', { class: 'num' }, fmt.money(c.income_received)), h('td', { class: 'num' }, fmt.money(c.spending)),
             h('td', { class: 'num' }, fmt.money(c.card_payments)), h('td', { class: 'num' }, h('span', { class: left < 0 ? 'bad' : '' }, fmt.money(left))));
         })))) : empty('No pay periods yet.'))),
@@ -140,7 +140,7 @@ function payCard(d) {
       ...(p.splits || []).flatMap(s => [h('span', { class: 'ws-note' }, '→ account ••' + s.account_mask), h('span', { class: 'ws-note' }, fmt.money(s.amount))])),
     d.pay.length ? h('table', { class: 'ws-table', style: { marginTop: '12px' } },
       h('thead', {}, h('tr', {}, h('th', {}, 'Month'), h('th', { class: 'num' }, 'Checks'), h('th', { class: 'num' }, 'Gross'), h('th', { class: 'num' }, 'Net'))),
-      h('tbody', {}, d.pay.slice(0, 6).map(m => h('tr', {}, h('td', {}, fmt.month(m.month_start)), h('td', { class: 'num' }, m.paychecks),
+      h('tbody', {}, d.pay.slice(0, 6).map(m => h('tr', {}, h('td', { class: 'nowrap' }, new Date(m.month_start + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })), h('td', { class: 'num' }, m.paychecks),
         h('td', { class: 'num' }, fmt.money(m.gross)), h('td', { class: 'num' }, fmt.money(m.net)))))) : null);
 }
 
@@ -210,18 +210,24 @@ async function receipts(view, { params, navigate }) {
 async function accounts(view) {
   const d = await api('/api/v1/money/accounts');
   view.append(card(null, h('div', { class: 'ws-table-wrap' }, h('table', { class: 'ws-table' },
-    h('thead', {}, h('tr', {}, h('th', {}, 'Account'), h('th', {}, 'Type'), h('th', {}, 'As of'), h('th', { class: 'num' }, 'Balance'), h('th', {}, 'History'))),
+    h('thead', {}, h('tr', {}, h('th', {}, 'Account'), h('th', { class: 'wide-only' }, 'Type'), h('th', {}, 'As of'), h('th', { class: 'num' }, 'Balance'), h('th', { class: 'wide-only' }, 'History'))),
     h('tbody', {}, d.accounts.map(a => h('tr', { style: a.is_active ? null : { opacity: .55 } },
-      h('td', {}, h('strong', {}, a.name), h('div', { class: 'ws-note' }, [a.institution, a.mask ? '••' + a.mask : null].filter(Boolean).join(' '))),
-      h('td', {}, a.account_type.replace('_', ' ') + (a.is_liability ? ' (owed)' : '')),
-      h('td', {}, a.as_of ? fmt.day(a.as_of) : '—'),
+      h('td', {}, h('strong', {}, a.name), h('div', { class: 'ws-note' }, [a.institution !== a.name ? a.institution : null, a.mask ? '••' + a.mask : null].filter(Boolean).join(' ')),
+        h('div', { class: 'ws-note narrow-only' }, a.account_type.replace('_', ' ') + (a.is_liability ? ' (owed)' : ''))),
+      h('td', { class: 'wide-only' }, a.account_type.replace('_', ' ') + (a.is_liability ? ' (owed)' : '')),
+      h('td', { class: 'nowrap' }, a.as_of ? shortDay(a.as_of) : '—'),
       h('td', { class: 'num' }, fmt.money(a.balance)),
-      h('td', {}, a.history.length > 1 ? spark(a.history.map(p => p.balance)) : h('span', { class: 'ws-note' }, `${a.history.length} reading${a.history.length === 1 ? '' : 's'}`)))))))),
-    d.statements.length ? card('Statements reconciled', h('table', { class: 'ws-table' },
-      h('thead', {}, h('tr', {}, h('th', {}, 'Statement'), h('th', {}, 'Period'), h('th', { class: 'num' }, 'Closing'), h('th', { class: 'num' }, 'Difference'))),
-      h('tbody', {}, d.statements.map(s => h('tr', {}, h('td', {}, s.original_filename || s.statement_id),
-        h('td', {}, `${fmt.day(s.period_start)} – ${fmt.day(s.period_end)}`), h('td', { class: 'num' }, fmt.money(s.closing_balance)),
-        h('td', { class: 'num' }, s.difference ? h('span', { class: 'bad' }, fmt.money(s.difference)) : '✓')))))) : null);
+      h('td', { class: 'wide-only' }, a.history.length > 1 ? spark(a.history.map(p => p.balance)) : h('span', { class: 'ws-note' }, `${a.history.length} reading${a.history.length === 1 ? '' : 's'}`)))))))),
+    d.statements.length ? card('Statements reconciled', h('div', { class: 'ws-table-wrap' }, h('table', { class: 'ws-table' },
+      h('thead', {}, h('tr', {}, h('th', {}, 'Statement'), h('th', {}, 'Period'), h('th', { class: 'num' }, 'Closing'), h('th', { class: 'num' }, 'Off by'))),
+      h('tbody', {}, d.statements.map(s => h('tr', {}, h('td', { class: 'ws-clip', title: s.original_filename || s.statement_id }, s.original_filename || s.statement_id),
+        h('td', { class: 'nowrap' }, `${shortDay(s.period_start)} – ${shortDay(s.period_end)}`), h('td', { class: 'num' }, fmt.money(s.closing_balance)),
+        h('td', { class: 'num' }, s.difference ? h('span', { class: 'bad' }, fmt.money(s.difference)) : '✓'))))))) : null);
+}
+
+// "Sep 18" (no weekday) for table cells.
+function shortDay(iso) {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function spark(values) {
@@ -268,16 +274,13 @@ async function goals(view) {
       stat('401(k) room left this year', fmt.money(r.deferral_room), `limit ${fmt.money(r.deferral_limit)} · projected ${fmt.money(r.projected_remaining_deferrals)} more`),
       stat('IRA', fmt.money(r.ira_actual), `of ${fmt.money(r.ira_limit)} · ${fmt.money(r.ira_per_check)} per check`)),
     h('div', { class: 'ws-grid two' },
-      card('Savings goals', d.goals.length ? h('ul', { class: 'ws-list' }, d.goals.map(g => h('li', { class: 'ws-row', style: { display: 'block' } },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between' } }, h('strong', {}, g.name), h('span', { class: 'ws-amount' }, fmt.pct(g.pct_of_target))),
-        bar(g.balance || 0, g.target || 0, 'good'),
-        h('div', { class: 'ws-row-meta' }, `${fmt.money(g.balance)} of ${fmt.money(g.target)}${g.due_on ? ' by ' + fmt.day(g.due_on) : ''}`)))) : empty('No savings goals.')),
+      card('Savings goals', goalList(d.goals)),
       card('Retirement accounts', h('ul', { class: 'ws-list' }, d.retirementAccounts.map(a => h('li', { class: 'ws-row' },
         h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, a.name), h('div', { class: 'ws-row-meta' }, a.as_of ? 'as of ' + fmt.day(a.as_of) : '')),
         h('span', { class: 'ws-amount' }, fmt.money(a.balance))))))),
     card('Pay plan', h('div', { class: 'ws-grid' },
       h('div', {}, h('div', { class: 'ws-note', style: { fontWeight: 600 } }, 'Each paycheck goes to'),
-        h('ul', { class: 'ws-list' }, d.deposits.map(x => h('li', { class: 'ws-row' }, h('div', { class: 'ws-row-main' }, x.account_id || x.name || 'Deposit'),
+        h('ul', { class: 'ws-list' }, d.deposits.map(x => h('li', { class: 'ws-row' }, h('div', { class: 'ws-row-main' }, x.name || (x.account_id ? 'Account ••' + x.account_id.replace(/^acct-/, '') : 'Deposit')),
           h('span', { class: 'ws-amount' }, fmt.money(x.amount)))))),
       h('div', {}, h('div', { class: 'ws-note', style: { fontWeight: 600 } }, 'Set aside each paycheck'),
         h('ul', { class: 'ws-list' }, d.allocations.map(x => h('li', { class: 'ws-row' },
@@ -374,14 +377,14 @@ function importCard(i, reload, open) {
       .filter(([k]) => counts[k]).map(([k, t]) => h('div', {}, `${fmt.num(counts[k])} ${t}`)),
     !Object.values(counts).some(Boolean) ? h('div', { class: 'ws-note' }, 'none') : null);
   const r = i.report;
-  return h('details', { class: 'ws-expand', open: open || null },
+  return h('details', { class: 'ws-expand ws-import', open: open || null },
     h('summary', { class: 'ws-row' },
       h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, i.filename),
         h('div', { class: 'ws-row-meta' }, summary || 'no records found')),
       h('div', { class: 'ws-row-end' },
         failed.length ? h('span', { class: 'ws-chip bad' }, `${failed.length} totals off`) : checks.length ? h('span', { class: 'ws-chip good' }, 'totals check') : null,
         h('span', { class: 'ws-chip ' + (STATUS[i.status]?.[0] || '') }, STATUS[i.status]?.[1] || i.status))),
-    h('div', { class: 'ws-lines', style: { display: 'block' } },
+    h('div', { class: 'ws-import-body' },
       (p.warnings || []).map(w => h('p', { class: 'ws-note warn' }, w)),
       h('div', { class: 'ws-counts' },
         row('Transactions', c.transactions), row('Receipts', c.receipts), row('Paychecks', c.paychecks && { new: c.paychecks.new, seen: c.paychecks.seen }),

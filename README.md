@@ -11,10 +11,9 @@ Built with Flask + modular vanilla JS. No build step required.
 |---|---|---|
 | Home | `/` | Introduction, latest writing, links to work and music |
 | Music | `/music`, `/music/<song>` | Every song (search, album filter), albums, photos; each song's story, versions, lyrics and chords. A player bar keeps playing while you browse. |
-| Projects | `/projects`, `/projects/<id>` | Technology projects to explore by technology; each with overview, outcomes and timeline, or an uploaded walkthrough in a sandboxed frame |
+| Career | `/career`, `/career#<section>`, `/career/projects/<id>` | The professional portfolio on one page: header with CV download, work ethos, experience (each role linking its projects), a project explorer filtered by technology, role or search, skills and certifications, education. Each project opens with its overview, outcomes and timeline, or an uploaded walkthrough in a sandboxed frame. `/resume` and `/projects` links land here |
 | Writing | `/writing`, `/writing/<id>` | Posts, each with its own page |
 | Garden, Travel | `/garden`, `/travel` | The garden map and gallery; the travel map |
-| Resume | `/resume` | The CV |
 | Say hi | `/contact` | Leave a note |
 
 **The workspace** at `/app` is where the owner records and edits everything, with
@@ -26,7 +25,7 @@ one sidebar and one screen at a time:
 | Journal | entries by date, editor, habits, balance check-in, photo transcription | `journal.entries`, tags, habit logs, journal balance snapshots |
 | Health | Overview · Activity · Food · Body · Goals | workouts, meals, weigh-ins, drinks, foods, profile, goals |
 | Money | Overview (full analysis, or goals only) · Transactions · Receipts · Accounts & balances · Budgets & bills · Goals & retirement · Imports · Finance tracker | bank activity, statements, paychecks and receipts through Imports; budgets, goals and the pay plan in the Finance tracker |
-| Site | Music · Projects · Writing · Garden · Travel · Messages | everything the public site shows |
+| Site | Music · Career (profile & ethos, experience, projects, skills & education, CV upload) · Writing · Garden · Travel · Messages | everything the public site shows |
 | Settings | site switches, journal check-in accounts, diagnostics | `core.settings` |
 
 Each record has one editor. The same logging forms (workout, meal, weigh-in, drink)
@@ -207,15 +206,15 @@ virtuwill/
 │   ├── today.py           The Today screen's day across every domain
 │   ├── importers/         Portal exports → structured finance data (chase, payroll, kroger, canonical, load)
 │   ├── money_imports.py   Money › Imports: upload, preview, commit, download
-│   └── journal.py, health.py, finance.py, music.py, content.py, garden.py, travel.py, site.py, trackers.py
+│   └── journal.py, health.py, finance.py, music.py, content.py, career.py, garden.py, travel.py, site.py, trackers.py
 ├── db/schema/             The data model, applied in name order, once each (see db/README.md)
 ├── templates/
 │   ├── index.html         Public site shell; pages/ holds each page's markup
 │   └── workspace.html     The workspace shell (/app)
 ├── static/
 │   ├── app/               The workspace: main.js (router, sidebar), lib.js, forms.js, moneyparts.js, screens/*.js
-│   ├── js/                Public pages: app.js (router), music.js (pages + player), projects.js,
-│   │                      writing.js, garden.js/viewer.js/gallery.js, travel.js, resume.js, contact.js
+│   ├── js/                Public pages: app.js (router), music.js (pages + player), career.js,
+│   │                      writing.js, garden.js/viewer.js/gallery.js, travel.js, contact.js
 │   └── css/               theme.css (tokens), site.css (public pages), page styles
 └── data/                  Content loaded into a new database on first start
 ```
@@ -267,7 +266,11 @@ Lakebase (PostgreSQL); see "Data: one relational model in Lakebase" above.
 | POST | `/api/v1/money/extract[?format=csv]` | Owner | Files → structured data, nothing staged |
 | GET | `/api/v1/music`, `/api/v1/music/songs/<slug>` | — | Published songs, versions and albums (`?view=owner` for everything) |
 | POST/PUT/DELETE | `/api/v1/music/{songs,recordings,albums}` | Owner | Songs, versions, albums |
-| GET/PUT/DELETE | `/api/v1/projects[/<id>]` | — / Owner | Projects |
+| GET/PUT/DELETE | `/api/v1/projects[/<id>]` | — / Owner | Projects (each may name its `role_id`) |
+| GET | `/api/v1/career` | — | The Career page: profile, highlights, roles, education, skills, projects |
+| PUT | `/api/v1/career/profile` | Owner | Name, headline, contact, ethos statement |
+| GET/POST/PUT/DELETE | `/api/v1/career/{roles,education,skill-groups,highlights}` | Owner | The page's lists |
+| POST/DELETE | `/api/v1/career/cv` | Owner | Upload a CV (PDF), or go back to the bundled one; `/career/cv` downloads it |
 | GET | `/api/v1/posts[/<id>]`, `/api/v1/travel`, `/api/v1/site-text/<key>` | — | Writing, travel, page text |
 
 ### Entry schema

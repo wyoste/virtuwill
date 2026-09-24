@@ -45,7 +45,8 @@ class SchemaTests(unittest.TestCase):
         db.reset()
         with db.tx() as conn:        # a second start re-runs nothing and flags the edited file
             self.assertEqual(db.schema_status(conn)["edited"], ["20_health.sql"])
-            self.assertEqual(conn.execute("SELECT COUNT(*) AS n FROM virtuwill.migrations").fetchone()["n"], 1)
+            self.assertEqual([r["name"] for r in conn.execute("SELECT name FROM virtuwill.migrations ORDER BY name")],
+                             ["career_seed_v1", "relational_v1"])
 
     def test_calendar_accepts_historical_dates(self):
         self.assertTrue(db.one("SELECT 1 AS ok FROM core.calendar WHERE day = '1999-05-01'"))

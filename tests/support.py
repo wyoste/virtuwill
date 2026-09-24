@@ -9,7 +9,7 @@ import os
 import unittest
 
 PG = os.environ.get("VIRTUWILL_TEST_PG")
-SCHEMAS = ("core", "journal", "health", "finance", "garden", "music", "content", "travel", "virtuwill",
+SCHEMAS = ("core", "journal", "health", "finance", "garden", "music", "content", "career", "travel", "virtuwill",
            "legacy_journal_v0", "legacy_health_v0")
 
 # Strong credentials, so the private trackers are enabled.

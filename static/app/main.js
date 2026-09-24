@@ -12,7 +12,7 @@ const NAV = [
     ['/app/money/accounts', 'Accounts & balances'], ['/app/money/budgets', 'Budgets & bills'],
     ['/app/money/goals', 'Goals & retirement'], ['/app/money/imports', 'Imports'], ['/app/money/editor', 'Finance tracker']] },
   { href: '/app/site', label: 'Site', icon: '◎', children: [
-    ['/app/site/music', 'Music'], ['/app/site/projects', 'Projects'], ['/app/site/writing', 'Writing'],
+    ['/app/site/music', 'Music'], ['/app/site/career', 'Career'], ['/app/site/writing', 'Writing'],
     ['/app/site/garden', 'Garden'], ['/app/site/travel', 'Travel'], ['/app/site/messages', 'Messages']] },
   { href: '/app/settings', label: 'Settings', icon: '⚙' },
 ];
@@ -23,7 +23,7 @@ const SCREENS = [
   ['/app/health', () => import('./screens/health.js')],
   ['/app/money', () => import('./screens/money.js')],
   ['/app/site/music', () => import('./screens/site-music.js')],
-  ['/app/site/projects', () => import('./screens/site-projects.js')],
+  ['/app/site/career', () => import('./screens/site-career.js')],
   ['/app/site/writing', () => import('./screens/site-writing.js')],
   ['/app/site/garden', () => import('./screens/site-garden.js')],
   ['/app/site/travel', () => import('./screens/site-travel.js')],
@@ -63,14 +63,18 @@ function sidebar() {
         h('a', { href: item.children ? item.children[0][0] : item.href, class: 'ws-nav-item' + (isOn ? ' on' : ''),
                  'aria-current': isOn && !item.children ? 'page' : null },
           h('span', { class: 'ws-nav-icon', 'aria-hidden': 'true' }, item.icon), h('span', {}, item.label)),
-        open ? h('div', { class: 'ws-subnav' }, item.children.map(([href, label]) =>
-          h('a', { href, class: path === href ? 'on' : null, 'aria-current': path === href ? 'page' : null }, label))) : null);
+        open ? h('div', { class: 'ws-subnav' }, item.children.map(([href, label]) => {
+          // A child is current on its own page and its sub-pages (Career › Experience), unless another child is exact.
+          const on = path === href || (path.startsWith(href + '/') && !item.children.some(([other]) => other === path));
+          return h('a', { href, class: on ? 'on' : null, 'aria-current': on ? 'page' : null }, label);
+        })) : null);
     }));
 }
 
 async function render() {
   const path = location.pathname.replace(/\/$/, '') || '/app';
   if (path === '/app/site') return navigate('/app/site/music', { replace: true });
+  if (path === '/app/site/projects') return navigate('/app/site/career/projects', { replace: true });
   document.getElementById('ws-sidebar-nav').replaceChildren(sidebar());
   document.body.classList.remove('nav-open');
   const main = document.getElementById('ws-main');
