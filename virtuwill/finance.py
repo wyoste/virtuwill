@@ -16,7 +16,7 @@ from flask import Blueprint, jsonify, request
 
 from . import db
 from .auth import admin_required
-from .util import in_calendar, number, parse_date, slug
+from .util import in_calendar, number, parse_date, plain, slug
 
 bp = Blueprint("finance", __name__)
 SOURCE = "finance_tracker"
@@ -378,3 +378,155 @@ def project(conn, state):
     report["receipts matched to bank"] = len(used)
     report["skipped"] = dict(report["skipped"])
     return report
+
+
+# ── Workspace API (v1): Money screens ────────────────────────────────────────
+# Read-only until the Money import and editing screens replace the Finance
+# tracker (which still owns these rows and re-projects them on every save).
+
+def _month(value):
+    """'2026-08' → first day of that month, or None."""
+    day = parse_date(f"{value}-01") if value and len(str(value)) == 7 else None
+    return day if in_calendar(day) else None
+
+
+def _rows(conn, sql, *args):
+    return [plain(r) for r in conn.execute(sql, args)]
+
+
+@bp.route("/api/v1/money/overview")
+@admin_required
+def money_overview():
+    with db.tx() as conn:
+        through = conn.execute("SELECT MAX(posted_on) AS d FROM finance.transactions").fetchone()["d"]
+        month = conn.execute("""SELECT COALESCE(MAX(month_start), date_trunc('month', current_date)::date) AS m
+                                FROM finance.budget_vs_actual WHERE actual IS NOT NULL AND actual <> 0""").fetchone()["m"]
+        return jsonify({
+            "through": through.isoformat() if through else None,
+            "month": month.isoformat(),
+            "balances": _rows(conn, """SELECT l.*, a.institution, a.is_active FROM finance.latest_balances l
+                                       JOIN finance.accounts a USING (account_id) WHERE a.is_active ORDER BY l.account_type, l.name"""),
+            "budgets": _rows(conn, "SELECT * FROM finance.budget_vs_actual WHERE month_start = %s ORDER BY name", month),
+            "goals": _rows(conn, "SELECT * FROM finance.goal_progress ORDER BY name"),
+            "retirement": plain(conn.execute("SELECT * FROM finance.retirement_summary").fetchone() or {}),
+            "cashFlow": _rows(conn, "SELECT * FROM finance.pay_period_cash_flow ORDER BY period_start DESC LIMIT 6"),
+            "spendingByCategory": _rows(conn, """SELECT category, category_group, amount, transactions FROM finance.monthly_spending
+                                                 WHERE month_start = %s ORDER BY amount DESC""", month),
+        })
+
+
+@bp.route("/api/v1/money/months")
+@admin_required
+def money_months():
+    with db.tx() as conn:
+        return jsonify([r["m"].strftime("%Y-%m") for r in conn.execute(
+            """SELECT DISTINCT date_trunc('month', d)::date AS m FROM (
+                   SELECT posted_on AS d FROM finance.transactions UNION SELECT purchased_on FROM finance.receipts) x
+               WHERE d IS NOT NULL ORDER BY m DESC""")])
+
+
+@bp.route("/api/v1/money/transactions")
+@admin_required
+def money_transactions():
+    month = _month(request.args.get("month"))
+    where, args = [], []
+    if month:
+        where.append("t.posted_on >= %s AND t.posted_on < (%s::date + INTERVAL '1 month')"); args += [month, month]
+    for key, column in (("account", "t.account_id"), ("category", "t.category"), ("kind", "t.kind")):
+        if request.args.get(key):
+            where.append(f"{column} = %s"); args.append(request.args[key])
+    if request.args.get("q"):
+        where.append("(t.merchant ILIKE %s OR t.description_raw ILIKE %s)"); args += ["%" + request.args["q"] + "%"] * 2
+    with db.tx() as conn:
+        rows = _rows(conn, f"""
+            SELECT t.transaction_id, t.posted_on, t.merchant, t.description_raw, t.amount, t.kind, t.category,
+                   t.movement_type, t.is_pending, t.account_id, a.name AS account_name, a.institution,
+                   COALESCE((SELECT jsonb_agg(jsonb_build_object('receipt_id', p.receipt_id, 'merchant', r.merchant,
+                                                                'total', r.total, 'purchased_on', r.purchased_on))
+                             FROM finance.receipt_payments p JOIN finance.receipts r USING (receipt_id)
+                             WHERE p.transaction_id = t.transaction_id), '[]') AS receipts,
+                   COALESCE((SELECT jsonb_agg(jsonb_build_object('line', l.line, 'item_name', l.item_name,
+                                                                'item_category', l.item_category, 'amount', l.allocated_amount)
+                                              ORDER BY l.receipt_id, l.line)
+                             FROM finance.transaction_line_items l WHERE l.transaction_id = t.transaction_id), '[]') AS lines,
+                   COALESCE((SELECT jsonb_agg(jsonb_build_object('file', d.original_filename, 'row', s.source_row,
+                                                                'reported_balance', s.reported_balance))
+                             FROM finance.transaction_sources s JOIN finance.source_documents d USING (document_id)
+                             WHERE s.transaction_id = t.transaction_id), '[]') AS sources
+            FROM finance.transactions t LEFT JOIN finance.accounts a USING (account_id)
+            {'WHERE ' + ' AND '.join(where) if where else ''}
+            ORDER BY t.posted_on DESC, t.transaction_id LIMIT 1000""", *args)
+        return jsonify({
+            "transactions": rows,
+            "accounts": _rows(conn, "SELECT account_id, name, institution FROM finance.accounts WHERE is_active ORDER BY name"),
+            "categories": [r["category"] for r in conn.execute("SELECT category FROM finance.categories ORDER BY category")],
+        })
+
+
+@bp.route("/api/v1/money/receipts")
+@admin_required
+def money_receipts():
+    month = _month(request.args.get("month"))
+    with db.tx() as conn:
+        return jsonify(_rows(conn, """
+            SELECT r.receipt_id, r.purchased_on, r.merchant, r.store_location, r.category, r.net, r.tax, r.total, r.savings,
+                   r.payment_text, m.match_status, m.matched_amount, m.transaction_ids,
+                   COALESCE((SELECT jsonb_agg(jsonb_build_object('line', i.line, 'item_name', i.item_name, 'quantity', i.quantity,
+                                                                'unit', i.unit, 'amount', i.amount, 'discount', i.discount,
+                                                                'item_category', i.item_category, 'planned', i.planned)
+                                              ORDER BY i.line)
+                             FROM finance.receipt_items i WHERE i.receipt_id = r.receipt_id), '[]') AS items
+            FROM finance.receipts r LEFT JOIN finance.receipt_matching m USING (receipt_id)
+            WHERE %s::date IS NULL OR (r.purchased_on >= %s AND r.purchased_on < (%s::date + INTERVAL '1 month'))
+            ORDER BY r.purchased_on DESC, r.receipt_id""", month, month, month))
+
+
+@bp.route("/api/v1/money/accounts")
+@admin_required
+def money_accounts():
+    with db.tx() as conn:
+        accounts = _rows(conn, """SELECT a.*, t.is_liability, l.balance, l.as_of, l.balance_kind
+                                  FROM finance.accounts a JOIN finance.account_types t USING (account_type)
+                                  LEFT JOIN finance.latest_balances l USING (account_id)
+                                  ORDER BY a.is_active DESC, a.account_type, a.name""")
+        history = {}
+        for r in conn.execute("""SELECT account_id, as_of, balance, balance_kind, source FROM finance.balance_timeline
+                                 ORDER BY account_id, as_of"""):
+            history.setdefault(r["account_id"], []).append(plain(r))
+        for a in accounts:
+            a["history"] = history.get(a["account_id"], [])[-36:]
+        return jsonify({"accounts": accounts,
+                        "statements": _rows(conn, "SELECT * FROM finance.statement_reconciliation ORDER BY period_end DESC")})
+
+
+@bp.route("/api/v1/money/budgets")
+@admin_required
+def money_budgets():
+    month = _month(request.args.get("month"))
+    with db.tx() as conn:
+        if not month:
+            month = conn.execute("""SELECT COALESCE(MAX(month_start), date_trunc('month', current_date)::date) AS m
+                                    FROM finance.budget_vs_actual WHERE actual <> 0""").fetchone()["m"]
+        return jsonify({
+            "month": month.isoformat(),
+            "budgets": _rows(conn, """SELECT e.*, v.actual, v.remaining, v.over_budget FROM finance.effective_budgets e
+                                      LEFT JOIN finance.budget_vs_actual v ON v.budget_id = e.budget_id AND v.month_start = %s
+                                      ORDER BY e.name""", month),
+            "bills": _rows(conn, "SELECT * FROM finance.recurring_monthly ORDER BY due_day NULLS LAST, name"),
+            "spending": _rows(conn, "SELECT * FROM finance.monthly_spending WHERE month_start = %s ORDER BY amount DESC", month),
+        })
+
+
+@bp.route("/api/v1/money/goals")
+@admin_required
+def money_goals():
+    with db.tx() as conn:
+        return jsonify({
+            "goals": _rows(conn, "SELECT * FROM finance.goal_progress ORDER BY name"),
+            "retirement": plain(conn.execute("SELECT * FROM finance.retirement_summary").fetchone() or {}),
+            "retirementAccounts": _rows(conn, """SELECT l.* FROM finance.latest_balances l JOIN finance.accounts a USING (account_id)
+                                                 WHERE a.retirement_type IS NOT NULL ORDER BY l.name"""),
+            "pay": _rows(conn, "SELECT * FROM finance.pay_profile"),
+            "deposits": _rows(conn, "SELECT * FROM finance.paycheck_deposits"),
+            "allocations": _rows(conn, "SELECT * FROM finance.allocations"),
+        })

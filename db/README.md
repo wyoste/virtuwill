@@ -16,11 +16,11 @@ module per schema. `virtuwill/migrate.py` moved the earlier Lakebase layout in o
 | Schema | Holds | Visibility |
 |---|---|---|
 | `core` | `calendar` (conformed date dimension, 1900–2100), `media_assets` (every file), `daily_summary` view | shared |
-| `journal` | `entries` (one per date), `entry_tags`, `habits`, `habit_logs`, `meals`, `workout_types`, `workouts` | private |
+| `journal` | `entries` (one per date), `entry_tags`, `habits`, `habit_logs`, `meals`, `workout_types`, `workouts` + `derived_habits`, `day_habits` views | private |
 | `health` | `body_measurements` (many weigh-ins per date), `alcohol`, `daily_logs`, `foods`, `recipes`, `recipe_ingredients`, `profile`, `profile_history`, `goals` + 4 views | private |
 | `finance` | `account_types`, `accounts`, `account_aliases`, `import_profiles`, `import_batches`, `source_documents`, `statements`, `categories`, `movement_types`, `transactions`, `transaction_sources`, `receipts`, `item_categories`, `item_catalog`, `receipt_items`, `receipt_payments`, `shopping_list`, `budgets`, `budget_categories`, `recurring_expenses`, `pay_profile`, `paycheck_deposits`, `other_incomes`, `allocations`, `savings_goals`, `balance_snapshots`, `retirement_plan` + 18 views | private |
 | `garden` | `settings`, `species`, `health_levels`, `beds`, `seasons`, `plantings`, `plant_observations`, `photos`, `photo_subjects` + 2 views | public read |
-| `music` | `albums`, `songs`, `song_sections`, `recordings`, `gallery_photos` + `public_catalog` view | published rows public |
+| `music` | `albums`, `songs` (each with a URL `slug`), `song_sections`, `recordings`, `gallery_photos` + `public_catalog` view | published songs, and published recordings on published albums |
 | `content` | `blog_posts`, `portfolio_projects`, `project_metrics`, `project_timeline`, `site_text`, `messages` + `public_posts` view | posts/projects public; messages private |
 | `travel` | `places`, `place_photos`, `visited_regions` | public read |
 | `virtuwill` | `schema_versions`, `migrations`, `trackers` (Finance/Health tracker documents), `sync_reports` | private |
@@ -40,6 +40,12 @@ module per schema. `virtuwill/migrate.py` moved the earlier Lakebase layout in o
 - **Unknown is not zero**: missing calories, minutes, prices or balances stay `NULL`.
 - **Single owner**: there is no `user_id`; every row belongs to the site owner.
 - **Settings**: `core.settings` holds owner switches such as `site.chat_enabled`.
+- **Derived habits**: `journal.habits.derived_from` ties run, lift and drink to the day's
+  records (`journal.derived_habits`); `journal.day_habits` shows each day's habits, where a
+  `habit_logs` row set by the owner wins over the derivation.
+- **One editor per record**: workspace screens write through `/api/v1`. The Health
+  tracker is retired, so its former rows are edited like any other; the Finance
+  tracker still owns the finance rows it projects until Money imports replace it.
 
 ## Statements, exports and receipts
 

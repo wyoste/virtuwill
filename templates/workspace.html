@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="robots" content="noindex"/>
+  <title>VirtuWill workspace</title>
+  <link rel="icon" href="{{ url_for('static', filename='yoste_logo.png') }}"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  {% if signed_in %}
+  <!-- The reused garden planner's own components; workspace.css loads last and wins. -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/garden.css') }}"/>
+  {% endif %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='app/workspace.css') }}"/>
+  <script>window.WORKSPACE = { signedIn: {{ 'true' if signed_in else 'false' }} };</script>
+</head>
+<body>
+{% if signed_in %}
+  <header class="ws-topbar">
+    <button class="ws-menu" id="ws-menu" aria-label="Open navigation" aria-expanded="false" aria-controls="ws-sidebar">☰</button>
+    <a class="ws-brand" href="/app"><img src="{{ url_for('static', filename='yoste_logo.png') }}" alt=""/> Workspace</a>
+    <span class="ws-status" id="ws-status" role="status" aria-live="polite"></span>
+  </header>
+  <div class="ws-scrim" id="ws-scrim"></div>
+  <aside class="ws-sidebar" id="ws-sidebar">
+    <a class="ws-brand ws-brand-side" href="/app"><img src="{{ url_for('static', filename='yoste_logo.png') }}" alt=""/> Workspace</a>
+    <div id="ws-sidebar-nav"></div>
+    <div class="ws-sidebar-foot">
+      <a href="/" class="ws-nav-item"><span class="ws-nav-icon" aria-hidden="true">↗</span><span>View public site</span></a>
+      <button class="ws-nav-item" id="ws-signout"><span class="ws-nav-icon" aria-hidden="true">⎋</span><span>Sign out</span></button>
+    </div>
+  </aside>
+  <main class="ws-main" id="ws-main" tabindex="-1"></main>
+
+  <!-- The garden planner canvas; the Garden screen moves it into view. -->
+  <div id="ws-planner-home" hidden>{% include 'pages/planner.html' %}</div>
+  <div id="ws-toasts" class="ws-toasts"></div>
+
+  <script>
+    // Shims for the reused garden planner and Finance tracker bridge.
+    window.VW = window.VW || {};
+    window.VW.Auth = { isAdmin: () => true, setAdmin() {} };
+    window.toast = (message, kind) => {
+      const el = document.createElement('div');
+      el.className = 'ws-toast ' + (kind === 'error' ? 'error' : 'ok');
+      el.textContent = String(message).replace(/<[^>]*>/g, '');
+      document.getElementById('ws-toasts').append(el);
+      setTimeout(() => el.remove(), 3500);
+    };
+    window.go = () => { location.href = '/app'; };
+  </script>
+  <script src="{{ url_for('static', filename='js/garden.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/trackers.js') }}"></script>
+{% else %}
+  <div id="ws-toasts" class="ws-toasts"></div>
+{% endif %}
+  <script type="module" src="{{ url_for('static', filename='app/main.js') }}"></script>
+</body>
+</html>

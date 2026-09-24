@@ -8,13 +8,14 @@ linked to a recording through the audio path they point at.
 import json
 import os
 import re
+import uuid
 from pathlib import PurePosixPath
 
 from flask import Blueprint, jsonify, request
 
 from . import db, media
-from .auth import admin_required
-from .util import number
+from .auth import admin_required, is_admin
+from .util import number, plain, slug
 
 bp = Blueprint("music", __name__)
 SECTION_TYPES = {"intro", "verse", "pre-chorus", "chorus", "bridge", "solo", "outro", "coda"}
@@ -43,6 +44,10 @@ def add_recording(conn, asset, path, title=None):
         art = _art_for(conn, [f"audio/{album}/{stem}"])
     else:
         art = _art_for(conn, [f"audio/{stem}"])
+    if album:
+        # An album appears publicly once it has music; the owner can hide it in the workspace.
+        conn.execute("UPDATE music.albums SET published = true WHERE album_id = %s AND NOT EXISTS "
+                     "(SELECT 1 FROM music.recordings WHERE album_id = %s)", (album, album))
     return conn.execute("""INSERT INTO music.recordings (album_id, title, audio_asset_id, art_asset_id, published)
                            VALUES (%s, %s, %s, %s, true) RETURNING recording_id""",
                         (album, title or stem.replace("_", " "), asset, art)).fetchone()["recording_id"]
@@ -93,15 +98,15 @@ def save_catalog(conn, doc):
         song_id = str(t["id"])
         year, bpm = number(t.get("year")), number(t.get("bpm"))
         conn.execute(
-            """INSERT INTO music.songs (song_id, title, year_written, written_at, story, genre, musical_key, bpm, published, position)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """INSERT INTO music.songs (song_id, title, year_written, written_at, story, genre, musical_key, bpm, published, position, slug)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (song_id) DO UPDATE SET title = EXCLUDED.title, year_written = EXCLUDED.year_written,
                    written_at = EXCLUDED.written_at, story = EXCLUDED.story, genre = EXCLUDED.genre,
                    musical_key = EXCLUDED.musical_key, bpm = EXCLUDED.bpm, published = EXCLUDED.published,
                    position = EXCLUDED.position, updated_at = now()""",
             (song_id, t["title"], int(year) if year and 1900 <= year <= 2100 else None, t.get("location") or "",
              t.get("story") or "", t.get("genre") or "", t.get("key") or "", bpm if bpm and bpm > 0 else None,
-             t.get("published") is not False, position))
+             t.get("published") is not False, position, unique_slug(conn, t["title"], song_id)))
         conn.execute("DELETE FROM music.song_sections WHERE song_id = %s", (song_id,))
         sections = [x for x in t.get("sections") or [] if isinstance(x, dict)]
         if any(t.get(k) for k in ("chords", "lyrics", "tabs")):
@@ -230,3 +235,203 @@ def legacy_sample():
         return jsonify(json.loads((db.ROOT / "mock_data" / "music_library.json").read_text(encoding="utf-8")))
     except (OSError, ValueError):
         return jsonify([])
+
+
+# ── Workspace and public API (v1) ────────────────────────────────────────────
+# Songs are the compositions (one page each); recordings are their versions.
+# Visitors see published songs, and only published recordings on published
+# albums (or singles). The owner sees everything, including audio files not
+# yet attached to a song.
+
+SONG_FIELDS = ("title", "year_written", "written_at", "story", "genre", "musical_key", "bpm", "published")
+
+
+def unique_slug(conn, title, song_id=None):
+    base, n = slug(title), 1
+    candidate = base
+    while conn.execute("SELECT 1 FROM music.songs WHERE slug = %s AND song_id IS DISTINCT FROM %s", (candidate, song_id)).fetchone():
+        n += 1
+        candidate = f"{base}-{n}"
+    return candidate
+
+
+def _recordings(conn, owner):
+    visible = "" if owner else """ AND r.published AND (r.album_id IS NULL OR a.published)"""
+    return [plain(r) | {"url": media.url(r["path"]), "art": media.url(r["art_path"] or r["album_art_path"])}
+            for r in conn.execute(f"""
+                SELECT r.recording_id, r.song_id, s.slug AS song_slug, s.title AS song_title, r.album_id, a.title AS album, a.published AS album_published,
+                       a.release_year, r.track_number, r.title, r.version_label, r.duration_seconds, r.published,
+                       m.path, art.path AS art_path, aart.path AS album_art_path
+                FROM music.recordings r
+                JOIN core.media_assets m ON m.asset_id = r.audio_asset_id
+                LEFT JOIN core.media_assets art ON art.asset_id = r.art_asset_id
+                LEFT JOIN music.albums a ON a.album_id = r.album_id
+                LEFT JOIN core.media_assets aart ON aart.asset_id = a.art_asset_id
+                LEFT JOIN music.songs s ON s.song_id = r.song_id
+                WHERE (m.content IS NOT NULL OR m.byte_size IS NOT NULL){visible}
+                ORDER BY a.title NULLS LAST, r.track_number NULLS LAST, m.path""")]
+
+
+def _song(row, versions, sections=None):
+    song = {k: row[k] for k in ("song_id", "slug", "title", "year_written", "written_at", "genre", "musical_key", "published")}
+    song.update(bpm=number(row["bpm"]), story=row["story"], versions=versions,
+                art=next((v["art"] for v in versions if v["art"]), None),
+                has_lyrics=row["has_lyrics"])
+    if sections is not None:
+        song["sections"] = sections
+    return song
+
+
+def music_page(conn, owner):
+    recordings = _recordings(conn, owner)
+    by_song = {}
+    for r in recordings:
+        if r["song_id"]:
+            by_song.setdefault(r["song_id"], []).append(r)
+    songs = [_song(s, by_song.get(s["song_id"], [])) for s in conn.execute(
+        f"""SELECT s.*, EXISTS (SELECT 1 FROM music.song_sections x WHERE x.song_id = s.song_id
+                                 AND (x.lyrics <> '' OR x.chords <> '')) AS has_lyrics
+            FROM music.songs s {'' if owner else 'WHERE s.published'}
+            ORDER BY s.position NULLS LAST, s.title""")]
+    albums = {}
+    for r in recordings:
+        if r["album_id"]:
+            album = albums.setdefault(r["album_id"], {"album_id": r["album_id"], "title": r["album"], "year": r["release_year"],
+                                                      "published": r["album_published"], "art": media.url(r["album_art_path"]),
+                                                      "tracks": []})
+            album["tracks"].append(r)
+    return {"songs": songs, "albums": list(albums.values()),
+            "singles": [r for r in recordings if not r["album_id"] and not r["song_id"]],
+            "unassigned": [r for r in recordings if not r["song_id"]] if owner else None}
+
+
+@bp.route("/api/v1/music")
+def music_v1():
+    owner = is_admin() and request.args.get("view") == "owner"
+    with db.tx() as conn:
+        return jsonify(music_page(conn, owner))
+
+
+@bp.route("/api/v1/music/songs/<slug_or_id>")
+def song_v1(slug_or_id):
+    owner = is_admin() and request.args.get("view") == "owner"
+    with db.tx() as conn:
+        row = conn.execute("""SELECT s.*, EXISTS (SELECT 1 FROM music.song_sections x WHERE x.song_id = s.song_id) AS has_lyrics
+                              FROM music.songs s WHERE (slug = %s OR song_id = %s)""" + ("" if owner else " AND published"),
+                           (slug_or_id, slug_or_id)).fetchone()
+        if not row:
+            return jsonify({"error": "Not found"}), 404
+        versions = [r for r in _recordings(conn, owner) if r["song_id"] == row["song_id"]]
+        sections = [plain(x) for x in conn.execute(
+            "SELECT position, section_type, label, chords, lyrics, tabs FROM music.song_sections WHERE song_id = %s ORDER BY position",
+            (row["song_id"],))]
+        return jsonify(_song(row, versions, sections))
+
+
+def _write_song(conn, song_id, data):
+    fields = {k: data[k] for k in SONG_FIELDS if k in data}
+    if "title" in fields and not str(fields["title"]).strip():
+        raise ValueError("A song needs a title")
+    if "year_written" in fields:
+        year = number(fields["year_written"])
+        fields["year_written"] = int(year) if year and 1900 <= year <= 2100 else None
+    if "bpm" in fields:
+        bpm = number(fields["bpm"])
+        fields["bpm"] = bpm if bpm and 0 < bpm < 400 else None
+    if "published" in fields:
+        fields["published"] = bool(fields["published"])
+    for key in ("title", "written_at", "story", "genre", "musical_key"):
+        if key in fields:
+            fields[key] = str(fields[key] or "").strip()
+    if "title" in fields:
+        fields["slug"] = unique_slug(conn, fields["title"], song_id)
+    if fields:
+        conn.execute(f"UPDATE music.songs SET {', '.join(f'{k} = %s' for k in fields)}, updated_at = now() WHERE song_id = %s",
+                     [*fields.values(), song_id])
+    if isinstance(data.get("sections"), list):
+        conn.execute("DELETE FROM music.song_sections WHERE song_id = %s", (song_id,))
+        for position, x in enumerate(s for s in data["sections"] if isinstance(s, dict)):
+            kind = x.get("section_type") if x.get("section_type") in SECTION_TYPES | {"full"} else "verse"
+            conn.execute("INSERT INTO music.song_sections VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                         (song_id, position, kind, str(x.get("label") or ""), str(x.get("chords") or ""),
+                          str(x.get("lyrics") or ""), str(x.get("tabs") or "")))
+
+
+@bp.route("/api/v1/music/songs", methods=["POST"])
+@admin_required
+def song_create_v1():
+    data = request.get_json(silent=True) or {}
+    if not str(data.get("title") or "").strip():
+        return jsonify({"error": "A song needs a title"}), 400
+    song_id = "s" + uuid.uuid4().hex[:12]
+    with db.tx() as conn:
+        conn.execute("INSERT INTO music.songs (song_id, title, slug, published) VALUES (%s, %s, %s, false)",
+                     (song_id, data["title"].strip(), unique_slug(conn, data["title"])))
+        _write_song(conn, song_id, data)
+        if data.get("recording_id"):
+            conn.execute("UPDATE music.recordings SET song_id = %s WHERE recording_id = %s", (song_id, data["recording_id"]))
+        return jsonify({"song_id": song_id, "slug": conn.execute("SELECT slug FROM music.songs WHERE song_id = %s",
+                                                                 (song_id,)).fetchone()["slug"]}), 201
+
+
+@bp.route("/api/v1/music/songs/<song_id>", methods=["PUT", "DELETE"])
+@admin_required
+def song_write_v1(song_id):
+    with db.tx() as conn:
+        if not conn.execute("SELECT 1 FROM music.songs WHERE song_id = %s", (song_id,)).fetchone():
+            return jsonify({"error": "Not found"}), 404
+        if request.method == "DELETE":
+            # Its recordings stay, back in the unassigned list.
+            conn.execute("DELETE FROM music.songs WHERE song_id = %s", (song_id,))
+            return jsonify({"ok": True})
+        try:
+            _write_song(conn, song_id, request.get_json(silent=True) or {})
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        return jsonify({"ok": True, "slug": conn.execute("SELECT slug FROM music.songs WHERE song_id = %s", (song_id,)).fetchone()["slug"]})
+
+
+@bp.route("/api/v1/music/recordings/<int:recording_id>", methods=["PUT"])
+@admin_required
+def recording_write_v1(recording_id):
+    data = request.get_json(silent=True) or {}
+    fields = {}
+    if "song_id" in data:
+        fields["song_id"] = data["song_id"] or None
+    for key in ("title", "version_label"):
+        if key in data:
+            fields[key] = str(data[key] or "").strip()[:200]
+    if "published" in data:
+        fields["published"] = bool(data["published"])
+    if not fields:
+        return jsonify({"error": "Nothing to change"}), 400
+    if fields.get("title") == "":
+        return jsonify({"error": "A recording needs a title"}), 400
+    with db.tx() as conn:
+        if fields.get("song_id") and not conn.execute("SELECT 1 FROM music.songs WHERE song_id = %s", (fields["song_id"],)).fetchone():
+            return jsonify({"error": "Unknown song"}), 400
+        if not conn.execute(f"UPDATE music.recordings SET {', '.join(f'{k} = %s' for k in fields)} WHERE recording_id = %s",
+                            [*fields.values(), recording_id]).rowcount:
+            return jsonify({"error": "Not found"}), 404
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/v1/music/albums/<album_id>", methods=["PUT"])
+@admin_required
+def album_write_v1(album_id):
+    data = request.get_json(silent=True) or {}
+    fields = {}
+    if "title" in data and str(data["title"]).strip():
+        fields["title"] = str(data["title"]).strip()[:200]
+    if "release_year" in data:
+        year = number(data["release_year"])
+        fields["release_year"] = int(year) if year and 1900 <= year <= 2100 else None
+    if "published" in data:
+        fields["published"] = bool(data["published"])
+    if not fields:
+        return jsonify({"error": "Nothing to change"}), 400
+    with db.tx() as conn:
+        if not conn.execute(f"UPDATE music.albums SET {', '.join(f'{k} = %s' for k in fields)} WHERE album_id = %s",
+                            [*fields.values(), album_id]).rowcount:
+            return jsonify({"error": "Not found"}), 404
+    return jsonify({"ok": True})
