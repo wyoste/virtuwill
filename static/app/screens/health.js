@@ -1,6 +1,6 @@
 // Health: Overview · Activity · Food · Body · Goals, over the shared tables.
 import { h, api, fmt, card, stat, pageHead, tabs, isoToday, addDays, empty, toast, run, field, values } from '../lib.js';
-import { quickAdd, recordRow, meal as mealEditor, cap } from '../forms.js';
+import { quickAdd, recordRow, meal as mealEditor, cap, forgetFoods } from '../forms.js';
 
 const TABS = [['/app/health', 'Overview'], ['/app/health/activity', 'Activity'], ['/app/health/food', 'Food'],
               ['/app/health/body', 'Body'], ['/app/health/goals', 'Goals']];
@@ -158,6 +158,7 @@ async function editFood(food, redraw) {
       const body = values(form);
       if (food) await api('/api/v1/health/foods/' + encodeURIComponent(food.food_id), { method: 'PUT', body });
       else await api('/api/v1/health/foods', { method: 'POST', body });
+      forgetFoods();
       toast('Food saved');
       redraw();
       return;

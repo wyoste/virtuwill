@@ -346,15 +346,72 @@ WORKOUT_TYPES = {"Strength", "Cardio", "Mobility / recovery", "Dog walk", "Other
 SLOTS_V1 = {"breakfast", "lunch", "dinner", "snack", "meal"}
 
 
-def _meal_nutrition(conn, values):
-    """A meal chosen from a reference food gets that food's nutrition × quantity, unless given."""
+NUTRIENTS = ("calories", "protein_g", "carbs_g", "fat_g", "fiber_g")
+
+
+def _food(conn, food_id):
+    food = conn.execute("SELECT * FROM health.foods WHERE food_id = %s", (food_id,)).fetchone()
+    if not food:
+        raise records.Invalid(f"Unknown food: {food_id}")
+    return food
+
+
+def _meal_items(conn, body):
+    """Validated meal items: each a saved food × servings, with its own nutrition (overridable)."""
+    items = body.get("items")
+    if not isinstance(items, list) or len(items) > 40:
+        raise records.Invalid("items must be a list of up to 40 foods")
+    out = []
+    for i, item in enumerate(items, 1):
+        if not isinstance(item, dict) or not item.get("food_id"):
+            raise records.Invalid(f"Item {i} needs a food")
+        food = _food(conn, str(item["food_id"]))
+        qty = number(item.get("quantity"))
+        qty = 1 if item.get("quantity") in (None, "") else qty
+        if qty is None or not 0 < qty <= 100:
+            raise records.Invalid(f"Item {i}: servings must be more than 0 and at most 100")
+        row = {"food_id": food["food_id"], "description": food["name"], "quantity": qty, "unit": food["unit"] or ""}
+        for column in NUTRIENTS:
+            given = number(item.get(column)) if item.get(column) not in (None, "") else None
+            if given is not None and not 0 <= given <= 10000:
+                raise records.Invalid(f"Item {i}: {column} is out of range")
+            row[column] = given if given is not None else (
+                round(float(food[column]) * qty, 1) if food[column] is not None else None)
+        out.append(row)
+    return out
+
+
+def _meal_nutrition(conn, values, body):
+    """Fill a meal's nutrition from its foods.
+
+    With items (an egg burrito: eggs, tortillas, olive oil), the meal's totals
+    are the sum of its items. With a single food_id, that food × quantity.
+    """
+    if "items" in body:
+        items = _meal_items(conn, body)
+        if items:
+            # The meal is its foods: totals are their sum, whatever else was sent.
+            for column in NUTRIENTS:
+                known = [x[column] for x in items if x[column] is not None]
+                values[column] = round(sum(known), 1) if known else None
+            values["food_id"], values["quantity"] = None, None
+            if not values.get("description"):
+                values["description"] = ", ".join(x["description"] for x in items)[:300]
+
+        def write_items(conn, meal_id):
+            conn.execute("DELETE FROM journal.meal_items WHERE meal_id = %s", (meal_id,))
+            for position, x in enumerate(items):
+                conn.execute("""INSERT INTO journal.meal_items (meal_id, position, food_id, description, quantity, unit,
+                                                                calories, protein_g, carbs_g, fat_g, fiber_g)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                             (meal_id, position, x["food_id"], x["description"], x["quantity"], x["unit"],
+                              *(x[c] for c in NUTRIENTS)))
+        return values, write_items
     food_id, quantity = values.get("food_id"), values.get("quantity")
     if food_id:
-        food = conn.execute("SELECT * FROM health.foods WHERE food_id = %s", (food_id,)).fetchone()
-        if not food:
-            raise records.Invalid("Unknown food")
+        food = _food(conn, food_id)
         qty = quantity or 1
-        for column in ("calories", "protein_g", "carbs_g", "fat_g", "fiber_g"):
+        for column in NUTRIENTS:
             if values.get(column) is None and food[column] is not None:
                 values[column] = round(float(food[column]) * qty, 1)
         if not values.get("description"):
@@ -362,11 +419,19 @@ def _meal_nutrition(conn, values):
     return values
 
 
-def _drink_math(conn, values):
+def _drink_math(conn, values, body=None):
     if values.get("standard_drinks") is None and all(values.get(k) for k in ("containers", "oz_per_container", "abv_pct")):
         values["standard_drinks"] = round(values["containers"] * values["oz_per_container"] * values["abv_pct"] / 100 / 0.6, 2)
     return values
 
+
+MEALS_WITH_ITEMS = """
+    SELECT m.*, COALESCE((SELECT jsonb_agg(jsonb_build_object(
+               'food_id', i.food_id, 'description', i.description, 'quantity', i.quantity, 'unit', i.unit,
+               'calories', i.calories, 'protein_g', i.protein_g, 'carbs_g', i.carbs_g, 'fat_g', i.fat_g,
+               'fiber_g', i.fiber_g) ORDER BY i.position)
+           FROM journal.meal_items i WHERE i.meal_id = m.meal_id), '[]') AS items
+    FROM journal.meals m"""
 
 F = records.Field
 records.Resource(bp, "/api/v1/health/workouts", "journal.workouts", "workout_id", [
@@ -378,11 +443,11 @@ records.Resource(bp, "/api/v1/health/workouts", "journal.workouts", "workout_id"
 records.Resource(bp, "/api/v1/health/meals", "journal.meals", "meal_id", [
     F("meal_date", "date", required=True), F("slot", choices=SLOTS_V1, default="meal"),
     F("status", choices={"eaten", "planned"}, default="eaten"), F("description", max_length=300), F("note", max_length=2000),
-    F("food_id", max_length=200), F("quantity", "number", low=0, high=100),
+    F("food_id", max_length=200, nullable=True), F("quantity", "number", low=0, high=100),
     F("calories", "number", low=0, high=10000), F("protein_g", "number", low=0, high=1000), F("carbs_g", "number", low=0, high=1000),
     F("fat_g", "number", low=0, high=1000), F("fiber_g", "number", low=0, high=1000)],
     date_column="meal_date", order="meal_date DESC, array_position(ARRAY['breakfast','lunch','dinner','snack','meal'], slot), meal_id",
-    defaults={"source": "manual"}, prepare=_meal_nutrition)
+    defaults={"source": "manual"}, prepare=_meal_nutrition, select=MEALS_WITH_ITEMS)
 records.Resource(bp, "/api/v1/health/weigh-ins", "health.body_measurements", "measurement_id", [
     F("measured_on", "date", required=True), F("measured_at", "time"), F("value", "number", required=True, low=20, high=1000),
     F("unit", choices={"lb", "kg"}, default="lb"), F("is_morning", "bool", default=False), F("note", max_length=2000)],
