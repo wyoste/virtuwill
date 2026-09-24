@@ -91,7 +91,7 @@ window.VW.Resume = (() => {
   let _pendingDel  = null; // id of project awaiting delete confirmation
 
   // ── Persistence ─────────────────────────────────────────────────────────────
-  // Uses localStorage as a lightweight store (no extra API endpoint needed).
+  // Saved on the server (/api/data/portfolio_layout), cached in localStorage.
   // Key: 'vw_portfolio_state' → { [id]: { visible, deleted } }
   const STORE_KEY = 'vw_portfolio_state';
 
@@ -143,11 +143,13 @@ window.VW.Resume = (() => {
         }
       });
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
+      VW.Store?.push(STORE_KEY);
     } catch { /* ignore */ }
   }
 
   // ── Portfolio grid rendering ────────────────────────────────────────────────
   async function renderPortfolio() {
+    await VW.Store?.pull(STORE_KEY);
     _loadProjects();
     await _mergeUploads();
     const grid = document.getElementById('projects-grid-dynamic');

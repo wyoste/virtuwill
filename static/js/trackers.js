@@ -53,6 +53,7 @@ window.VW.Trackers = (() => {
       const meta = await responseJSON(await fetch(endpoint(kind), { cache: 'no-store' }));
       if (sessions.get(kind) !== s) return;
       s.csrf = meta.csrf;
+      s.storage = meta.storage;
       if (!meta.configured) {
         status(kind, 'Import your original ' + names[kind] + ' HTML to get started.');
         const setup = document.createElement('div');
@@ -128,7 +129,7 @@ window.VW.Trackers = (() => {
     if (!s?.frame || event.source !== s.frame.contentWindow) return;
     if (msg.type === 'ready' && s.revision === null && Number.isInteger(msg.revision)) {
       s.revision = msg.revision;
-      status(s.kind, 'Connected · changes save automatically');
+      status(s.kind, s.storage === 'lakebase' ? 'Connected · changes save to Lakebase automatically' : 'Connected · changes save automatically');
     }
     if (msg.type === 'save' && Number.isInteger(msg.sequence) && msg.state?.version === 1) {
       s.pending = { sequence: msg.sequence, state: msg.state };

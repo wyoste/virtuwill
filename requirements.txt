@@ -13,5 +13,11 @@ python-dotenv>=1.0.0
 # ── Production server ────────────────────────────────────────────────────────
 gunicorn>=22.0.0
 
+# ── Lakebase (Databricks-managed Postgres) storage ───────────────────────────
+# Used when a database resource is attached to the Databricks app (PGHOST set).
+psycopg[binary]>=3.1
+psycopg-pool>=3.2
+databricks-sdk>=0.50.0
+
 # ── OCR (optional — comment out if not using photo transcription) ─────────
 anthropic>=0.28.0

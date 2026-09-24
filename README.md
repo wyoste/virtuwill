@@ -27,17 +27,14 @@ Alternatively, import on the deployment host:
 python scripts/import_trackers.py --finance /private/Yoste-Finance.html --health /private/Yoste-Health.html
 ```
 
-Personal HTML and JSON state live in `data/private-trackers/trackers.sqlite3`,
-which is ignored by Git. Neither the source HTML nor private records are shipped
+Personal HTML and JSON state live in the Lakebase `virtuwill.trackers` table when
+a database is attached (see below), or in `data/private-trackers/trackers.sqlite3`
+during local development, which is ignored by Git. Neither the source HTML nor private records are shipped
 in the public repository or public static assets. Do not add your original HTML
 files to `static/`, `templates/`, or the public portfolio uploader.
 
-Set `TRACKER_DATA_DIR` to a directory on a **persistent writable volume** when
-deploying. All workers must use the same local SQLite database. Separate replicas
-with separate disks are not supported; use a shared database implementation
-before scaling across hosts. Back up the private SQLite store and use the
-trackers' JSON exports for portable copies. Redeploys with ephemeral storage will
-lose imports and records.
+Without Lakebase, local storage is lost on every redeploy of a hosted app. Use
+the trackers' JSON exports for portable backups either way.
 
 The imported apps run in sandboxed frames with no network or parent-page access.
 Admin-only endpoints, CSRF tokens, no-store responses, and revision checks protect
@@ -47,7 +44,7 @@ remain visible in the tracker until reload; closing or reloading while a save is
 pending triggers a warning. Existing browser-local data is not read automatically
 across origins or devices.
 
-### Deploying the trackers on Databricks Apps
+### Deploying on Databricks Apps
 
 - Merging to GitHub does not update the app. Redeploy it (Apps UI → Deploy, or
   `databricks apps deploy`) from the updated source, then hard-refresh the browser.
@@ -57,8 +54,48 @@ across origins or devices.
   Secret). Deployment fails if either resource is missing. The admin password is
   the `admin-password` secret value, and the trackers need `SECRET_KEY` of 32+
   characters and `ADMIN_PASSWORD` of 12+ characters.
-- The app's local filesystem does not persist across redeploys. Imported trackers
-  are lost unless `TRACKER_DATA_DIR` points to persistent storage.
+- Attach a Lakebase database so data survives redeploys (see below).
+
+### Storage: one data model in Lakebase
+
+`storage.py` is the single persistence layer for every feature. When the app has a
+Lakebase (Databricks-managed Postgres) database resource, Databricks sets `PGHOST`,
+`PGDATABASE`, `PGUSER` and related variables, and the app stores everything in one
+`virtuwill` schema, authenticating with the app's own OAuth token:
+
+| Table | Contents |
+|---|---|
+| `collections` | One JSONB document per feature: `journal_entries`, `garden`, `garden_photos`, `music_catalog`, `blog`, `messages`, `portfolio_uploads`, `accounts_template`, plus `travel_pins`, `travel_visited`, `garden_gallery_note`, `garden_gallery_hero`, `portfolio_layout` |
+| `media` | Uploaded audio, photos, blog thumbnails and portfolio HTML, keyed by path under `static/` |
+| `trackers` | Finance and Health tracker documents and state |
+
+Without `PGHOST` (local development), the same code reads and writes `data/*.json`,
+`static/` and the tracker SQLite file.
+
+Set it up once:
+
+1. Create a Lakebase database instance in the workspace (Compute → Lakebase / Database
+   instances → Create), if you don't have one.
+2. Open the app → **Edit** → **Resources** → **Add resource** → **Database**. Choose the
+   instance and database (`databricks_postgres` by default) with permission
+   **Can connect and create**. Save.
+3. Deploy. The app creates the `virtuwill` schema on first use.
+
+Migration happens automatically:
+
+- A collection with no row yet is read from the repository's `data/*.json` (or
+  `mock_data/`), so the first deploy starts from the committed data. The first save
+  writes it to Lakebase; from then on the database is the source of truth.
+- Travel pins, visited places, garden gallery text and portfolio layout used to live
+  only in the browser. The first time you open those pages signed in as admin in the
+  browser that has them, they are uploaded; other devices then load them from the
+  server.
+- Uploads are stored in the database and restored under `static/` after a redeploy.
+- Data written in a running app before Lakebase was attached (and not committed to
+  the repository) is not carried over; the local disk is reset on redeploy.
+
+Tests run against any Postgres when `VIRTUWILL_TEST_PG` is set, for example
+`VIRTUWILL_TEST_PG="host=localhost dbname=lake user=app password=pw sslmode=disable"`.
 
 Validation:
 
