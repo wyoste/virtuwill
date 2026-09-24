@@ -1,0 +1,1275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Generated from db/schema/*.sql applied to PostgreSQL 16. Open in a browser. -->
+<title>VirtuWill Lakebase Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #f4f6f5; --surface: #ffffff; --surface2: #eef1f0; --ink: #16212b; --ink2: #44525e; --ink3: #6e7b86; --rule: #d8dfdd;
+  --code-bg: #eef1f0; --focus: #1b6fb8;
+  --core: #3d4f5f; --core-bg: #e6ebef;
+  --journal: #4a55a8; --journal-bg: #e9ebf8;
+  --health: #23775f; --health-bg: #e2f2ec;
+  --finance: #16608f; --finance-bg: #e1eef7;
+  --garden: #5b7419; --garden-bg: #edf3dc;
+  --music: #86407a; --music-bg: #f4e6f1;
+  --content: #a04d1d; --content-bg: #f8e9df;
+  --travel: #17767f; --travel-bg: #ddf1f2;
+  --app: #7b5a1a; --app-bg: #f4ecda;
+  --view: #6b3f8f; --view-bg: #f0e8f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #11171c; --surface: #182129; --surface2: #1e2932; --ink: #e6ecef; --ink2: #b3c0c8; --ink3: #8795a0; --rule: #2c3944; --code-bg: #1e2932; --focus: #7cb8ee;
+    --core: #b9c7d3; --core-bg: #2a3540; --journal: #a3abf0; --journal-bg: #252b4d; --health: #7fd3b6; --health-bg: #183a31;
+    --finance: #86c3ea; --finance-bg: #16324a; --garden: #bcd77a; --garden-bg: #2c3814; --music: #e3a6d6; --music-bg: #3d2338;
+    --content: #efb28c; --content-bg: #40281a; --travel: #87d7dd; --travel-bg: #173a3d; --app: #e1c07e; --app-bg: #3a2f17;
+    --view: #d1a8f0; --view-bg: #34243f;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #11171c; --surface: #182129; --surface2: #1e2932; --ink: #e6ecef; --ink2: #b3c0c8; --ink3: #8795a0; --rule: #2c3944; --code-bg: #1e2932; --focus: #7cb8ee;
+  --core: #b9c7d3; --core-bg: #2a3540; --journal: #a3abf0; --journal-bg: #252b4d; --health: #7fd3b6; --health-bg: #183a31;
+  --finance: #86c3ea; --finance-bg: #16324a; --garden: #bcd77a; --garden-bg: #2c3814; --music: #e3a6d6; --music-bg: #3d2338;
+  --content: #efb28c; --content-bg: #40281a; --travel: #87d7dd; --travel-bg: #173a3d; --app: #e1c07e; --app-bg: #3a2f17;
+  --view: #d1a8f0; --view-bg: #34243f;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.6 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; padding-inline: 20px; padding-block: 32px 64px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 48px; }
+h1, h2, h3 { font-family: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif; text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 24px; font-weight: 600; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+h3 { font-size: 18px; font-weight: 600; }
+h3.sub { margin-top: 8px; }
+p { margin: 0; max-width: 76ch; }
+code, .mono { font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 0.88em; }
+:not(pre) > code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--focus); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+section { display: grid; gap: 16px; }
+.lede { color: var(--ink2); font-size: 16px; }
+.eyebrow { font: 600 11px/1 "IBM Plex Sans", system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
+header { display: grid; gap: 12px; border-bottom: 1px solid var(--rule); padding-bottom: 24px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--ink3); font-size: 13px; }
+.count { font: 500 13px/1 "IBM Plex Sans", system-ui, sans-serif; color: var(--ink3); }
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+nav.toc a { text-decoration: none; }
+
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; font-family: "IBM Plex Sans", system-ui, sans-serif; }
+.chip.core { background: var(--core-bg); color: var(--core); } .chip.journal { background: var(--journal-bg); color: var(--journal); }
+.chip.health { background: var(--health-bg); color: var(--health); } .chip.finance { background: var(--finance-bg); color: var(--finance); }
+.chip.garden { background: var(--garden-bg); color: var(--garden); } .chip.music { background: var(--music-bg); color: var(--music); }
+.chip.content { background: var(--content-bg); color: var(--content); } .chip.travel { background: var(--travel-bg); color: var(--travel); }
+.chip.app { background: var(--app-bg); color: var(--app); } .chip.view { background: var(--view-bg); color: var(--view); }
+
+.schemas { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 12px; }
+.schema { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+.schema .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.schema .n { font-size: 12px; color: var(--ink3); font-variant-numeric: tabular-nums; }
+.schema p { font-size: 13.5px; color: var(--ink2); }
+.schema .vis { font-size: 12px; color: var(--ink3); }
+
+.scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+th { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink3); font-weight: 600; background: var(--surface2); }
+tr:last-child td { border-bottom: none; }
+td.col, td.type { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 12.5px; white-space: nowrap; }
+td.type { color: var(--ink2); }
+td.mono { font-size: 12px; color: var(--ink2); }
+.key { font: 600 10px/1 "IBM Plex Mono", ui-monospace, monospace; padding: 2px 5px; border-radius: 4px; margin-left: 6px; background: var(--surface2); color: var(--ink2); border: 1px solid var(--rule); }
+.table-card { display: grid; gap: 8px; align-content: start; }
+.table-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.table-head h3 { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 15px; font-weight: 500; }
+.table-head .purpose { color: var(--ink2); font-size: 13.5px; flex-basis: 100%; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 500px), 1fr)); gap: 26px; }
+.notes { font-size: 12.5px; color: var(--ink2); display: grid; gap: 3px; }
+.notes div::before { content: "— "; color: var(--ink3); }
+.diagram { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; overflow-x: auto; }
+.diagram pre.mermaid { background: transparent; margin: 0; text-align: center; font-size: 12px; }
+.rules { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 84ch; }
+.rules li::marker { color: var(--ink3); }
+.rulegroups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 22px; }
+.rulegroups section h3 { display: flex; gap: 8px; align-items: center; }
+.questions { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 84ch; color: var(--ink2); }
+footer { color: var(--ink3); font-size: 13px; border-top: 1px solid var(--rule); padding-top: 16px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Lakebase · PostgreSQL · db/schema</div>
+  <h1>VirtuWill Lakebase Model</h1>
+  <p class="lede">The complete model for the site: journal, health, finance, garden, music, content and travel in one database. Every dated fact meets on a shared calendar. Views compute the metrics the pages read. This is the target the application code moves onto next.</p>
+  <div class="meta">
+    <span>71 tables · 27 views · 9 schemas</span>
+    <span>Source: <code>db/schema/*.sql</code>, <code>db/README.md</code></span>
+    <span>Validated on PostgreSQL 16 with the real data</span>
+  </div>
+  <nav class="toc" aria-label="Sections">
+    <a href="#overview">Schemas</a> · <a href="#dims">Dimensions</a> · <a href="#facts">Facts and grain</a> · <a href="#ledger">Files to ledger</a> · <a href="#links">Cross-domain links</a> · <a href="#measures">Measures</a> · <a href="#rules">Rules</a> · <a href="#mapping">Source mapping</a> · <a href="#questions">Open questions</a> · <a href="#physical">Physical model</a>
+  </nav>
+</header>
+
+<section id="overview" aria-labelledby="h-overview">
+  <div class="eyebrow">Semantic model</div>
+  <h2 id="h-overview">Schemas</h2>
+  <div class="schemas">
+    <div class="schema"><div class="top"><span class="chip core">core</span><span class="n">2 tables · 1 view</span></div><p>The calendar every domain joins on, every file the site serves, and a daily summary across domains.</p><span class="vis">Shared</span></div>
+    <div class="schema"><div class="top"><span class="chip journal">journal</span><span class="n">7 tables</span></div><p>The daily record: one entry per date, tags, habits, meals and workouts.</p><span class="vis">Private</span></div>
+    <div class="schema"><div class="top"><span class="chip health">health</span><span class="n">9 tables · 4 views</span></div><p>Weigh-ins, drinks, logged days, foods, recipes, profile and goals.</p><span class="vis">Private</span></div>
+    <div class="schema"><div class="top"><span class="chip finance">finance</span><span class="n">27 tables · 18 views</span></div><p>Accounts, statement and export files, bank activity, point-in-time balances, receipts tied to bank charges, budgets, bills, pay, goals, retirement.</p><span class="vis">Private</span></div>
+    <div class="schema"><div class="top"><span class="chip garden">garden</span><span class="n">9 tables · 2 views</span></div><p>Beds, plantings on a 0.25 ft grid, species, seasons, plant health over time, photos.</p><span class="vis">Public to read</span></div>
+    <div class="schema"><div class="top"><span class="chip music">music</span><span class="n">5 tables · 1 view</span></div><p>Songs and their sections, separate from recordings and albums.</p><span class="vis">Published rows public</span></div>
+    <div class="schema"><div class="top"><span class="chip content">content</span><span class="n">6 tables · 1 view</span></div><p>Blog posts, portfolio projects, page text, contact messages.</p><span class="vis">Posts and projects public; messages private</span></div>
+    <div class="schema"><div class="top"><span class="chip travel">travel</span><span class="n">3 tables</span></div><p>Map pins, their photos, countries and states visited.</p><span class="vis">Public to read</span></div>
+    <div class="schema"><div class="top"><span class="chip app">virtuwill</span><span class="n">3 tables</span></div><p>Tracker documents, sync reports and the migration log.</p><span class="vis">Private</span></div>
+  </div>
+</section>
+
+<section id="dims" aria-labelledby="h-dims">
+  <h2 id="h-dims">Conformed dimensions</h2>
+  <p>Shared reference data that several domains point at, so their facts line up.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Dimension</th><th>Table</th><th>Attributes</th><th>Referenced by</th></tr></thead>
+    <tbody>
+      <tr><td>Calendar date</td><td class="col">core.calendar</td><td>day, ISO weekday, weekend, Monday week start, ISO week, month, quarter, year</td><td>Every dated fact in every schema: entries, meals, workouts, weigh-ins, drinks, transactions, receipts, balances, observations, posts, messages, places</td></tr>
+      <tr><td>Account</td><td class="col">finance.accounts</td><td>institution, name, last four, type, retirement type, purpose, shown in journal</td><td>Transactions, receipts, balance snapshots, paycheck deposits, allocations, recurring bills</td></tr>
+      <tr><td>Spending category</td><td class="col">finance.categories</td><td>category, group, needs review</td><td>Transactions, budgets, recurring bills, spending views</td></tr>
+      <tr><td>Food</td><td class="col">health.foods</td><td>name, unit, calories, protein, carbs, fat, fiber, label note</td><td>Meals, recipe ingredients, and the item catalog (linking purchases to nutrition)</td></tr>
+      <tr><td>Media asset</td><td class="col">core.media_assets</td><td>path, type, size, visibility</td><td>Recordings, album art, blog thumbnails, garden photos and map, portfolio HTML, place photos</td></tr>
+      <tr><td>Source</td><td>a <code>source</code> column on every copied fact</td><td><code>journal</code>, <code>health_tracker</code>, <code>finance_tracker</code>, <code>manual</code>, <code>import</code></td><td>Decides which writer owns and may replace a row</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="facts" aria-labelledby="h-facts">
+  <h2 id="h-facts">Facts and grain</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Domain</th><th>Fact</th><th>Table</th><th>Grain (one row per)</th><th>Dimensions</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip journal">journal</span></td><td>Journal entry</td><td class="col">journal.entries</td><td>calendar date (1:1)</td><td>date</td></tr>
+      <tr><td><span class="chip journal">journal</span></td><td>Habit log</td><td class="col">journal.habit_logs</td><td>date × habit</td><td>date, habit</td></tr>
+      <tr><td><span class="chip journal">journal</span></td><td>Meal</td><td class="col">journal.meals</td><td>meal item (many per date)</td><td>date, slot, status, food, source</td></tr>
+      <tr><td><span class="chip journal">journal</span></td><td>Workout session</td><td class="col">journal.workouts</td><td>session (many per date)</td><td>date, workout type, source</td></tr>
+      <tr><td><span class="chip health">health</span></td><td>Weigh-in</td><td class="col">health.body_measurements</td><td>reading (many per date)</td><td>date, time, morning or reference, source</td></tr>
+      <tr><td><span class="chip health">health</span></td><td>Drink</td><td class="col">health.alcohol</td><td>drink entry (many per date)</td><td>date, source</td></tr>
+      <tr><td><span class="chip health">health</span></td><td>Logged day</td><td class="col">health.daily_logs</td><td>date (at most one)</td><td>date</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Source document</td><td class="col">finance.source_documents</td><td>file (by content hash)</td><td>account, period, type, format, import profile</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Statement</td><td class="col">finance.statements</td><td>account × statement period</td><td>account, period end, document</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Bank transaction</td><td class="col">finance.transactions</td><td>real transaction (deduplicated across files)</td><td>date, account, category or movement type</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Transaction appearance</td><td class="col">finance.transaction_sources</td><td>transaction × file × page or row</td><td>document, printed balance</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Receipt</td><td class="col">finance.receipts</td><td>purchase at any store</td><td>date, merchant, spending category, document</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Receipt line</td><td class="col">finance.receipt_items</td><td>receipt × line</td><td>receipt, item category, planned</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Receipt payment</td><td class="col">finance.receipt_payments</td><td>tender on a receipt</td><td>account, bank transaction it became</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Balance snapshot</td><td class="col">finance.balance_snapshots</td><td>account or savings goal × point in time × kind</td><td>date, account, goal, statement, document, source</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Pay profile</td><td class="col">finance.pay_profile</td><td>pay date</td><td>date</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Plan lines</td><td class="col">budgets · recurring_expenses · allocations · savings_goals</td><td>budget, bill, allocation, goal</td><td>category, account</td></tr>
+      <tr><td><span class="chip garden">garden</span></td><td>Planting</td><td class="col">garden.plantings</td><td>plant at a grid position in a bed's season</td><td>bed, season, species, health</td></tr>
+      <tr><td><span class="chip garden">garden</span></td><td>Plant observation</td><td class="col">garden.plant_observations</td><td>planting × date</td><td>date, health</td></tr>
+      <tr><td><span class="chip music">music</span></td><td>Recording</td><td class="col">music.recordings</td><td>audio file</td><td>song, album, date, media</td></tr>
+      <tr><td><span class="chip content">content</span></td><td>Blog post · Message</td><td class="col">content.blog_posts · messages</td><td>post · message</td><td>date</td></tr>
+      <tr><td><span class="chip travel">travel</span></td><td>Place · Visited region</td><td class="col">travel.places · visited_regions</td><td>pin · country or state</td><td>date visited</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="ledger" aria-labelledby="h-ledger">
+  <h2 id="h-ledger"><span class="chip finance">finance</span> From files to balances and receipt lines</h2>
+  <p>Folders of statement PDFs, CSV exports and receipts are the source of truth. Each file is registered once, its balances become points in time, its rows become bank transactions stored once however many files show them, and receipts tie their lines to the charges they explain.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  F["Folder of PDFs and CSVs"] --> P["import_profiles<br/>how to read each institution"]
+  F --> D["source_documents<br/>one per file, by SHA-256"]
+  P --> D
+  D --> S["statements<br/>opening and closing balance"]
+  S --> B["balance_snapshots<br/>balance at a point in time"]
+  D --> TS["transaction_sources<br/>page or row, printed balance"]
+  TS --> T["transactions<br/>one per real transaction"]
+  R["receipts + receipt_items<br/>any store, line level"] --> RP["receipt_payments<br/>each tender"]
+  RP --> T
+  T --> V1["statement_reconciliation"]
+  S --> V1
+  T --> V2["running_balances"]
+  TS --> V2
+  RP --> V3["transaction_line_items"]
+  D --> V4["document_coverage"]
+  </pre></div>
+  <div class="scroll"><table>
+    <thead><tr><th>Check</th><th>View</th><th>What it tells you</th></tr></thead>
+    <tbody>
+      <tr><td>Statement balances</td><td class="col">finance.statement_reconciliation</td><td>Opening balance + the period's transactions vs the closing balance. A difference means transactions are missing or doubled.</td></tr>
+      <tr><td>Running balance</td><td class="col">finance.running_balances</td><td>After each transaction, the balance carried from the statement beside the balance the file printed.</td></tr>
+      <tr><td>Coverage</td><td class="col">finance.document_coverage</td><td>Per account and month: days covered by a statement, by any file, and transactions loaded. Uncovered days are files still to find.</td></tr>
+      <tr><td>Receipt matching</td><td class="col">finance.receipt_matching</td><td>Each receipt matched, partly matched (split tender, cash) or unmatched to bank transactions.</td></tr>
+      <tr><td>Line items behind a charge</td><td class="col">finance.transaction_line_items</td><td>The receipt lines inside a bank charge, with tax and tip shared across lines and scaled to the part that charge paid.</td></tr>
+      <tr><td>Balances over time</td><td class="col">finance.balance_timeline · latest_balances</td><td>Every known balance of every account, from statements, exports, portals and journal entries.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="notes">Validated with a synthetic statement and export: opening balance plus activity matched the closing balance to the cent, every carried balance matched the printed one, and a receipt paid part by card and part in cash showed as partly matched with its lines allocated to the card charge.</p>
+</section>
+
+<section id="links" aria-labelledby="h-links">
+  <h2 id="h-links">Cross-domain links</h2>
+  <ol class="rules">
+    <li><strong>Calendar date joins everything.</strong> <code>core.daily_summary</code> shows, per day: journal entry, habits, workout minutes, calories, beers, weight, spending, income, garden observations and posts.</li>
+    <li><strong>Journal and health share meals and workouts.</strong> The journal page and the Health tracker write to the same <code>journal.meals</code> and <code>journal.workouts</code>; the health views read them.</li>
+    <li><strong>Journal account lists are balance snapshots.</strong> Each entry's list of account balances becomes <code>finance.balance_snapshots</code> rows (source <code>journal</code>) dated to the entry, linked to an account once it is identified.</li>
+    <li><strong>Purchases link to nutrition.</strong> An item catalog entry can reference a <code>health.foods</code> row, so purchases and meals share a food identity.</li>
+    <li><strong>Savings goals link to the pay plan.</strong> A goal references the allocation that funds it each paycheck; its balances are snapshots over time.</li>
+  </ol>
+</section>
+
+<section id="measures" aria-labelledby="h-measures">
+  <h2 id="h-measures">Measures</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Domain</th><th>Measure</th><th>Definition</th><th>View</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip health">health</span></td><td>Workout minutes, qualifying day</td><td>Sum of minutes of types that count toward the goal (not dog walks); a day qualifies at 45+ minutes</td><td class="col">health.daily_activity</td></tr>
+      <tr><td><span class="chip health">health</span></td><td>Qualifying days per week</td><td>Qualifying days in the Monday-start week, against the goal of 5</td><td class="col">health.weekly_workout_progress</td></tr>
+      <tr><td><span class="chip health">health</span></td><td>Eaten, planned and total calories</td><td>Eaten meal calories plus alcohol calories, against the calorie target; planned food shown separately</td><td class="col">health.daily_activity</td></tr>
+      <tr><td><span class="chip health">health</span></td><td>Alcohol within rules</td><td>No drinks, or fewer than the boundary (3) on one of the alcohol days (Friday–Sunday)</td><td class="col">health.daily_activity</td></tr>
+      <tr><td><span class="chip health">health</span></td><td>Weigh-ins, morning 7-day average, BMI</td><td>Count and latest/first/min/max per date; morning readings only for the 7-day calendar average; BMI from height</td><td class="col">health.weight_trend</td></tr>
+      <tr><td><span class="chip health">health</span></td><td>Goal progress</td><td>Current value per goal and whether met (at least, at most, or below the target)</td><td class="col">health.goal_progress</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Spending</td><td>Expense charges, carrying the category of the receipt that explains them, plus the part of each receipt no charge explains yet. Movements never count</td><td class="col">finance.spending</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Statement difference</td><td>Closing − (opening ± period transactions); + for liabilities, − for deposit accounts. Should be 0</td><td class="col">finance.statement_reconciliation</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Allocated line amount</td><td>Line amount × (1 + (tax + tip) ÷ net) × payment amount ÷ receipt total</td><td class="col">finance.transaction_line_items</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Coverage days</td><td>Days in a month inside a statement's or export's period, per account</td><td class="col">finance.document_coverage</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Effective budget</td><td>Fixed amount; or per paycheck × paychecks a year ÷ 12; or the monthly equivalent of current recurring bills in its categories</td><td class="col">finance.effective_budgets</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Budget vs actual</td><td>Monthly spending in a budget's categories against its effective amount; remaining and over-budget</td><td class="col">finance.budget_vs_actual</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Pay-period cash flow</td><td>Per 14-day period from the pay anchor: income received, spending, transfers in and out, card payments, unconfirmed movements</td><td class="col">finance.pay_period_cash_flow</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Recurring monthly equivalent</td><td>Weekly × 52 ÷ 12, biweekly × 26 ÷ 12, annual ÷ 12; unknown prices count as 0</td><td class="col">finance.recurring_monthly</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Receipt reconciliation</td><td>Lines vs net, match status, and each matched payment vs its bank amount; differences should be 0</td><td class="col">finance.receipt_reconciliation</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Item spending</td><td>Receipt line amounts and discounts by month and item category, rolled up to spending categories; unplanned lines</td><td class="col">finance.item_spending</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Latest balance, goal progress</td><td>Most recent snapshot per account or goal; percent of target</td><td class="col">finance.latest_balances · goal_progress</td></tr>
+      <tr><td><span class="chip finance">finance</span></td><td>Retirement room</td><td>Deferral limit − year-to-date deferrals − other deferrals, against contributions still scheduled this year</td><td class="col">finance.retirement_summary</td></tr>
+      <tr><td><span class="chip garden">garden</span></td><td>Bed and species inventory</td><td>Area (rectangle, circle, or shoelace for polygons), plants, species, average health, plants needing attention</td><td class="col">garden.bed_summary · species_inventory</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="rules" aria-labelledby="h-rules">
+  <h2 id="h-rules">Business rules the model enforces</h2>
+  <div class="rulegroups">
+    <section><h3><span class="chip journal">journal</span><span class="chip health">health</span></h3>
+      <ol class="rules">
+        <li>One journal entry per calendar date; moving an entry carries its tags, habits and meals.</li>
+        <li>Many weigh-ins per date; the trend uses morning readings, others stay as references.</li>
+        <li>Planned meals are never counted as eaten; calories include alcohol.</li>
+        <li>Dog walks are recorded but never qualify a workout day.</li>
+        <li>Goal weight derives from the BMI goal and height; the profile keeps its history.</li>
+      </ol></section>
+    <section><h3><span class="chip finance">finance</span></h3>
+      <ol class="rules">
+        <li>Amounts keep the bank's sign: positive leaves the account, negative arrives.</li>
+        <li>Each file is registered once by content hash; a transaction is stored once however many files show it, found again by bank id or fingerprint.</li>
+        <li>A matched receipt explains its bank charge and is never counted twice; a receipt can be split across tenders; its lines equal its net and net + tax + tip equals its total.</li>
+        <li>For credit cards and loans the balance is the amount owed and charges raise it; for deposit accounts charges lower it.</li>
+        <li>Statement opening and closing balances must come from a statement.</li>
+        <li>Movements (pay, transfers, card payments) are never spending; every movement has a type.</li>
+        <li>A category belongs to at most one budget; a budget can pool several.</li>
+        <li>Balances are observations over time; the latest wins.</li>
+      </ol></section>
+    <section><h3><span class="chip garden">garden</span><span class="chip music">music</span><span class="chip content">content</span></h3>
+      <ol class="rules">
+        <li>One active season per bed; each bed's shape carries the dimensions its type needs.</li>
+        <li>A song is separate from its recordings; drafts never appear in the public catalog.</li>
+        <li>Only published posts appear publicly; messages are private.</li>
+      </ol></section>
+    <section><h3><span class="chip core">all</span></h3>
+      <ol class="rules">
+        <li>Every writer owns its rows by <code>source</code> and replaces only those.</li>
+        <li>Unknown is not zero: missing values stay empty.</li>
+        <li>Copied rows keep the source's original record in <code>details</code>.</li>
+        <li>Single owner: no <code>user_id</code> yet.</li>
+      </ol></section>
+  </div>
+</section>
+
+<section id="mapping" aria-labelledby="h-mapping">
+  <h2 id="h-mapping">Where today's data goes</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Today</th><th>Model</th></tr></thead>
+    <tbody>
+      <tr><td><code>data/journal_entries.json</code></td><td>journal.entries, entry_tags, habit_logs, meals; account lists → finance.balance_snapshots</td></tr>
+      <tr><td>Health tracker state and seed</td><td>workouts, meals → journal; weights → body_measurements; beers → alcohol; complete → daily_logs; foods, recipes; settings → profile and goals</td></tr>
+      <tr><td>Statement PDFs, CSV exports, receipt files</td><td>source_documents, statements, balance_snapshots, transactions, transaction_sources, receipts, receipt_items, receipt_payments</td></tr>
+      <tr><td>Finance tracker state</td><td>transactions and movements (with the statement each names), receipts, lines and payments, item catalog, budgets, recurring bills, pay profile, paycheck deposits, other incomes, allocations, savings goals, balances, retirement plan, shopping list</td></tr>
+      <tr><td><code>data/garden.json</code>, species in <code>garden.js</code>, <code>garden_photos.json</code></td><td>garden.settings, species, beds, seasons (one “Current” per bed), plantings, photos, photo_subjects</td></tr>
+      <tr><td><code>data/music_catalog.json</code>, <code>static/audio/</code></td><td>music.songs, song_sections, albums (audio folders), recordings (audio files)</td></tr>
+      <tr><td><code>blog.json</code>, <code>messages.json</code>, projects in <code>resume.js</code>, <code>portfolio_uploads.json</code></td><td>content.blog_posts, messages, portfolio_projects, project_metrics, project_timeline</td></tr>
+      <tr><td>Browser-only: travel, garden gallery text, portfolio layout</td><td>travel.places, place_photos, visited_regions; content.site_text; portfolio_projects.visible/removed</td></tr>
+      <tr><td>Uploaded and bundled files</td><td>core.media_assets</td></tr>
+    </tbody>
+  </table></div>
+  <p class="notes">Validated by applying the schema twice to an empty database as a role with only CONNECT and CREATE, then loading the real journal, both trackers, garden, music catalog, blog, messages and portfolio. Every constraint held and every receipt reconciled to the cent.</p>
+</section>
+
+<section id="questions" aria-labelledby="h-questions">
+  <h2 id="h-questions">Open questions</h2>
+  <ol class="questions">
+    <li><strong>Account identities.</strong> Statements, receipts and paycheck deposits name accounts only by institution and last four digits, and some cards appear only on receipts. Each needs an institution, a name and a type.</li>
+    <li><strong>Retirement account institutions</strong> for the retirement balances.</li>
+    <li><strong>Journal account lists</strong> sometimes name an institution without an account.</li>
+    <li><strong>Music links.</strong> One catalog song points to an audio file that isn't in <code>static/audio</code>, and another points to the root folder while its file is in an album folder.</li>
+    <li><strong>Discretionary pool</strong> membership is read from the budget's note: Shopping, Dining, Entertainment, Personal, Health, Professional, Home, Fees, Review.</li>
+    <li><strong>Statement files.</strong> The tracker names the statements its rows came from but not their periods or balances. A sample CSV and statement from each institution is needed to write their import profiles.</li>
+  </ol>
+</section>
+
+<section id="physical" aria-labelledby="h-physical">
+  <div class="eyebrow">Physical model</div>
+  <h2 id="h-physical">Tables, keys and views by schema</h2>
+  <p>Generated from the database built from <code>db/schema</code>. Diagrams show foreign keys; <code>calendar</code> is <code>core.calendar</code>.</p>
+</section>
+
+<section id="schema-core" aria-labelledby="h-core">
+<h2 id="h-core"><span class="chip core">core</span> schema <span class="count">2 tables · 1 views</span></h2>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  calendar {
+    date day PK
+    smallint iso_weekday
+    text day_name
+    boolean is_weekend
+    date week_start
+    smallint iso_year
+    smallint iso_week
+    date month_start
+    smallint month
+    smallint quarter
+    smallint year
+    smallint day_of_year
+  }
+  media_assets {
+    bigint asset_id PK
+    text path UK
+    text content_type
+    bytea content
+    bigint byte_size
+    text sha256
+    text visibility
+    timestamptz uploaded_at
+  }
+</pre></div>
+<div class="grid2"><div class="table-card"><div class="table-head"><h3>core.calendar</h3><span class="purpose">One row per day, 2015–2040. The conformed date dimension every dated fact references.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">day<span class="key">PK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">iso_weekday</td><td class="type">smallint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">day_name</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">is_weekend</td><td class="type">boolean</td><td>no</td><td class="mono"></td></tr><tr><td class="col">week_start</td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">iso_year</td><td class="type">smallint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">iso_week</td><td class="type">smallint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">month_start</td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">month</td><td class="type">smallint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">quarter</td><td class="type">smallint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">year</td><td class="type">smallint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">day_of_year</td><td class="type">smallint</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"></div></div><div class="table-card"><div class="table-head"><h3>core.media_assets</h3><span class="purpose">Every file the site serves: audio, photos, thumbnails, portfolio HTML.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">asset_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">path<span class="key">UK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">content_type</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">content</td><td class="type">bytea</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">byte_size</td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">sha256</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">visibility</td><td class="type">text</td><td>no</td><td class="mono">&#x27;public&#x27;</td></tr><tr><td class="col">uploaded_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>((visibility = ANY (ARRAY[&#x27;public&#x27;::text, &#x27;private&#x27;::text])))</code></div></div></div></div>
+<h3 class="sub">Views</h3><div class="scroll"><table><thead><tr><th>View</th><th>Purpose</th><th>Columns</th></tr></thead><tbody><tr><td class="col">core.daily_summary</td><td>One row per active day across every domain.</td><td class="mono">day, iso_weekday, week_start, month_start, has_journal_entry, habits_built, habits_to_limit, workout_minutes, qualifying_workout_day, total_calories, calorie_target, beers, weight, spending, income_received, garden_observations, posts_published</td></tr></tbody></table></div>
+</section>
+<section id="schema-journal" aria-labelledby="h-journal">
+<h2 id="h-journal"><span class="chip journal">journal</span> schema <span class="count">7 tables · 0 views</span></h2>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  calendar ||--o{ entries : &quot;entry_date&quot;
+  entries ||--o{ entry_tags : &quot;entry_date&quot;
+  entries ||--o{ habit_logs : &quot;entry_date&quot;
+  habits ||--o{ habit_logs : &quot;habit&quot;
+  calendar ||--o{ meals : &quot;meal_date&quot;
+  calendar ||--o{ workouts : &quot;workout_date&quot;
+  workout_types ||--o{ workouts : &quot;workout_type&quot;
+  health_foods ||--o{ meals : &quot;food_id&quot;
+  entries {
+    date entry_date PK,FK
+    text entry_id UK
+    text quote
+    text quote_author
+    text free_write
+    text source
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  entry_tags {
+    date entry_date PK,FK
+    text tag PK
+    integer position
+  }
+  habit_logs {
+    date entry_date PK,FK
+    text habit PK,FK
+    boolean done
+  }
+  habits {
+    text habit PK
+    text label
+    text polarity
+  }
+  meals {
+    bigint meal_id PK
+    date meal_date FK
+    text slot
+    text status
+    text description
+    text note
+    text food_id FK
+    numeric quantity
+    numeric calories
+    numeric protein_g
+    numeric carbs_g
+    numeric fat_g
+    numeric fiber_g
+    text source
+    etc more_3_columns
+  }
+  workout_types {
+    text workout_type PK
+    boolean counts_toward_goal
+  }
+  workouts {
+    bigint workout_id PK
+    date workout_date FK
+    text workout_type FK
+    text activity
+    numeric minutes
+    text note
+    text source
+    text source_ref
+    jsonb details
+    timestamptz created_at
+  }
+</pre></div>
+<div class="grid2"><div class="table-card"><div class="table-head"><h3>journal.entries</h3><span class="purpose">One journal entry per calendar date.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">entry_date<span class="key">PK</span><span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">entry_id<span class="key">UK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">quote</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">quote_author</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">free_write</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">source</td><td class="type">text</td><td>no</td><td class="mono">&#x27;manual&#x27;</td></tr><tr><td class="col">created_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr><tr><td class="col">updated_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>entry_date</code> → <code>core.calendar</code></div><div>Check <code>((source = ANY (ARRAY[&#x27;manual&#x27;::text, &#x27;photo&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>journal.entry_tags</h3><span class="purpose">Tags on an entry, in the order entered.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">entry_date<span class="key">PK</span><span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">tag<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">position</td><td class="type">integer</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>entry_date</code> → <code>journal.entries</code></div></div></div><div class="table-card"><div class="table-head"><h3>journal.habit_logs</h3><span class="purpose">Date × habit check-offs.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">entry_date<span class="key">PK</span><span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">habit<span class="key">PK</span><span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">done</td><td class="type">boolean</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>entry_date</code> → <code>journal.entries</code></div><div>FK <code>habit</code> → <code>journal.habits</code></div></div></div><div class="table-card"><div class="table-head"><h3>journal.habits</h3><span class="purpose">The habits the journal tracks, and whether each is one to build or to limit.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">habit<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">label</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">polarity</td><td class="type">text</td><td>no</td><td class="mono">&#x27;build&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>((polarity = ANY (ARRAY[&#x27;build&#x27;::text, &#x27;limit&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>journal.meals</h3><span class="purpose">One row per meal item, eaten or planned, from the journal or the Health tracker.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">meal_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">meal_date<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">slot</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">status</td><td class="type">text</td><td>no</td><td class="mono">&#x27;eaten&#x27;</td></tr><tr><td class="col">description</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">food_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">quantity</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">calories</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">protein_g</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">carbs_g</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">fat_g</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">fiber_g</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">source</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">source_ref</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">details</td><td class="type">jsonb</td><td>no</td><td class="mono">&#x27;{}&#x27;</td></tr><tr><td class="col">created_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>meal_date</code> → <code>core.calendar</code></div><div>FK <code>food_id</code> → <code>health.foods</code></div><div>Check <code>((slot = ANY (ARRAY[&#x27;breakfast&#x27;::text, &#x27;lunch&#x27;::text, &#x27;dinner&#x27;::text, &#x27;snack&#x27;::text, &#x27;meal&#x27;::text])))</code></div><div>Check <code>((status = ANY (ARRAY[&#x27;eaten&#x27;::text, &#x27;planned&#x27;::text])))</code></div><div>Check <code>((source = ANY (ARRAY[&#x27;journal&#x27;::text, &#x27;health_tracker&#x27;::text, &#x27;manual&#x27;::text])))</code></div><div>Index <code>(meal_date)</code></div><div>Index <code>(source, meal_date)</code></div></div></div><div class="table-card"><div class="table-head"><h3>journal.workout_types</h3><span class="purpose">Workout types and whether they count toward the workout goal.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">workout_type<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">counts_toward_goal</td><td class="type">boolean</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"></div></div><div class="table-card"><div class="table-head"><h3>journal.workouts</h3><span class="purpose">One row per workout session.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">workout_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">workout_date<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">workout_type<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono">&#x27;Other&#x27;</td></tr><tr><td class="col">activity</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">minutes</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">source</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">source_ref</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">details</td><td class="type">jsonb</td><td>no</td><td class="mono">&#x27;{}&#x27;</td></tr><tr><td class="col">created_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>workout_date</code> → <code>core.calendar</code></div><div>FK <code>workout_type</code> → <code>journal.workout_types</code></div><div>Check <code>(((minutes IS NULL) OR ((minutes &gt;= (0)::numeric) AND (minutes &lt;= (1440)::numeric))))</code></div><div>Check <code>((source = ANY (ARRAY[&#x27;journal&#x27;::text, &#x27;health_tracker&#x27;::text, &#x27;manual&#x27;::text])))</code></div><div>Index <code>(workout_date)</code></div><div>Index <code>(source, workout_date)</code></div></div></div></div>
+
+</section>
+<section id="schema-health" aria-labelledby="h-health">
+<h2 id="h-health"><span class="chip health">health</span> schema <span class="count">9 tables · 4 views</span></h2>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  calendar ||--o{ body_measurements : &quot;measured_on&quot;
+  calendar ||--o{ alcohol : &quot;drink_date&quot;
+  calendar ||--o{ daily_logs : &quot;log_date&quot;
+  recipes ||--o{ recipe_ingredients : &quot;recipe_id&quot;
+  foods ||--o{ recipe_ingredients : &quot;food_id&quot;
+  alcohol {
+    bigint drink_id PK
+    date drink_date FK
+    text name
+    numeric containers
+    numeric oz_per_container
+    numeric abv_pct
+    numeric calories
+    numeric standard_drinks
+    text source
+    text source_ref
+    jsonb details
+    timestamptz created_at
+  }
+  body_measurements {
+    bigint measurement_id PK
+    date measured_on FK
+    timestamptz measured_at
+    text metric
+    numeric value
+    text unit
+    boolean is_morning
+    text note
+    text source
+    text source_ref
+    jsonb details
+    timestamptz created_at
+  }
+  daily_logs {
+    date log_date PK,FK
+    boolean nutrition_complete
+    text source
+    timestamptz updated_at
+  }
+  foods {
+    text food_id PK
+    text name
+    text unit
+    numeric calories
+    numeric protein_g
+    numeric carbs_g
+    numeric fat_g
+    numeric fiber_g
+    text reference_note
+    text url
+    text source
+    jsonb details
+    timestamptz updated_at
+  }
+  goals {
+    text metric PK
+    numeric target
+    text unit
+    text period
+    text direction
+    text derived_from
+    timestamptz updated_at
+  }
+  profile {
+    smallint profile_id PK
+    numeric height_in
+    integer age
+    text mode
+    numeric bmi_goal
+    numeric calorie_target
+    int2__ alcohol_days
+    numeric drink_boundary
+    jsonb details
+    timestamptz updated_at
+  }
+  profile_history {
+    timestamptz changed_at PK
+    jsonb profile
+  }
+  recipe_ingredients {
+    bigint recipe_id PK,FK
+    integer position PK
+    text food_id FK
+    numeric quantity
+  }
+  recipes {
+    bigint recipe_id PK
+    text name UK
+    text source
+  }
+</pre></div>
+<div class="grid2"><div class="table-card"><div class="table-head"><h3>health.alcohol</h3><span class="purpose">Drinks by date.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">drink_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">drink_date<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">name</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">containers</td><td class="type">numeric</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">oz_per_container</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">abv_pct</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">calories</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">standard_drinks</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">source</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">source_ref</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">details</td><td class="type">jsonb</td><td>no</td><td class="mono">&#x27;{}&#x27;</td></tr><tr><td class="col">created_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>drink_date</code> → <code>core.calendar</code></div><div>Check <code>((containers &gt;= (0)::numeric))</code></div><div>Check <code>(((oz_per_container IS NULL) OR (oz_per_container &gt; (0)::numeric)))</code></div><div>Check <code>(((abv_pct IS NULL) OR ((abv_pct &gt;= (0)::numeric) AND (abv_pct &lt;= (100)::numeric))))</code></div><div>Check <code>((source = ANY (ARRAY[&#x27;health_tracker&#x27;::text, &#x27;manual&#x27;::text])))</code></div><div>Index <code>(drink_date)</code></div></div></div><div class="table-card"><div class="table-head"><h3>health.body_measurements</h3><span class="purpose">Weigh-ins: many per date, each with an optional time.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">measurement_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">measured_on<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">measured_at</td><td class="type">timestamptz</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">metric</td><td class="type">text</td><td>no</td><td class="mono">&#x27;weight&#x27;</td></tr><tr><td class="col">value</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">unit</td><td class="type">text</td><td>no</td><td class="mono">&#x27;lb&#x27;</td></tr><tr><td class="col">is_morning</td><td class="type">boolean</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">source</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">source_ref</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">details</td><td class="type">jsonb</td><td>no</td><td class="mono">&#x27;{}&#x27;</td></tr><tr><td class="col">created_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>measured_on</code> → <code>core.calendar</code></div><div>Check <code>((metric = &#x27;weight&#x27;::text))</code></div><div>Check <code>((value &gt; (0)::numeric))</code></div><div>Check <code>((unit = ANY (ARRAY[&#x27;lb&#x27;::text, &#x27;kg&#x27;::text])))</code></div><div>Check <code>((source = ANY (ARRAY[&#x27;health_tracker&#x27;::text, &#x27;manual&#x27;::text])))</code></div><div>Index <code>(metric, measured_on, measured_at)</code></div></div></div><div class="table-card"><div class="table-head"><h3>health.daily_logs</h3><span class="purpose">Days marked “entire day logged”.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">log_date<span class="key">PK</span><span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">nutrition_complete</td><td class="type">boolean</td><td>no</td><td class="mono"></td></tr><tr><td class="col">source</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">updated_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>log_date</code> → <code>core.calendar</code></div></div></div><div class="table-card"><div class="table-head"><h3>health.foods</h3><span class="purpose">Food reference with nutrition per unit.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">food_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">name</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">unit</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">calories</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">protein_g</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">carbs_g</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">fat_g</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">fiber_g</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">reference_note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">url</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">source</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">details</td><td class="type">jsonb</td><td>no</td><td class="mono">&#x27;{}&#x27;</td></tr><tr><td class="col">updated_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"></div></div><div class="table-card"><div class="table-head"><h3>health.goals</h3><span class="purpose">Targets the views measure against.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">metric<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">target</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">unit</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">period</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">direction</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">derived_from</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">updated_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>((period = ANY (ARRAY[&#x27;day&#x27;::text, &#x27;week&#x27;::text])))</code></div><div>Check <code>((direction = ANY (ARRAY[&#x27;at_least&#x27;::text, &#x27;at_most&#x27;::text, &#x27;below&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>health.profile</h3><span class="purpose">One row: height, age, mode, BMI goal, calorie target, alcohol rules.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">profile_id<span class="key">PK</span></td><td class="type">smallint</td><td>no</td><td class="mono">1</td></tr><tr><td class="col">height_in</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">age</td><td class="type">integer</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">mode</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">bmi_goal</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">calorie_target</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">alcohol_days</td><td class="type">int2[]</td><td>no</td><td class="mono">&#x27;{5,6,7}&#x27;</td></tr><tr><td class="col">drink_boundary</td><td class="type">numeric</td><td>no</td><td class="mono">3</td></tr><tr><td class="col">details</td><td class="type">jsonb</td><td>no</td><td class="mono">&#x27;{}&#x27;</td></tr><tr><td class="col">updated_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>((profile_id = 1))</code></div><div>Check <code>(((height_in IS NULL) OR (height_in &gt; (0)::numeric)))</code></div><div>Check <code>(((mode IS NULL) OR (mode = ANY (ARRAY[&#x27;loss&#x27;::text, &#x27;maintain&#x27;::text, &#x27;gain&#x27;::text]))))</code></div></div></div><div class="table-card"><div class="table-head"><h3>health.profile_history</h3><span class="purpose">Earlier versions of the profile.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">changed_at<span class="key">PK</span></td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr><tr><td class="col">profile</td><td class="type">jsonb</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"></div></div><div class="table-card"><div class="table-head"><h3>health.recipe_ingredients</h3><span class="purpose">Foods and quantities in a recipe.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">recipe_id<span class="key">PK</span><span class="key">FK</span></td><td class="type">bigint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">position<span class="key">PK</span></td><td class="type">integer</td><td>no</td><td class="mono"></td></tr><tr><td class="col">food_id<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">quantity</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>recipe_id</code> → <code>health.recipes</code></div><div>FK <code>food_id</code> → <code>health.foods</code></div><div>Check <code>((quantity &gt; (0)::numeric))</code></div></div></div><div class="table-card"><div class="table-head"><h3>health.recipes</h3><span class="purpose">Named recipes.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">recipe_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">name<span class="key">UK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">source</td><td class="type">text</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"></div></div></div>
+<h3 class="sub">Views</h3><div class="scroll"><table><thead><tr><th>View</th><th>Purpose</th><th>Columns</th></tr></thead><tbody><tr><td class="col">health.daily_activity</td><td>One row per date: workouts, nutrition, alcohol, weigh-ins.</td><td class="mono">day, iso_weekday, week_start, workout_minutes, workout_sessions, dog_walk_minutes, qualifying_workout_day, meals_eaten, meals_planned, meal_calories, planned_calories, protein_g, carbs_g, fat_g, fiber_g, beers, standard_drinks, alcohol_calories, total_calories, calorie_target, nutrition_complete, alcohol_within_rules, weigh_ins, morning_weigh_ins, first_weight, weight, weight_unit, weight_is_morning, min_weight, max_weight, morning_weight, has_journal_entry</td></tr><tr><td class="col">health.goal_progress</td><td>Each goal&#x27;s current value and whether it is met.</td><td class="mono">metric, target, unit, period, direction, current_value, met</td></tr><tr><td class="col">health.weekly_workout_progress</td><td>One row per Monday-start week against the workout goal.</td><td class="mono">week_start, qualifying_days, workout_minutes, dog_walk_minutes, beers, standard_drinks, days_outside_alcohol_rules, target_days, goal_met</td></tr><tr><td class="col">health.weight_trend</td><td>Morning 7-day average and BMI per weigh-in date.</td><td class="mono">day, weigh_ins, weight, weight_unit, weight_is_morning, min_weight, max_weight, morning_weight, morning_avg_7d, bmi</td></tr></tbody></table></div>
+</section>
+<section id="schema-finance" aria-labelledby="h-finance">
+<h2 id="h-finance"><span class="chip finance">finance</span> schema <span class="count">27 tables · 18 views</span></h2>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  categories ||--o{ item_categories : &quot;spending_category&quot;
+  accounts ||--o{ statements : &quot;account_id&quot;
+  calendar ||--o{ statements : &quot;period_start&quot;
+  account_types ||--o{ accounts : &quot;account_type&quot;
+  accounts ||--o{ account_aliases : &quot;account_id&quot;
+  accounts ||--o{ import_profiles : &quot;account_id&quot;
+  core_media_assets ||--o{ source_documents : &quot;asset_id&quot;
+  accounts ||--o{ source_documents : &quot;account_id&quot;
+  calendar ||--o{ source_documents : &quot;period_start&quot;
+  import_profiles ||--o{ source_documents : &quot;import_profile_id&quot;
+  import_batches ||--o{ source_documents : &quot;import_batch_id&quot;
+  source_documents ||--o{ statements : &quot;document_id&quot;
+  accounts ||--o{ transactions : &quot;account_id&quot;
+  calendar ||--o{ transactions : &quot;posted_on&quot;
+  categories ||--o{ transactions : &quot;category&quot;
+  movement_types ||--o{ transactions : &quot;movement_type&quot;
+  transactions ||--o{ transaction_sources : &quot;transaction_id&quot;
+  source_documents ||--o{ transaction_sources : &quot;document_id&quot;
+  calendar ||--o{ receipts : &quot;purchased_on&quot;
+  categories ||--o{ receipts : &quot;category&quot;
+  source_documents ||--o{ receipts : &quot;document_id&quot;
+  item_categories ||--o{ item_catalog : &quot;item_category&quot;
+  health_foods ||--o{ item_catalog : &quot;food_id&quot;
+  receipts ||--o{ receipt_items : &quot;receipt_id&quot;
+  item_categories ||--o{ receipt_items : &quot;item_category&quot;
+  receipts ||--o{ receipt_payments : &quot;receipt_id&quot;
+  accounts ||--o{ receipt_payments : &quot;account_id&quot;
+  transactions ||--o{ receipt_payments : &quot;transaction_id&quot;
+  categories ||--o{ recurring_expenses : &quot;category&quot;
+  accounts ||--o{ recurring_expenses : &quot;account_id&quot;
+  budgets ||--o{ budget_categories : &quot;budget_id&quot;
+  categories ||--o{ budget_categories : &quot;category&quot;
+  calendar ||--o{ pay_profile : &quot;as_of&quot;
+  accounts ||--o{ paycheck_deposits : &quot;account_id&quot;
+  accounts ||--o{ allocations : &quot;account_id&quot;
+  allocations ||--o{ savings_goals : &quot;allocation_id&quot;
+  calendar ||--o{ balance_snapshots : &quot;as_of&quot;
+  accounts ||--o{ balance_snapshots : &quot;account_id&quot;
+  savings_goals ||--o{ balance_snapshots : &quot;goal_id&quot;
+  statements ||--o{ balance_snapshots : &quot;statement_id&quot;
+  source_documents ||--o{ balance_snapshots : &quot;document_id&quot;
+  calendar ||--o{ retirement_plan : &quot;as_of&quot;
+  account_aliases {
+    text alias PK
+    text account_id FK
+  }
+  account_types {
+    text account_type PK
+    boolean is_liability
+  }
+  accounts {
+    text account_id PK
+    text institution
+    text name
+    text mask
+    text account_type FK
+    text retirement_type
+    text purpose
+    date opened_on
+    date closed_on
+    boolean is_active
+    boolean show_in_journal
+    integer journal_position
+  }
+  allocations {
+    text allocation_id PK
+    text name UK
+    numeric amount
+    text cadence
+    text account_id FK
+    text note
+  }
+  balance_snapshots {
+    bigint snapshot_id PK
+    date as_of FK
+    text account_id FK
+    text goal_id FK
+    numeric balance
+    text balance_kind
+    bigint statement_id FK
+    bigint document_id FK
+    text institution_text
+    text account_text
+    smallint position
+    text source
+    text source_ref
+  }
+  budget_categories {
+    text budget_id PK,FK
+    text category PK,UK,FK
+  }
+  budgets {
+    text budget_id PK
+    text name UK
+    text basis
+    numeric amount_monthly
+    numeric per_paycheck
+    smallint paychecks_per_year
+    text note
+  }
+  categories {
+    text category PK
+    text category_group
+    boolean is_spending
+    boolean needs_review
+  }
+  import_batches {
+    bigint batch_id PK
+    text source_folder
+    timestamptz started_at
+    timestamptz finished_at
+    integer files_seen
+    integer files_new
+    integer files_failed
+    text notes
+  }
+  import_profiles {
+    text profile_id PK
+    text institution
+    text doc_type
+    text file_format
+    text filename_pattern
+    text account_id FK
+    jsonb column_map
+    text amount_sign
+    text date_format
+    text parser
+    text notes
+  }
+  item_catalog {
+    text item_name PK
+    text item_category FK
+    text food_id FK
+  }
+  item_categories {
+    text item_category PK
+    text spending_category FK
+  }
+  movement_types {
+    text movement_type PK
+    text flow
+    boolean confirmed
+  }
+  other_incomes {
+    text income_id PK
+    text name
+    numeric amount
+    text frequency
+    text note
+  }
+  pay_profile {
+    date as_of PK,FK
+    numeric net_pay
+    numeric gross_pay
+    smallint checks_per_year
+    date anchor_date
+    numeric gross_ytd
+    numeric net_ytd
+    numeric bonus_ytd
+  }
+  paycheck_deposits {
+    smallint position PK
+    text destination_text
+    text account_id FK
+    numeric amount
+  }
+  receipt_items {
+    text receipt_id PK,FK
+    integer line PK
+    text item_name
+    text sku
+    numeric quantity
+    text unit
+    numeric unit_price
+    numeric amount
+    numeric discount
+    text item_category FK
+    text planned
+  }
+  receipt_payments {
+    bigint payment_id PK
+    text receipt_id FK
+    text tender_text
+    text account_id FK
+    numeric amount
+    text transaction_id FK
+    text match_method
+    numeric match_score
+    timestamptz matched_at
+  }
+  receipts {
+    text receipt_id PK
+    date purchased_on FK
+    timestamptz purchased_at
+    text merchant
+    text store_location
+    text category FK
+    numeric net
+    numeric tax
+    numeric tip
+    numeric total
+    numeric savings
+    text payment_text
+    text order_number
+    bigint document_id FK
+    etc more_2_columns
+  }
+  recurring_expenses {
+    text expense_id PK
+    text name
+    numeric amount
+    text frequency
+    smallint due_day
+    text status
+    text category FK
+    text account_id FK
+    text note
+  }
+  retirement_plan {
+    date as_of PK,FK
+    numeric employee_per_check
+    numeric employer_per_check
+    numeric employee_ytd
+    numeric employer_ytd
+    numeric deferral_limit
+    numeric other_deferrals
+    smallint remaining_checks
+    numeric ira_per_check
+    numeric ira_limit
+    numeric ira_actual
+  }
+  savings_goals {
+    text goal_id PK
+    text name UK
+    numeric target
+    numeric contribution_per_check
+    date due_on
+    text allocation_id FK
+    text note
+  }
+  shopping_list {
+    text item_id PK
+    text name
+    text quantity_text
+    numeric price_cap
+    text note
+    boolean to_buy
+    boolean done
+  }
+  source_documents {
+    bigint document_id PK
+    text original_filename
+    text source_folder
+    text sha256 UK
+    bigint asset_id FK
+    text doc_type
+    text file_format
+    text institution
+    text account_id FK
+    date period_start FK
+    date period_end FK
+    date document_date FK
+    text import_profile_id FK
+    bigint import_batch_id FK
+    etc more_4_columns
+  }
+  statements {
+    bigint statement_id PK
+    bigint document_id UK,FK
+    text account_id FK
+    date period_start FK
+    date period_end FK
+    numeric opening_balance
+    numeric closing_balance
+    numeric total_debits
+    numeric total_credits
+    numeric interest_charged
+    numeric fees_charged
+    numeric minimum_due
+    date payment_due_on
+    numeric credit_limit
+  }
+  transaction_sources {
+    text transaction_id PK,FK
+    bigint document_id PK,FK
+    text source_row PK
+    numeric reported_balance
+    jsonb raw
+  }
+  transactions {
+    text transaction_id PK
+    text account_id FK
+    text account_text
+    date posted_on FK
+    date transacted_on FK
+    text description_raw
+    text merchant
+    numeric amount
+    character currency
+    text kind
+    text category FK
+    text movement_type FK
+    text classification
+    text check_number
+    etc more_6_columns
+  }
+</pre></div>
+<div class="grid2"><div class="table-card"><div class="table-head"><h3>finance.account_aliases</h3><span class="purpose">Every name a source uses for an account.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">alias<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">account_id<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>account_id</code> → <code>finance.accounts</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.account_types</h3><span class="purpose">Account types and whether the balance is an amount owed.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">account_type<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">is_liability</td><td class="type">boolean</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"></div></div><div class="table-card"><div class="table-head"><h3>finance.accounts</h3><span class="purpose">Bank, card, savings and retirement accounts.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">account_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">institution</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">name</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">mask</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">account_type<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">retirement_type</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">purpose</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">opened_on</td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">closed_on</td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">is_active</td><td class="type">boolean</td><td>no</td><td class="mono">true</td></tr><tr><td class="col">show_in_journal</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr><tr><td class="col">journal_position</td><td class="type">integer</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>account_type</code> → <code>finance.account_types</code></div><div>Check <code>((retirement_type = ANY (ARRAY[&#x27;roth_ira&#x27;::text, &#x27;traditional_ira&#x27;::text, &#x27;401k&#x27;::text, &#x27;403b&#x27;::text, &#x27;401a&#x27;::text])))</code></div><div>Check <code>(((account_type = &#x27;retirement&#x27;::text) = (retirement_type IS NOT NULL)))</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.allocations</h3><span class="purpose">The per-paycheck plan for where money goes.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">allocation_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">name<span class="key">UK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">amount</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">cadence</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">account_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>account_id</code> → <code>finance.accounts</code></div><div>Check <code>((amount &gt;= (0)::numeric))</code></div><div>Check <code>((cadence = ANY (ARRAY[&#x27;Weekly&#x27;::text, &#x27;Biweekly&#x27;::text, &#x27;Monthly&#x27;::text, &#x27;Annual&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.balance_snapshots</h3><span class="purpose">Balances at a point in time: statement, running, reported, available, journal.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">snapshot_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">as_of<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">account_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">goal_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">balance</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">balance_kind</td><td class="type">text</td><td>no</td><td class="mono">&#x27;reported&#x27;</td></tr><tr><td class="col">statement_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">document_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">institution_text</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">account_text</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">position</td><td class="type">smallint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">source</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">source_ref</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>as_of</code> → <code>core.calendar</code></div><div>FK <code>account_id</code> → <code>finance.accounts</code></div><div>FK <code>goal_id</code> → <code>finance.savings_goals</code></div><div>FK <code>statement_id</code> → <code>finance.statements</code></div><div>FK <code>document_id</code> → <code>finance.source_documents</code></div><div>Check <code>((balance_kind = ANY (ARRAY[&#x27;statement_opening&#x27;::text, &#x27;statement_closing&#x27;::text, &#x27;running&#x27;::text, &#x27;reported&#x27;::text, &#x27;available&#x27;::text, &#x27;journal&#x27;::text])))</code></div><div>Check <code>((source = ANY (ARRAY[&#x27;finance_tracker&#x27;::text, &#x27;import&#x27;::text, &#x27;journal&#x27;::text, &#x27;manual&#x27;::text])))</code></div><div>Check <code>(((account_id IS NOT NULL) OR (goal_id IS NOT NULL) OR (account_text &lt;&gt; &#x27;&#x27;::text) OR (institution_text &lt;&gt; &#x27;&#x27;::text)))</code></div><div>Check <code>(((balance_kind !~~ &#x27;statement_%&#x27;::text) OR (statement_id IS NOT NULL)))</code></div><div>Index <code>(account_id, as_of)</code></div><div>Index <code>(goal_id, as_of)</code></div><div>Index <code>(source, source_ref)</code></div><div>Index <code>unique (statement_id, balance_kind) WHERE (statement_id IS NOT NULL)</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.budget_categories</h3><span class="purpose">Which categories a budget covers; a category is in at most one.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">budget_id<span class="key">PK</span><span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">category<span class="key">PK</span><span class="key">UK</span><span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>budget_id</code> → <code>finance.budgets</code></div><div>FK <code>category</code> → <code>finance.categories</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.budgets</h3><span class="purpose">Monthly budget lines and how each amount is set.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">budget_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">name<span class="key">UK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">basis</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">amount_monthly</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">per_paycheck</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">paychecks_per_year</td><td class="type">smallint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>((basis = ANY (ARRAY[&#x27;fixed&#x27;::text, &#x27;per_paycheck&#x27;::text, &#x27;recurring_expenses&#x27;::text, &#x27;unset&#x27;::text])))</code></div><div>Check <code>(((basis &lt;&gt; &#x27;fixed&#x27;::text) OR (amount_monthly IS NOT NULL)))</code></div><div>Check <code>(((basis &lt;&gt; &#x27;per_paycheck&#x27;::text) OR ((per_paycheck IS NOT NULL) AND (paychecks_per_year &gt; 0))))</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.categories</h3><span class="purpose">Spending categories and their group.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">category<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">category_group</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">is_spending</td><td class="type">boolean</td><td>no</td><td class="mono">true</td></tr><tr><td class="col">needs_review</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr></tbody></table></div>
+<div class="notes"></div></div><div class="table-card"><div class="table-head"><h3>finance.import_batches</h3><span class="purpose">One run over a folder of files.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">batch_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">source_folder</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">started_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr><tr><td class="col">finished_at</td><td class="type">timestamptz</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">files_seen</td><td class="type">integer</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">files_new</td><td class="type">integer</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">files_failed</td><td class="type">integer</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">notes</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"></div></div><div class="table-card"><div class="table-head"><h3>finance.import_profiles</h3><span class="purpose">How to read one institution&#x27;s files: columns, sign, file-name pattern, parser.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">profile_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">institution</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">doc_type</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">file_format</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">filename_pattern</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">account_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">column_map</td><td class="type">jsonb</td><td>no</td><td class="mono">&#x27;{}&#x27;</td></tr><tr><td class="col">amount_sign</td><td class="type">text</td><td>no</td><td class="mono">&#x27;outflow_positive&#x27;</td></tr><tr><td class="col">date_format</td><td class="type">text</td><td>no</td><td class="mono">&#x27;YYYY-MM-DD&#x27;</td></tr><tr><td class="col">parser</td><td class="type">text</td><td>no</td><td class="mono">&#x27;csv&#x27;</td></tr><tr><td class="col">notes</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>account_id</code> → <code>finance.accounts</code></div><div>Check <code>((amount_sign = ANY (ARRAY[&#x27;outflow_positive&#x27;::text, &#x27;inflow_positive&#x27;::text, &#x27;split_columns&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.item_catalog</h3><span class="purpose">How each item name is categorized, and its nutrition reference.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">item_name<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">item_category<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">food_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>item_category</code> → <code>finance.item_categories</code></div><div>FK <code>food_id</code> → <code>health.foods</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.item_categories</h3><span class="purpose">Item categories (Produce, Dairy, Hardware …) and their spending category.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">item_category<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">spending_category<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>spending_category</code> → <code>finance.categories</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.movement_types</h3><span class="purpose">What a non-spending movement is: income, transfer, card payment or unconfirmed.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">movement_type<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">flow</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">confirmed</td><td class="type">boolean</td><td>no</td><td class="mono">true</td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>((flow = ANY (ARRAY[&#x27;income&#x27;::text, &#x27;transfer&#x27;::text, &#x27;card_payment&#x27;::text, &#x27;unconfirmed&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.other_incomes</h3><span class="purpose">Income besides the paycheck.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">income_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">name</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">amount</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">frequency</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>((frequency = ANY (ARRAY[&#x27;Weekly&#x27;::text, &#x27;Biweekly&#x27;::text, &#x27;Monthly&#x27;::text, &#x27;Annual&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.pay_profile</h3><span class="purpose">Paycheck facts as of a pay date.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">as_of<span class="key">PK</span><span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">net_pay</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">gross_pay</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">checks_per_year</td><td class="type">smallint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">anchor_date</td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">gross_ytd</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">net_ytd</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">bonus_ytd</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>as_of</code> → <code>core.calendar</code></div><div>Check <code>((checks_per_year &gt; 0))</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.paycheck_deposits</h3><span class="purpose">How each paycheck is split across accounts.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">position<span class="key">PK</span></td><td class="type">smallint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">destination_text</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">account_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">amount</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>account_id</code> → <code>finance.accounts</code></div><div>Check <code>((amount &gt;= (0)::numeric))</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.receipt_items</h3><span class="purpose">One row per receipt line.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">receipt_id<span class="key">PK</span><span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">line<span class="key">PK</span></td><td class="type">integer</td><td>no</td><td class="mono"></td></tr><tr><td class="col">item_name</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">sku</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">quantity</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">unit</td><td class="type">text</td><td>no</td><td class="mono">&#x27;ea&#x27;</td></tr><tr><td class="col">unit_price</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">amount</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">discount</td><td class="type">numeric</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">item_category<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">planned</td><td class="type">text</td><td>no</td><td class="mono">&#x27;Unknown&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>receipt_id</code> → <code>finance.receipts</code></div><div>FK <code>item_category</code> → <code>finance.item_categories</code></div><div>Check <code>((line &gt; 0))</code></div><div>Check <code>((quantity &lt;&gt; (0)::numeric))</code></div><div>Check <code>((planned = ANY (ARRAY[&#x27;Planned&#x27;::text, &#x27;Unplanned&#x27;::text, &#x27;Unknown&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.receipt_payments</h3><span class="purpose">Each tender on a receipt and the bank transaction it became.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">payment_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">receipt_id<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">tender_text</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">account_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">amount</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">transaction_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">match_method</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">match_score</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">matched_at</td><td class="type">timestamptz</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>receipt_id</code> → <code>finance.receipts</code></div><div>FK <code>account_id</code> → <code>finance.accounts</code></div><div>FK <code>transaction_id</code> → <code>finance.transactions</code></div><div>Check <code>((amount &lt;&gt; (0)::numeric))</code></div><div>Check <code>((match_method = ANY (ARRAY[&#x27;auto&#x27;::text, &#x27;manual&#x27;::text])))</code></div><div>Check <code>(((transaction_id IS NULL) = (match_method IS NULL)))</code></div><div>Check <code>UNIQUE (receipt_id, transaction_id)</code></div><div>Index <code>(transaction_id)</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.receipts</h3><span class="purpose">One row per purchase at any store.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">receipt_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">purchased_on<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">purchased_at</td><td class="type">timestamptz</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">merchant</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">store_location</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">category<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono">&#x27;Groceries&#x27;</td></tr><tr><td class="col">net</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">tax</td><td class="type">numeric</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">tip</td><td class="type">numeric</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">total</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">savings</td><td class="type">numeric</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">payment_text</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">order_number</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">document_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">source</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">details</td><td class="type">jsonb</td><td>no</td><td class="mono">&#x27;{}&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>purchased_on</code> → <code>core.calendar</code></div><div>FK <code>category</code> → <code>finance.categories</code></div><div>FK <code>document_id</code> → <code>finance.source_documents</code></div><div>Check <code>((abs((((net + tax) + tip) - total)) &lt;= 0.01))</code></div><div>Index <code>(purchased_on)</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.recurring_expenses</h3><span class="purpose">Subscriptions, insurance and other recurring bills.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">expense_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">name</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">amount</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">frequency</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">due_day</td><td class="type">smallint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">status</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">category<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">account_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>category</code> → <code>finance.categories</code></div><div>FK <code>account_id</code> → <code>finance.accounts</code></div><div>Check <code>((frequency = ANY (ARRAY[&#x27;Weekly&#x27;::text, &#x27;Biweekly&#x27;::text, &#x27;Monthly&#x27;::text, &#x27;Annual&#x27;::text])))</code></div><div>Check <code>(((due_day &gt;= 1) AND (due_day &lt;= 31)))</code></div><div>Check <code>((status = ANY (ARRAY[&#x27;Active&#x27;::text, &#x27;Unconfirmed&#x27;::text, &#x27;Canceled&#x27;::text, &#x27;Expiring&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.retirement_plan</h3><span class="purpose">Retirement contribution plan and limits as of a date.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">as_of<span class="key">PK</span><span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">employee_per_check</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">employer_per_check</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">employee_ytd</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">employer_ytd</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">deferral_limit</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">other_deferrals</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">remaining_checks</td><td class="type">smallint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">ira_per_check</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">ira_limit</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">ira_actual</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>as_of</code> → <code>core.calendar</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.savings_goals</h3><span class="purpose">Savings buckets with a target and contribution.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">goal_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">name<span class="key">UK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">target</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">contribution_per_check</td><td class="type">numeric</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">due_on</td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">allocation_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>allocation_id</code> → <code>finance.allocations</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.shopping_list</h3><span class="purpose">The planned grocery list.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">item_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">name</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">quantity_text</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">price_cap</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">to_buy</td><td class="type">boolean</td><td>no</td><td class="mono">true</td></tr><tr><td class="col">done</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr></tbody></table></div>
+<div class="notes"></div></div><div class="table-card"><div class="table-head"><h3>finance.source_documents</h3><span class="purpose">Every statement, export and receipt file, registered once by content hash.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">document_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">original_filename</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">source_folder</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">sha256<span class="key">UK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">asset_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">doc_type</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">file_format</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">institution</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">account_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">period_start<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">period_end<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">document_date<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">import_profile_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">import_batch_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">status</td><td class="type">text</td><td>no</td><td class="mono">&#x27;registered&#x27;</td></tr><tr><td class="col">parsed_rows</td><td class="type">integer</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">notes</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">registered_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>asset_id</code> → <code>core.media_assets</code></div><div>FK <code>account_id</code> → <code>finance.accounts</code></div><div>FK <code>period_start</code> → <code>core.calendar</code></div><div>FK <code>period_end</code> → <code>core.calendar</code></div><div>FK <code>document_date</code> → <code>core.calendar</code></div><div>FK <code>import_profile_id</code> → <code>finance.import_profiles</code></div><div>FK <code>import_batch_id</code> → <code>finance.import_batches</code></div><div>Check <code>((doc_type = ANY (ARRAY[&#x27;statement&#x27;::text, &#x27;transaction_export&#x27;::text, &#x27;receipt&#x27;::text, &#x27;retirement_statement&#x27;::text, &#x27;pay_stub&#x27;::text, &#x27;tax_form&#x27;::text, &#x27;other&#x27;::text])))</code></div><div>Check <code>((file_format = ANY (ARRAY[&#x27;pdf&#x27;::text, &#x27;csv&#x27;::text, &#x27;ofx&#x27;::text, &#x27;qfx&#x27;::text, &#x27;xlsx&#x27;::text, &#x27;image&#x27;::text, &#x27;html&#x27;::text, &#x27;email&#x27;::text, &#x27;other&#x27;::text])))</code></div><div>Check <code>((status = ANY (ARRAY[&#x27;registered&#x27;::text, &#x27;parsed&#x27;::text, &#x27;needs_review&#x27;::text, &#x27;failed&#x27;::text, &#x27;ignored&#x27;::text])))</code></div><div>Check <code>(((period_end IS NULL) OR (period_start IS NULL) OR (period_end &gt;= period_start)))</code></div><div>Index <code>(account_id, period_start, period_end)</code></div><div>Index <code>unique (source_folder, original_filename) WHERE (sha256 IS NULL)</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.statements</h3><span class="purpose">Balances and totals printed on a statement.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">statement_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">document_id<span class="key">UK</span><span class="key">FK</span></td><td class="type">bigint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">account_id<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">period_start<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">period_end<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">opening_balance</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">closing_balance</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">total_debits</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">total_credits</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">interest_charged</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">fees_charged</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">minimum_due</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">payment_due_on</td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">credit_limit</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>account_id</code> → <code>finance.accounts</code></div><div>FK <code>period_start</code> → <code>core.calendar</code></div><div>FK <code>period_end</code> → <code>core.calendar</code></div><div>FK <code>document_id</code> → <code>finance.source_documents</code></div><div>Check <code>((period_end &gt;= period_start))</code></div><div>Check <code>UNIQUE (account_id, period_end)</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.transaction_sources</h3><span class="purpose">Each file, page or row a transaction appeared in, with the printed balance.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">transaction_id<span class="key">PK</span><span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">document_id<span class="key">PK</span><span class="key">FK</span></td><td class="type">bigint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">source_row<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">reported_balance</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">raw</td><td class="type">jsonb</td><td>no</td><td class="mono">&#x27;{}&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>transaction_id</code> → <code>finance.transactions</code></div><div>FK <code>document_id</code> → <code>finance.source_documents</code></div><div>Index <code>(document_id)</code></div></div></div><div class="table-card"><div class="table-head"><h3>finance.transactions</h3><span class="purpose">One row per real bank transaction, however many files show it.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">transaction_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">account_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">account_text</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">posted_on<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">transacted_on<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">description_raw</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">merchant</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">amount</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">currency</td><td class="type">character</td><td>no</td><td class="mono">&#x27;USD&#x27;</td></tr><tr><td class="col">kind</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">category<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">movement_type<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">classification</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">check_number</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">external_id</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">fingerprint</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">is_pending</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr><tr><td class="col">source</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">details</td><td class="type">jsonb</td><td>no</td><td class="mono">&#x27;{}&#x27;</td></tr><tr><td class="col">created_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>account_id</code> → <code>finance.accounts</code></div><div>FK <code>posted_on</code> → <code>core.calendar</code></div><div>FK <code>transacted_on</code> → <code>core.calendar</code></div><div>FK <code>category</code> → <code>finance.categories</code></div><div>FK <code>movement_type</code> → <code>finance.movement_types</code></div><div>Check <code>((kind = ANY (ARRAY[&#x27;expense&#x27;::text, &#x27;movement&#x27;::text])))</code></div><div>Check <code>((source = ANY (ARRAY[&#x27;finance_tracker&#x27;::text, &#x27;import&#x27;::text, &#x27;manual&#x27;::text])))</code></div><div>Check <code>(((kind = &#x27;movement&#x27;::text) = (movement_type IS NOT NULL)))</code></div><div>Check <code>(((kind = &#x27;movement&#x27;::text) OR (category IS NOT NULL)))</code></div><div>Check <code>UNIQUE (account_id, fingerprint)</code></div><div>Check <code>UNIQUE (account_id, external_id)</code></div><div>Index <code>(posted_on)</code></div><div>Index <code>(account_id, posted_on)</code></div></div></div></div>
+<h3 class="sub">Views</h3><div class="scroll"><table><thead><tr><th>View</th><th>Purpose</th><th>Columns</th></tr></thead><tbody><tr><td class="col">finance.balance_timeline</td><td>Every known balance of every account over time.</td><td class="mono">account_id, name, account_type, is_liability, as_of, balance, balance_kind, source, statement_id, document_id, original_filename</td></tr><tr><td class="col">finance.budget_vs_actual</td><td>Budget, actual and remaining per month and budget.</td><td class="mono">month_start, budget_id, name, budget, actual, remaining, over_budget</td></tr><tr><td class="col">finance.document_coverage</td><td>Days per account and month covered by statements and exports.</td><td class="mono">account_id, month_start, days, days_with_statement, days_with_any_document, transactions</td></tr><tr><td class="col">finance.effective_budgets</td><td>Each budget&#x27;s monthly amount after applying its basis.</td><td class="mono">budget_id, name, basis, note, monthly_amount</td></tr><tr><td class="col">finance.goal_progress</td><td>Latest balance of each savings goal against its target.</td><td class="mono">goal_id, name, target, contribution_per_check, due_on, allocation, as_of, balance, pct_of_target</td></tr><tr><td class="col">finance.item_spending</td><td>Receipt line spending by month and item category.</td><td class="mono">month_start, item_category, spending_category, amount, discounts, lines, unplanned_lines</td></tr><tr><td class="col">finance.latest_balances</td><td>Latest observed balance per account.</td><td class="mono">account_id, name, account_type, is_liability, as_of, balance, balance_kind, source</td></tr><tr><td class="col">finance.monthly_spending</td><td>Spending by month and category.</td><td class="mono">month_start, category, category_group, budget_id, amount, transactions</td></tr><tr><td class="col">finance.pay_period_cash_flow</td><td>Income, spending, transfers and card payments per pay period.</td><td class="mono">period_start, period_end, income_received, spending, transferred_out, transferred_in, card_payments, unconfirmed_movements</td></tr><tr><td class="col">finance.pay_periods</td><td>Each calendar day&#x27;s two-week pay period.</td><td class="mono">day, period_start</td></tr><tr><td class="col">finance.receipt_matching</td><td>How much of each receipt bank transactions explain.</td><td class="mono">receipt_id, purchased_on, merchant, total, matched_amount, unmatched_amount, match_status, transaction_ids</td></tr><tr><td class="col">finance.receipt_reconciliation</td><td>Receipt lines vs net, match status, payments vs bank amounts.</td><td class="mono">receipt_id, purchased_on, merchant, net, tax, tip, total, line_total, lines, lines_vs_net, match_status, matched_amount, bank_vs_payments</td></tr><tr><td class="col">finance.recurring_monthly</td><td>Recurring bills with their monthly equivalent.</td><td class="mono">expense_id, name, amount, frequency, due_day, status, category, account_id, note, monthly_amount, is_current</td></tr><tr><td class="col">finance.retirement_summary</td><td>Retirement total, contributions, and room under the limits.</td><td class="mono">total_balance, balances_as_of, plan_as_of, employee_ytd, employer_ytd, deferral_limit, deferral_room, projected_remaining_deferrals, ira_limit, ira_per_check, ira_actual</td></tr><tr><td class="col">finance.running_balances</td><td>Carried balance after each transaction beside the printed balance.</td><td class="mono">statement_id, account_id, posted_on, transaction_id, merchant, amount, computed_balance, reported_balance</td></tr><tr><td class="col">finance.spending</td><td>Every expense once: bank charges plus any part of a receipt no charge explains.</td><td class="mono">spend_id, day, account_id, merchant, category, amount, origin, receipt_id</td></tr><tr><td class="col">finance.statement_reconciliation</td><td>Opening balance plus activity vs the closing balance.</td><td class="mono">statement_id, account_id, period_start, period_end, original_filename, opening_balance, closing_balance, transactions, money_out, money_in, computed_closing, difference</td></tr><tr><td class="col">finance.transaction_line_items</td><td>Receipt lines behind each bank charge, with allocated amounts.</td><td class="mono">transaction_id, posted_on, account_id, receipt_id, merchant, line, item_name, item_category, spending_category, quantity, unit, line_amount, line_with_tax, allocated_amount</td></tr></tbody></table></div>
+</section>
+<section id="schema-garden" aria-labelledby="h-garden">
+<h2 id="h-garden"><span class="chip garden">garden</span> schema <span class="count">9 tables · 2 views</span></h2>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  calendar ||--o{ seasons : &quot;started_on&quot;
+  core_media_assets ||--o{ settings : &quot;background_asset_id&quot;
+  beds ||--o{ seasons : &quot;bed_id&quot;
+  beds ||--o{ plantings : &quot;bed_id&quot;
+  seasons ||--o{ plantings : &quot;season_id&quot;
+  species ||--o{ plantings : &quot;species_id&quot;
+  health_levels ||--o{ plantings : &quot;health&quot;
+  calendar ||--o{ plantings : &quot;planted_on&quot;
+  plantings ||--o{ plant_observations : &quot;planting_id&quot;
+  calendar ||--o{ plant_observations : &quot;observed_on&quot;
+  health_levels ||--o{ plant_observations : &quot;health&quot;
+  core_media_assets ||--o{ photos : &quot;asset_id&quot;
+  calendar ||--o{ photos : &quot;taken_on&quot;
+  photos ||--o{ photo_subjects : &quot;photo_id&quot;
+  beds {
+    text bed_id PK
+    text name
+    text color
+    text shape_type
+    numeric width_ft
+    numeric height_ft
+    numeric radius_ft
+    jsonb vertices
+    numeric x_ft
+    numeric y_ft
+    numeric rotation_deg
+    integer position
+  }
+  health_levels {
+    smallint level PK
+    text label UK
+    text icon
+  }
+  photo_subjects {
+    text photo_id PK,FK
+    text subject_type PK
+    text subject_ref PK
+  }
+  photos {
+    text photo_id PK
+    bigint asset_id FK
+    date taken_on FK
+    text caption
+    text category
+  }
+  plant_observations {
+    bigint observation_id PK
+    text planting_id FK
+    date observed_on FK
+    smallint health FK
+    text note
+  }
+  plantings {
+    text planting_id PK
+    text bed_id FK
+    bigint season_id FK
+    text species_id FK
+    text display_name
+    integer grid_i
+    integer grid_j
+    smallint health FK
+    text notes
+    date planted_on FK
+    date removed_on FK
+  }
+  seasons {
+    bigint season_id PK
+    text bed_id FK
+    text label
+    date started_on FK
+    text note
+    boolean is_active
+  }
+  settings {
+    smallint settings_id PK
+    bigint background_asset_id FK
+    numeric feet_per_pixel
+    numeric grid_ft
+  }
+  species {
+    text species_id PK
+    text name
+    text category
+    numeric mature_diameter_ft
+    text emoji
+  }
+</pre></div>
+<div class="grid2"><div class="table-card"><div class="table-head"><h3>garden.beds</h3><span class="purpose">Beds with their shape and position on the map, in feet.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">bed_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">name</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">color</td><td class="type">text</td><td>no</td><td class="mono">&#x27;#5DCAA5&#x27;</td></tr><tr><td class="col">shape_type</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">width_ft</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">height_ft</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">radius_ft</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">vertices</td><td class="type">jsonb</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">x_ft</td><td class="type">numeric</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">y_ft</td><td class="type">numeric</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">rotation_deg</td><td class="type">numeric</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">position</td><td class="type">integer</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>((shape_type = ANY (ARRAY[&#x27;rectangle&#x27;::text, &#x27;circle&#x27;::text, &#x27;polygon&#x27;::text])))</code></div><div>Check <code>(((shape_type &lt;&gt; &#x27;rectangle&#x27;::text) OR ((width_ft &gt; (0)::numeric) AND (height_ft &gt; (0)::numeric))))</code></div><div>Check <code>(((shape_type &lt;&gt; &#x27;circle&#x27;::text) OR (radius_ft &gt; (0)::numeric)))</code></div><div>Check <code>(((shape_type &lt;&gt; &#x27;polygon&#x27;::text) OR (jsonb_typeof(vertices) = &#x27;array&#x27;::text)))</code></div></div></div><div class="table-card"><div class="table-head"><h3>garden.health_levels</h3><span class="purpose">Plant health scale, 0 (dead) to 4 (full bloom).</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">level<span class="key">PK</span></td><td class="type">smallint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">label<span class="key">UK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">icon</td><td class="type">text</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>(((level &gt;= 0) AND (level &lt;= 4)))</code></div></div></div><div class="table-card"><div class="table-head"><h3>garden.photo_subjects</h3><span class="purpose">What each photo shows: beds, plantings or species.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">photo_id<span class="key">PK</span><span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">subject_type<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">subject_ref<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>photo_id</code> → <code>garden.photos</code></div><div>Check <code>((subject_type = ANY (ARRAY[&#x27;bed&#x27;::text, &#x27;planting&#x27;::text, &#x27;species&#x27;::text, &#x27;label&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>garden.photos</h3><span class="purpose">Garden photos.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">photo_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">asset_id<span class="key">FK</span></td><td class="type">bigint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">taken_on<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">caption</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">category</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>asset_id</code> → <code>core.media_assets</code></div><div>FK <code>taken_on</code> → <code>core.calendar</code></div></div></div><div class="table-card"><div class="table-head"><h3>garden.plant_observations</h3><span class="purpose">A plant&#x27;s health on a date.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">observation_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">planting_id<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">observed_on<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">health<span class="key">FK</span></td><td class="type">smallint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>planting_id</code> → <code>garden.plantings</code></div><div>FK <code>observed_on</code> → <code>core.calendar</code></div><div>FK <code>health</code> → <code>garden.health_levels</code></div><div>Index <code>(observed_on)</code></div></div></div><div class="table-card"><div class="table-head"><h3>garden.plantings</h3><span class="purpose">One plant on a bed&#x27;s 0.25 ft grid in a season.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">planting_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">bed_id<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">season_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">species_id<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">display_name</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">grid_i</td><td class="type">integer</td><td>no</td><td class="mono"></td></tr><tr><td class="col">grid_j</td><td class="type">integer</td><td>no</td><td class="mono"></td></tr><tr><td class="col">health<span class="key">FK</span></td><td class="type">smallint</td><td>no</td><td class="mono">2</td></tr><tr><td class="col">notes</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">planted_on<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">removed_on<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>bed_id</code> → <code>garden.beds</code></div><div>FK <code>season_id</code> → <code>garden.seasons</code></div><div>FK <code>species_id</code> → <code>garden.species</code></div><div>FK <code>health</code> → <code>garden.health_levels</code></div><div>FK <code>planted_on</code> → <code>core.calendar</code></div><div>FK <code>removed_on</code> → <code>core.calendar</code></div><div>Index <code>(bed_id, season_id)</code></div></div></div><div class="table-card"><div class="table-head"><h3>garden.seasons</h3><span class="purpose">A bed&#x27;s layout for a season.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">season_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">bed_id<span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">label</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">started_on<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">is_active</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>started_on</code> → <code>core.calendar</code></div><div>FK <code>bed_id</code> → <code>garden.beds</code></div><div>Check <code>UNIQUE (bed_id, label)</code></div><div>Index <code>unique (bed_id) WHERE is_active</code></div></div></div><div class="table-card"><div class="table-head"><h3>garden.settings</h3><span class="purpose">One row: map background and scale.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">settings_id<span class="key">PK</span></td><td class="type">smallint</td><td>no</td><td class="mono">1</td></tr><tr><td class="col">background_asset_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">feet_per_pixel</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">grid_ft</td><td class="type">numeric</td><td>no</td><td class="mono">0.25</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>background_asset_id</code> → <code>core.media_assets</code></div><div>Check <code>(((feet_per_pixel IS NULL) OR (feet_per_pixel &gt; (0)::numeric)))</code></div><div>Check <code>((settings_id = 1))</code></div></div></div><div class="table-card"><div class="table-head"><h3>garden.species</h3><span class="purpose">Plant species with mature size.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">species_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">name</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">category</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">mature_diameter_ft</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">emoji</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>((mature_diameter_ft &gt; (0)::numeric))</code></div></div></div></div>
+<h3 class="sub">Views</h3><div class="scroll"><table><thead><tr><th>View</th><th>Purpose</th><th>Columns</th></tr></thead><tbody><tr><td class="col">garden.bed_summary</td><td>Per bed: area, plants, species, health.</td><td class="mono">bed_id, name, shape_type, area_sqft, plants, species, avg_health, plants_needing_attention</td></tr><tr><td class="col">garden.species_inventory</td><td>Per species: plants, beds, health.</td><td class="mono">species_id, name, category, plants, beds, avg_health</td></tr></tbody></table></div>
+</section>
+<section id="schema-music" aria-labelledby="h-music">
+<h2 id="h-music"><span class="chip music">music</span> schema <span class="count">5 tables · 1 views</span></h2>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  core_media_assets ||--o{ albums : &quot;art_asset_id&quot;
+  songs ||--o{ song_sections : &quot;song_id&quot;
+  songs ||--o{ recordings : &quot;song_id&quot;
+  albums ||--o{ recordings : &quot;album_id&quot;
+  core_media_assets ||--o{ recordings : &quot;audio_asset_id&quot;
+  core_media_assets ||--o{ recordings : &quot;art_asset_id&quot;
+  calendar ||--o{ recordings : &quot;recorded_on&quot;
+  core_media_assets ||--o{ gallery_photos : &quot;asset_id&quot;
+  albums {
+    text album_id PK
+    text title
+    text artist
+    smallint release_year
+    text genre
+    bigint art_asset_id FK
+    boolean published
+  }
+  gallery_photos {
+    bigint asset_id PK,FK
+    text caption
+    integer position
+  }
+  recordings {
+    bigint recording_id PK
+    text song_id FK
+    text album_id FK
+    smallint track_number
+    text title
+    text version_label
+    bigint audio_asset_id FK
+    bigint art_asset_id FK
+    numeric duration_seconds
+    date recorded_on FK
+    boolean published
+  }
+  song_sections {
+    text song_id PK,FK
+    integer position PK
+    text section_type
+    text label
+    text chords
+    text lyrics
+    text tabs
+  }
+  songs {
+    text song_id PK
+    text title
+    smallint year_written
+    text written_at
+    text story
+    text genre
+    text musical_key
+    numeric bpm
+    boolean published
+    timestamptz created_at
+    timestamptz updated_at
+  }
+</pre></div>
+<div class="grid2"><div class="table-card"><div class="table-head"><h3>music.albums</h3><span class="purpose">Albums (the folders under static/audio).</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">album_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">title</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">artist</td><td class="type">text</td><td>no</td><td class="mono">&#x27;Will Yoste&#x27;</td></tr><tr><td class="col">release_year</td><td class="type">smallint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">genre</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">art_asset_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">published</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>art_asset_id</code> → <code>core.media_assets</code></div></div></div><div class="table-card"><div class="table-head"><h3>music.gallery_photos</h3><span class="purpose">Photos in the music gallery.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">asset_id<span class="key">PK</span><span class="key">FK</span></td><td class="type">bigint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">caption</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">position</td><td class="type">integer</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>asset_id</code> → <code>core.media_assets</code></div></div></div><div class="table-card"><div class="table-head"><h3>music.recordings</h3><span class="purpose">Audio recordings: versions of a song, optionally on an album.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">recording_id<span class="key">PK</span></td><td class="type">bigint</td><td>no</td><td class="mono">identity</td></tr><tr><td class="col">song_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">album_id<span class="key">FK</span></td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">track_number</td><td class="type">smallint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">title</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">version_label</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">audio_asset_id<span class="key">FK</span></td><td class="type">bigint</td><td>no</td><td class="mono"></td></tr><tr><td class="col">art_asset_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">duration_seconds</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">recorded_on<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">published</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>song_id</code> → <code>music.songs</code></div><div>FK <code>album_id</code> → <code>music.albums</code></div><div>FK <code>audio_asset_id</code> → <code>core.media_assets</code></div><div>FK <code>art_asset_id</code> → <code>core.media_assets</code></div><div>FK <code>recorded_on</code> → <code>core.calendar</code></div><div>Check <code>UNIQUE (album_id, track_number)</code></div></div></div><div class="table-card"><div class="table-head"><h3>music.song_sections</h3><span class="purpose">Ordered sections of a song with chords, lyrics and tabs.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">song_id<span class="key">PK</span><span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">position<span class="key">PK</span></td><td class="type">integer</td><td>no</td><td class="mono"></td></tr><tr><td class="col">section_type</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">label</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">chords</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">lyrics</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">tabs</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>song_id</code> → <code>music.songs</code></div><div>Check <code>((section_type = ANY (ARRAY[&#x27;intro&#x27;::text, &#x27;verse&#x27;::text, &#x27;pre-chorus&#x27;::text, &#x27;chorus&#x27;::text, &#x27;bridge&#x27;::text, &#x27;solo&#x27;::text, &#x27;outro&#x27;::text, &#x27;coda&#x27;::text, &#x27;full&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>music.songs</h3><span class="purpose">Songs: the composition, its story and whether it is published.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">song_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">title</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">year_written</td><td class="type">smallint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">written_at</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">story</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">genre</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">musical_key</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">bpm</td><td class="type">numeric</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">published</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr><tr><td class="col">created_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr><tr><td class="col">updated_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>(((bpm IS NULL) OR (bpm &gt; (0)::numeric)))</code></div></div></div></div>
+<h3 class="sub">Views</h3><div class="scroll"><table><thead><tr><th>View</th><th>Purpose</th><th>Columns</th></tr></thead><tbody><tr><td class="col">music.public_catalog</td><td>Published songs and their published recordings only.</td><td class="mono">song_id, title, year_written, written_at, story, genre, musical_key, bpm, recording_id, version_label, album, track_number, audio_path, duration_seconds</td></tr></tbody></table></div>
+</section>
+<section id="schema-content" aria-labelledby="h-content">
+<h2 id="h-content"><span class="chip content">content</span> schema <span class="count">6 tables · 1 views</span></h2>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  core_media_assets ||--o{ blog_posts : &quot;thumbnail_asset_id&quot;
+  calendar ||--o{ blog_posts : &quot;post_date&quot;
+  core_media_assets ||--o{ portfolio_projects : &quot;html_asset_id&quot;
+  calendar ||--o{ portfolio_projects : &quot;uploaded_on&quot;
+  portfolio_projects ||--o{ project_metrics : &quot;project_id&quot;
+  portfolio_projects ||--o{ project_timeline : &quot;project_id&quot;
+  calendar ||--o{ messages : &quot;received_on&quot;
+  blog_posts {
+    text post_id PK
+    text title
+    text body
+    text excerpt
+    bigint thumbnail_asset_id FK
+    text author
+    boolean published
+    date post_date FK
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  messages {
+    text message_id PK
+    text sender_name
+    text contact
+    text body
+    date received_on FK
+    timestamptz received_at
+    boolean is_read
+  }
+  portfolio_projects {
+    text project_id PK
+    text title
+    text tag
+    text tag_class
+    text description
+    text subtitle
+    text overview
+    text__ chips
+    bigint html_asset_id FK
+    boolean is_builtin
+    boolean visible
+    boolean removed
+    integer position
+    date uploaded_on FK
+  }
+  project_metrics {
+    text project_id PK,FK
+    integer position PK
+    text value
+    text label
+  }
+  project_timeline {
+    text project_id PK,FK
+    integer position PK
+    text period
+    text phase
+    text description
+  }
+  site_text {
+    text text_key PK
+    text value
+    timestamptz updated_at
+  }
+</pre></div>
+<div class="grid2"><div class="table-card"><div class="table-head"><h3>content.blog_posts</h3><span class="purpose">Blog posts.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">post_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">title</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">body</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">excerpt</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">thumbnail_asset_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">author</td><td class="type">text</td><td>no</td><td class="mono">&#x27;Will Yoste&#x27;</td></tr><tr><td class="col">published</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr><tr><td class="col">post_date<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">created_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr><tr><td class="col">updated_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>thumbnail_asset_id</code> → <code>core.media_assets</code></div><div>FK <code>post_date</code> → <code>core.calendar</code></div><div>Index <code>(post_date)</code></div></div></div><div class="table-card"><div class="table-head"><h3>content.messages</h3><span class="purpose">Messages from the contact form.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">message_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">sender_name</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">contact</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">body</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">received_on<span class="key">FK</span></td><td class="type">date</td><td>no</td><td class="mono"></td></tr><tr><td class="col">received_at</td><td class="type">timestamptz</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">is_read</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>received_on</code> → <code>core.calendar</code></div><div>Index <code>(received_on) WHERE (NOT is_read)</code></div></div></div><div class="table-card"><div class="table-head"><h3>content.portfolio_projects</h3><span class="purpose">Built-in and uploaded portfolio projects.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">project_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">title</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">tag</td><td class="type">text</td><td>no</td><td class="mono">&#x27;Project&#x27;</td></tr><tr><td class="col">tag_class</td><td class="type">text</td><td>no</td><td class="mono">&#x27;platform&#x27;</td></tr><tr><td class="col">description</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">subtitle</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">overview</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">chips</td><td class="type">text[]</td><td>no</td><td class="mono">&#x27;{}&#x27;</td></tr><tr><td class="col">html_asset_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">is_builtin</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr><tr><td class="col">visible</td><td class="type">boolean</td><td>no</td><td class="mono">true</td></tr><tr><td class="col">removed</td><td class="type">boolean</td><td>no</td><td class="mono">false</td></tr><tr><td class="col">position</td><td class="type">integer</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">uploaded_on<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>html_asset_id</code> → <code>core.media_assets</code></div><div>FK <code>uploaded_on</code> → <code>core.calendar</code></div><div>Check <code>((is_builtin OR (html_asset_id IS NOT NULL) OR removed))</code></div></div></div><div class="table-card"><div class="table-head"><h3>content.project_metrics</h3><span class="purpose">Headline numbers on a project page.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">project_id<span class="key">PK</span><span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">position<span class="key">PK</span></td><td class="type">integer</td><td>no</td><td class="mono"></td></tr><tr><td class="col">value</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">label</td><td class="type">text</td><td>no</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>project_id</code> → <code>content.portfolio_projects</code></div></div></div><div class="table-card"><div class="table-head"><h3>content.project_timeline</h3><span class="purpose">Timeline phases on a project page.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">project_id<span class="key">PK</span><span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">position<span class="key">PK</span></td><td class="type">integer</td><td>no</td><td class="mono"></td></tr><tr><td class="col">period</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">phase</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">description</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>project_id</code> → <code>content.portfolio_projects</code></div></div></div><div class="table-card"><div class="table-head"><h3>content.site_text</h3><span class="purpose">Short editable text on public pages.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">text_key<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">value</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">updated_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"></div></div></div>
+<h3 class="sub">Views</h3><div class="scroll"><table><thead><tr><th>View</th><th>Purpose</th><th>Columns</th></tr></thead><tbody><tr><td class="col">content.public_posts</td><td>Published blog posts only.</td><td class="mono">post_id, title, excerpt, body, author, post_date, thumbnail_path</td></tr></tbody></table></div>
+</section>
+<section id="schema-travel" aria-labelledby="h-travel">
+<h2 id="h-travel"><span class="chip travel">travel</span> schema <span class="count">3 tables · 0 views</span></h2>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  calendar ||--o{ places : &quot;visited_on&quot;
+  places ||--o{ place_photos : &quot;place_id&quot;
+  core_media_assets ||--o{ place_photos : &quot;asset_id&quot;
+  calendar ||--o{ visited_regions : &quot;first_visited_on&quot;
+  place_photos {
+    text place_id PK,FK
+    integer position PK
+    bigint asset_id FK
+    text url
+    text caption
+  }
+  places {
+    text place_id PK
+    text name
+    text city
+    text display_name
+    numeric latitude
+    numeric longitude
+    text pin_type
+    text note
+    date visited_on FK
+    timestamptz created_at
+  }
+  visited_regions {
+    text region_type PK
+    text code PK
+    date first_visited_on FK
+  }
+</pre></div>
+<div class="grid2"><div class="table-card"><div class="table-head"><h3>travel.place_photos</h3><span class="purpose">Photos on a pin.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">place_id<span class="key">PK</span><span class="key">FK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">position<span class="key">PK</span></td><td class="type">integer</td><td>no</td><td class="mono"></td></tr><tr><td class="col">asset_id<span class="key">FK</span></td><td class="type">bigint</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">url</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">caption</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>place_id</code> → <code>travel.places</code></div><div>FK <code>asset_id</code> → <code>core.media_assets</code></div><div>Check <code>(((asset_id IS NOT NULL) OR (url IS NOT NULL)))</code></div></div></div><div class="table-card"><div class="table-head"><h3>travel.places</h3><span class="purpose">Map pins: visited, recommended or wishlist.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">place_id<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">name</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">city</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">display_name</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">latitude</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">longitude</td><td class="type">numeric</td><td>no</td><td class="mono"></td></tr><tr><td class="col">pin_type</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">note</td><td class="type">text</td><td>no</td><td class="mono">&#x27;&#x27;</td></tr><tr><td class="col">visited_on<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">created_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>visited_on</code> → <code>core.calendar</code></div><div>Check <code>(((latitude &gt;= (&#x27;-90&#x27;::integer)::numeric) AND (latitude &lt;= (90)::numeric)))</code></div><div>Check <code>(((longitude &gt;= (&#x27;-180&#x27;::integer)::numeric) AND (longitude &lt;= (180)::numeric)))</code></div><div>Check <code>((pin_type = ANY (ARRAY[&#x27;visited&#x27;::text, &#x27;recommend&#x27;::text, &#x27;wishlist&#x27;::text])))</code></div></div></div><div class="table-card"><div class="table-head"><h3>travel.visited_regions</h3><span class="purpose">Countries and US states visited.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">region_type<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">code<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">first_visited_on<span class="key">FK</span></td><td class="type">date</td><td>yes</td><td class="mono"></td></tr></tbody></table></div>
+<div class="notes"><div>FK <code>first_visited_on</code> → <code>core.calendar</code></div><div>Check <code>((region_type = ANY (ARRAY[&#x27;country&#x27;::text, &#x27;us_state&#x27;::text])))</code></div><div>Check <code>(((code = upper(code)) AND (length(code) = 2)))</code></div></div></div></div>
+
+</section>
+<section id="schema-virtuwill" aria-labelledby="h-virtuwill">
+<h2 id="h-virtuwill"><span class="chip app">virtuwill</span> schema <span class="count">3 tables · 0 views</span></h2>
+
+<div class="grid2"><div class="table-card"><div class="table-head"><h3>virtuwill.migrations</h3><span class="purpose">One-time data moves already run.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">name<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">applied_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"></div></div><div class="table-card"><div class="table-head"><h3>virtuwill.sync_reports</h3><span class="purpose">Outcome of the latest copy from each tracker.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">source<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">report</td><td class="type">jsonb</td><td>no</td><td class="mono"></td></tr><tr><td class="col">synced_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"></div></div><div class="table-card"><div class="table-head"><h3>virtuwill.trackers</h3><span class="purpose">Finance and Health tracker documents and their saved state.</span></div>
+<div class="scroll"><table><thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th></tr></thead><tbody><tr><td class="col">kind<span class="key">PK</span></td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">document</td><td class="type">text</td><td>no</td><td class="mono"></td></tr><tr><td class="col">state</td><td class="type">text</td><td>yes</td><td class="mono"></td></tr><tr><td class="col">revision</td><td class="type">integer</td><td>no</td><td class="mono">0</td></tr><tr><td class="col">updated_at</td><td class="type">timestamptz</td><td>no</td><td class="mono">now()</td></tr></tbody></table></div>
+<div class="notes"><div>Check <code>((kind = ANY (ARRAY[&#x27;finance&#x27;::text, &#x27;health&#x27;::text])))</code></div></div></div></div>
+
+</section>
+
+<footer>Generated from <code>db/schema/*.sql</code> applied to PostgreSQL 16. Column types, keys, checks and indexes are read from the catalog; semantics are from <code>db/README.md</code>.</footer>
+</div>
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+mermaid.initialize({ startOnLoad: true, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default" });
+</script>
+</body>
+</html>

@@ -4,6 +4,9 @@ The target model for the Lakebase (PostgreSQL) database. `db/schema/*.sql` run i
 name order; each file is idempotent and safe to rerun on every start. Views are
 dropped and recreated so their columns always match the files.
 
+A browsable version with the semantic model, diagrams and every table is in
+[`docs/lakebase-model.html`](../docs/lakebase-model.html) (open it in a browser).
+
 This is the model only. The application still reads and writes through
 `storage.py` / `lakebase_model.py`; moving the app onto these schemas is the next step.
 
