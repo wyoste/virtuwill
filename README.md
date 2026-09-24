@@ -27,14 +27,11 @@ Alternatively, import on the deployment host:
 python scripts/import_trackers.py --finance /private/Yoste-Finance.html --health /private/Yoste-Health.html
 ```
 
-Personal HTML and JSON state live in the Lakebase `virtuwill.trackers` table when
-a database is attached (see below), or in `data/private-trackers/trackers.sqlite3`
-during local development, which is ignored by Git. Neither the source HTML nor private records are shipped
-in the public repository or public static assets. Do not add your original HTML
-files to `static/`, `templates/`, or the public portfolio uploader.
-
-Without Lakebase, local storage is lost on every redeploy of a hosted app. Use
-the trackers' JSON exports for portable backups either way.
+Personal HTML and JSON state live in the Lakebase `virtuwill.trackers` table.
+Neither the source HTML nor private records are shipped in the public repository
+or public static assets. Do not add your original HTML files to `static/`,
+`templates/`, or the public portfolio uploader. Use the trackers' JSON exports
+for portable backups.
 
 The imported apps run in sandboxed frames with no network or parent-page access.
 Admin-only endpoints, CSRF tokens, no-store responses, and revision checks protect
@@ -56,60 +53,17 @@ across origins or devices.
   characters and `ADMIN_PASSWORD` of 12+ characters.
 - Attach a Lakebase database so data survives redeploys (see below).
 
-### Storage: one data model in Lakebase
+### Data: one relational model in Lakebase
 
-`storage.py` is the single persistence layer for every feature. When the app has a
-Lakebase (Databricks-managed Postgres) database resource, Databricks sets `PGHOST`,
-`PGDATABASE`, `PGUSER` and related variables, and the app authenticates with its own
-OAuth token.
+Every page reads and writes the relational model in [`db/schema/`](db/schema)
+(documented in [`db/README.md`](db/README.md) and, with diagrams,
+[`docs/lakebase-model.html`](docs/lakebase-model.html)). The Python package
+`virtuwill/` has one module per domain — `journal`, `health`, `finance`, `garden`,
+`music`, `content`, `travel`, `site` — each with its queries and its API routes.
+The page API shapes did not change.
 
-**Journal and health** (relational, `lakebase_model.py`):
-
-| Table | Grain and contents |
-|---|---|
-| `journal.entries` | One entry per calendar date (primary key): quote, author, free-write text, source, account snapshots |
-| `journal.entry_tags`, `journal.habit_logs` | Tags (in order) and daily habit check-offs for an entry |
-| `journal.meals` | One row per meal item: date, slot, eaten or planned, description, calories, protein, carbs, fat, fiber, source |
-| `journal.workouts` | One row per session: date, activity (Strength, Cardio, Mobility / recovery, Dog walk…), minutes, note, dog-walk flag, source |
-| `health.body_measurements` | One row per weigh-in; many per date. Optional time, morning or reference flag, note |
-| `health.alcohol` | One row per drink entry: containers, ounces, ABV, calories, standard drinks |
-| `health.daily_logs` | Days marked "entire day logged" |
-| `health.foods` | Food reference: nutrition per unit, label note, link |
-| `health.profile` | One row: height, age, mode, BMI goal, calorie target, alcohol days |
-| `health.goals` | Targets: 5 qualifying workout days a week, 45 minutes to qualify, weight (from the BMI goal and height), BMI, daily calories, beers per day |
-
-Views the UI reads, matching the Health tracker's own calculations:
-
-| View | One row per | Used for |
-|---|---|---|
-| `health.daily_activity` | date | Workout and dog-walk minutes, qualifying day, eaten vs planned calories, macros, beers and standard drinks, total calories (eaten food + alcohol) against the target, alcohol within rules (weekend days, under 3), weigh-in count, first/latest/min/max weight, morning weight, day logged |
-| `health.weekly_workout_progress` | week (Monday start) | Qualifying days against the weekly goal, minutes, beers, days outside the alcohol rules |
-| `health.weight_trend` | weigh-in date | Latest weight, morning 7-day average (morning weigh-ins only), BMI |
-| `health.goal_progress` | goal | Current value and whether the goal is met |
-
-The Health tracker keeps its own document as its editing format. Every save copies
-its workouts, meals, weigh-ins, drinks, logged days, foods and settings into the shared
-tables, replacing the rows it produced before; workouts and weigh-ins logged on the
-dashboard (`source = 'manual'`) are kept. Each copied row keeps its original record in
-`details`, and a sync report (counts, skipped records, field names seen) is shown on the
-dashboard. A copy failure is reported and never blocks the tracker save. Journal
-entries include that day's workouts, weight and calories as a read-only `health` field.
-
-Admin → Health goals shows the dashboard above the tracker (`/api/health/dashboard`),
-with forms to log workouts and weigh-ins. `APP_TIMEZONE` in `app.yaml` sets which
-calendar day "today" and "this week" mean.
-
-**Everything else** is in the `virtuwill` schema:
-
-| Table | Contents |
-|---|---|
-| `collections` | One JSONB document per remaining feature: `garden`, `garden_photos`, `music_catalog`, `blog`, `messages`, `portfolio_uploads`, `accounts_template`, plus `travel_pins`, `travel_visited`, `garden_gallery_note`, `garden_gallery_hero`, `portfolio_layout` |
-| `media` | Uploaded audio, photos, blog thumbnails and portfolio HTML, keyed by path under `static/` |
-| `trackers` | Finance and Health tracker documents and state |
-| `migrations` | One-time data moves that have run |
-
-Without `PGHOST` (local development), the same code reads and writes `data/*.json`,
-`static/` and the tracker SQLite file.
+A database is required. Without one, pages load but every data request returns
+503 with a clear message; Admin → Settings → Diagnostics says what is missing.
 
 Set it up once:
 
@@ -117,35 +71,55 @@ Set it up once:
    instances → Create), if you don't have one.
 2. Open the app → **Edit** → **Resources** → **Add resource** → **Database**. Choose the
    instance and database (`databricks_postgres` by default) with permission
-   **Can connect and create**. Save.
-3. Deploy. The app creates the `virtuwill`, `journal` and `health` schemas on first use.
+   **Can connect and create**. Save. Databricks then sets `PGHOST`, `PGDATABASE`,
+   `PGUSER` and related variables; the app signs in with its own OAuth token.
+3. Deploy. On first start the app creates the schemas and moves existing data in.
 
-Migration happens automatically:
+**Schema changes are versioned.** `db/schema/*.sql` run once each, in name order,
+recorded with a checksum in `virtuwill.schema_versions`, under an advisory lock so
+several workers starting together never race. A file that has run is never edited:
+a change to the model is a new, higher-numbered file. An edited file is logged and
+flagged in Diagnostics rather than re-run.
 
-- Journal entries are copied once from `data/journal_entries.json` into the
-  `journal` tables on first start (a `migrations` row records it). A second entry
-  for an already-used date is kept in the `journal_import_conflicts` collection rather
-  than dropped. An existing Health tracker state is copied into the shared tables once.
-- A collection with no row yet is read from the repository's `data/*.json` (or
-  `mock_data/`), so the first deploy starts from the committed data. The first save
-  writes it to Lakebase; from then on the database is the source of truth.
-- Travel pins, visited places, garden gallery text and portfolio layout used to live
-  only in the browser. The first time you open those pages signed in as admin in the
-  browser that has them, they are uploaded; other devices then load them from the
-  server.
-- Uploads are stored in the database and restored under `static/` after a redeploy.
-- Data written in a running app before Lakebase was attached (and not committed to
-  the repository) is not carried over; the local disk is reset on redeploy.
+**The one-time move** (`virtuwill/migrate.py`, recorded as `relational_v1`) runs on
+the first start of this version and copies, without deleting anything:
 
-Tests run against any Postgres when `VIRTUWILL_TEST_PG` is set, for example
-`VIRTUWILL_TEST_PG="host=localhost dbname=lake user=app password=pw sslmode=disable"`.
+- journal entries, tags, habits, meals and account balances from the earlier
+  `journal`/`health` tables, which are renamed to `legacy_journal_v0` /
+  `legacy_health_v0` and kept;
+- workouts and weigh-ins logged on the dashboard;
+- garden, garden photos, music catalog, blog, messages, portfolio uploads, account
+  template, travel pins and visited places, and garden gallery text from the earlier
+  `virtuwill.collections` documents (or, on a new database, the committed `data/*.json`);
+- uploaded files from `virtuwill.media` into `core.media_assets`;
+- the Finance and Health tracker states, re-projected into the finance, health and
+  journal tables.
 
-Validation:
+A step that fails is logged and reported in Diagnostics without blocking the rest.
+
+**The trackers stay the editors for their data** until native screens replace them.
+Each save projects the tracker's records into the relational tables. Every tracker
+record keeps one row and one id across saves: unchanged records are left alone, new
+ones are added, deleted ones removed. The save response and the tracker status bar
+report separately whether the record saved and whether the dashboards updated. Goals
+derived from the Health tracker's settings (weight, BMI, daily calories) are changed
+in the tracker; the dashboard refuses to edit them so a later save can't revert it.
+
+**Files.** Every file is a `core.media_assets` row. Uploads also keep their bytes in
+the database and are written back under `static/` after a redeploy. Only public
+assets are served to visitors. Uploaded portfolio pages are served with a CSP
+sandbox so their scripts never run on the site's origin.
+
+**Settings.** Admin → Settings holds site switches (the "Chat with Will" button is
+off by default) and Diagnostics: deployed commit, database, schema version, tracker
+installs and the latest sync of each tracker.
+
+Tests run against a scratch Postgres database whose app schemas they reset:
 
 ```bash
-python -m unittest discover -s tests -v
-node --check static/js/trackers.js
-node --check static/js/tracker-frame.js
+VIRTUWILL_TEST_PG="host=localhost dbname=scratch user=app password=pw sslmode=disable" \
+  python -m unittest discover -s tests -t . -v
+for f in static/js/*.js; do node --check "$f"; done
 ```
 
 ---
@@ -153,15 +127,15 @@ node --check static/js/tracker-frame.js
 ## Quick start
 
 ```bash
-pip install flask python-dotenv
-cp .env.example .env
+pip install -r requirements.txt
+cp .env.example .env          # then set the PG* lines to a local PostgreSQL database
 python app.py
 # → http://127.0.0.1:5000
 ```
 
-Works immediately with the bundled mock data. No database, no API keys needed.
-
-**Journal passphrase:** `virtuwill2026`
+Any PostgreSQL 14+ works for development, e.g.
+`createdb virtuwill` and `PGHOST=localhost PGDATABASE=virtuwill PGUSER=$USER PGPASSWORD=… PGSSLMODE=disable`.
+The first start builds the schema and loads the committed `data/*.json`.
 
 ---
 
@@ -170,8 +144,11 @@ Works immediately with the bundled mock data. No database, no API keys needed.
 ```
 virtuwill/
 │
-├── app.py               Flask application — all API routes
+├── app.py               Entry point (gunicorn app:app)
 ├── config.py            Environment variable loader
+├── virtuwill/           Flask app: one module per domain (queries + API routes),
+│                        db.py (pool, versioned schema), migrate.py (one-time moves)
+├── db/schema/           The data model, applied in name order (see db/README.md)
 ├── requirements.txt
 ├── .env.example         → copy to .env
 │
@@ -198,8 +175,7 @@ virtuwill/
 │   ├── journal_entries.json   11 sample entries (loaded if data/ is empty)
 │   └── music_library.json     5 albums + singles (always used as music source)
 │
-└── data/                      Auto-created on first write
-    └── journal_entries.json   Your real journal entries (git-ignored)
+└── data/                      Content loaded into a new database on first start
 ```
 
 ---
@@ -225,14 +201,13 @@ files own only their own selectors.
 
 ### Backend — Flask API
 
-`app.py` serves one route (`/`) and exposes JSON API endpoints. It has no knowledge of
-the SPA routing — all page navigation happens client-side via `go()` in `app.js`.
+`virtuwill.create_app()` serves the page shell and the JSON API, one blueprint per
+domain. Page navigation happens client-side via `go()` in `app.js`; `#page` links
+(e.g. `/#resume`) open that page, and a private page opens after sign-in.
 
 ### Data layer
 
-Journal entries persist to `data/journal_entries.json`. If that file doesn't exist,
-`mock_data/journal_entries.json` is returned instead. No other configuration needed
-for local development.
+Lakebase (PostgreSQL); see "Data: one relational model in Lakebase" above.
 
 ---
 

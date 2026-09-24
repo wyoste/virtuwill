@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS journal.meals (
 );
 CREATE INDEX IF NOT EXISTS meals_by_date ON journal.meals (meal_date);
 CREATE INDEX IF NOT EXISTS meals_by_source ON journal.meals (source, meal_date);
+-- A tracker record keeps its row (and id) across saves.
+CREATE UNIQUE INDEX IF NOT EXISTS meals_by_tracker_ref ON journal.meals (source_ref) WHERE source = 'health_tracker';
 
 CREATE TABLE IF NOT EXISTS journal.workout_types (
     workout_type TEXT PRIMARY KEY,
@@ -86,3 +88,4 @@ CREATE TABLE IF NOT EXISTS journal.workouts (
 );
 CREATE INDEX IF NOT EXISTS workouts_by_date ON journal.workouts (workout_date);
 CREATE INDEX IF NOT EXISTS workouts_by_source ON journal.workouts (source, workout_date);
+CREATE UNIQUE INDEX IF NOT EXISTS workouts_by_tracker_ref ON journal.workouts (source_ref) WHERE source = 'health_tracker';

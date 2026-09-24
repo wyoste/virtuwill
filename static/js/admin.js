@@ -16,7 +16,7 @@ window.VW.Admin = (() => {
   let _inited        = false;
   let _musicTrackCache = {};
 
-  const SECTIONS = ['overview','garden','music','portfolio','travel','notes','blog','chat','accounts','finance','health'];
+  const SECTIONS = ['overview','garden','music','portfolio','travel','notes','blog','chat','accounts','finance','health','settings'];
 
   // ── Init ────────────────────────────────────────────────────────────────────
   function init() {
@@ -27,9 +27,27 @@ window.VW.Admin = (() => {
     _loadPortfolioSection();
     _renderTravelSection();
     _loadNotes();
-    _loadChatHistory();
     VW.Blog?.initAdmin?.();
+    _labelNav();
     _inited = true;
+  }
+
+  // Icon-only on small screens: keep every item's name for assistive technology.
+  function _labelNav() {
+    document.querySelectorAll('.adm-nav-item').forEach(btn => {
+      const label = btn.querySelector('span:last-child')?.textContent?.trim();
+      if (label) { btn.setAttribute('aria-label', label); btn.title = label; }
+    });
+  }
+
+  // The garden as saved on the server; the planner's copy only exists once it has been opened.
+  async function _gardenBeds() {
+    const loaded = gdn?.getBedList?.() || [];
+    if (loaded.length) return loaded;
+    try {
+      const r = await fetch('/api/garden', { cache: 'no-store' });
+      return r.ok ? ((await r.json()).beds || []) : [];
+    } catch { return []; }
   }
 
   function onAuthChange() {
@@ -56,6 +74,7 @@ window.VW.Admin = (() => {
     if (id === 'travel')   _renderTravelSection();
     if (id === 'accounts') _loadTemplate();
     if (id === 'garden')   _renderGardenSection();
+    if (id === 'settings') loadSettings();
   }
 
   function _initPlannerEmbed() {
@@ -75,11 +94,11 @@ window.VW.Admin = (() => {
   // ════════════════════════════════════════════════════════════
   //  SECTION: Overview
   // ════════════════════════════════════════════════════════════
-  function _renderOverview() {
+  async function _renderOverview() {
     const el = document.getElementById('adm-overview-body');
     if (!el) return;
 
-    const beds   = gdn?.getBedList?.() || [];
+    const beds   = await _gardenBeds();
     const plants = beds.reduce((t, b) => t + (b.plants?.length || 0), 0);
 
     el.innerHTML = `
@@ -218,12 +237,12 @@ window.VW.Admin = (() => {
   // ════════════════════════════════════════════════════════════
   //  SECTION: Garden
   // ════════════════════════════════════════════════════════════
-  function _renderGardenSection() {
+  async function _renderGardenSection() {
     const el = document.getElementById('adm-garden-body');
     if (!el) return;
 
     const HEALTH = gdn?.HEALTH || [{icon:'💀'},{icon:'🥀'},{icon:'🌱'},{icon:'🌸'},{icon:'🌺'}];
-    const beds = gdn?.getBedList?.() || [];
+    const beds = await _gardenBeds();
 
     el.innerHTML = `
       <div class="adm-section-actions">
@@ -670,6 +689,11 @@ window.VW.Admin = (() => {
   async function _loadChatHistory() {
     const el = document.getElementById('adm-chat-body');
     if (!el) return;
+    if (!FLASK_SESSION?.chatEnabled) {
+      el.innerHTML = `<div class="adm-empty">The chat button is turned off. Turn it on in
+        <a href="#admin" onclick="VW.Admin.showSection('settings');return false">Settings</a> to see chat history.</div>`;
+      return;
+    }
 
     el.innerHTML = `<div class="adm-loading">Loading chat history…</div>`;
 
@@ -1025,8 +1049,63 @@ window.VW.Admin = (() => {
     },
   });
 
+  // ════════════════════════════════════════════════════════════
+  //  SECTION: Settings and diagnostics
+  // ════════════════════════════════════════════════════════════
+  async function loadSettings() {
+    const box = document.getElementById('adm-set-chat');
+    const out = document.getElementById('adm-diagnostics');
+    try {
+      const s = await (await fetch('/api/settings', { cache: 'no-store' })).json();
+      if (box) box.checked = s['site.chat_enabled'] === true;
+    } catch {}
+    if (!out) return;
+    let d;
+    try {
+      const r = await fetch('/api/admin/diagnostics', { cache: 'no-store' });
+      d = await r.json();
+      if (!r.ok) throw new Error(d.error || r.status);
+    } catch (error) {
+      out.innerHTML = `<div class="adm-empty">Could not load diagnostics (${_esc(error.message)}).</div>`;
+      return;
+    }
+    const ok = v => v ? '<span class="adm-ok">✓</span>' : '<span class="adm-bad">✗</span>';
+    const db = d.database || {};
+    const rows = [
+      ['Deployed commit', _esc(d.commit || 'unknown')],
+      ['Database', db.reachable ? `${ok(true)} ${_esc(db.name)} · ${_esc(db.timezone)}`
+                                : `${ok(false)} ${db.configured ? 'not reachable: ' + _esc(db.error || '') : 'not attached to the app'}`],
+    ];
+    if (d.schema) rows.push(['Schema', `${_esc(d.schema.version || 'none')}` +
+      (d.schema.pending.length ? ` · pending: ${_esc(d.schema.pending.join(', '))}` : '') +
+      (d.schema.edited.length ? ` · <span class="adm-bad">edited after applying: ${_esc(d.schema.edited.join(', '))}</span>` : '')]);
+    ['finance', 'health'].forEach(kind => {
+      const t = (d.trackers || []).find(x => x.kind === kind);
+      rows.push([kind[0].toUpperCase() + kind.slice(1) + ' tracker', t
+        ? `${ok(true)} installed · revision ${t.revision} · saved ${new Date(t.savedAt).toLocaleString()}`
+        : `${ok(false)} not installed — import the original HTML under ${kind === 'finance' ? 'Finances' : 'Health goals'}`]);
+    });
+    (d.syncs || []).forEach(s => rows.push(['Sync · ' + _esc(s.source),
+      `${ok(s.ok)} ${new Date(s.syncedAt).toLocaleString()}${s.error ? ' · ' + _esc(s.error) : ''}`]));
+    if (d.media) rows.push(['Files', `${d.media.files} registered · ${d.media.stored_in_database} kept in the database`]);
+    out.innerHTML = `<table class="adm-diag">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>`;
+  }
+
+  async function setSetting(key, value) {
+    try {
+      const r = await fetch('/api/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: value }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || r.status);
+      window.toast?.('Saved. Visitors see the change on their next page load.', 'success');
+    } catch (error) {
+      window.toast?.('Could not save the setting: ' + error.message, 'error');
+      loadSettings();
+    }
+  }
+
   return {
-    init, onAuthChange, showSection, toggleBtm,
+    init, onAuthChange, showSection, toggleBtm, loadSettings, setSetting,
     addTemplateAccount, saveTemplate,
     _tmplDragStart, _tmplDragOver, _tmplDrop, _tmplDragEnd,
     addTravelPlace, addMapPin, deletePin,

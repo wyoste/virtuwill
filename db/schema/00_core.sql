@@ -8,7 +8,8 @@ CREATE SCHEMA IF NOT EXISTS core;
 CREATE SCHEMA IF NOT EXISTS virtuwill;
 
 -- ── Calendar: the conformed date dimension ──────────────────────────────────
--- One row per calendar day. Every dated fact in every schema joins here.
+-- One row per calendar day, 1900–2100, so historical records (old recordings,
+-- statements) are never rejected. Every dated fact in every schema joins here.
 -- Days are local dates in the owner's timezone (APP_TIMEZONE).
 CREATE TABLE IF NOT EXISTS core.calendar (
     day DATE PRIMARY KEY,
@@ -37,7 +38,7 @@ SELECT d::date,
        EXTRACT(QUARTER FROM d)::smallint,
        EXTRACT(YEAR FROM d)::smallint,
        EXTRACT(DOY FROM d)::smallint
-FROM generate_series(DATE '2015-01-01', DATE '2040-12-31', INTERVAL '1 day') AS d
+FROM generate_series(DATE '1900-01-01', DATE '2100-12-31', INTERVAL '1 day') AS d
 ON CONFLICT (day) DO NOTHING;
 
 -- ── Media assets ─────────────────────────────────────────────────────────────
@@ -53,6 +54,16 @@ CREATE TABLE IF NOT EXISTS core.media_assets (
     visibility TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'private')),
     uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ── Site settings ────────────────────────────────────────────────────────────
+-- Owner-controlled switches, e.g. whether the chat widget is shown.
+CREATE TABLE IF NOT EXISTS core.settings (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO core.settings (key, value) VALUES ('site.chat_enabled', 'false')
+ON CONFLICT (key) DO NOTHING;
 
 -- ── Application plumbing ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS virtuwill.migrations (

@@ -109,7 +109,13 @@ window.VW.Trackers = (() => {
       s.revision = result.revision;
       // An opaque-origin frame requires '*'; source identity is checked on receive.
       s.frame.contentWindow.postMessage({ channel: 'vw-tracker', type: 'saved', sequence: job.sequence }, '*');
-      status(s.kind, 'Saved to server · available on your other devices');
+      // Saving the record and updating the dashboards are separate outcomes.
+      if (result.synced === false) {
+        status(s.kind, 'Record saved · dashboard update failed: ' + (result.syncError || 'unknown error') + '. Your data is safe; the next save retries.', true);
+      } else {
+        status(s.kind, 'Saved to server · dashboards updated');
+        if (s.kind === 'health') window.VW?.HealthDashboard?.load?.();
+      }
     } catch (error) {
       s.failed = true;
       s.pending = s.pending || job;

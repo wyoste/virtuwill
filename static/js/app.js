@@ -48,6 +48,9 @@ window.VW.Auth = (() => {
     if (galUploadBtn) galUploadBtn.style.display = val ? 'flex' : 'none';
     const galHint = document.getElementById('gal-quote-hint');
     if (galHint) galHint.style.display = val ? 'block' : 'none';
+    // Thin shimmer strip under the header
+    const strip = document.getElementById('admin-banner-strip');
+    if (strip) strip.style.display = val ? 'block' : 'none';
     // Turn octopus blue/dim
     const dot = document.getElementById('footerOctopus');
     if (dot) dot.style.opacity = val ? '1' : '0.35';
@@ -75,12 +78,7 @@ window.VW.Auth = (() => {
     const data = await res.json();
     if (data.ok) {
       setAdmin(true);
-      // Also unlock journal session
-      await fetch('/api/journal/unlock', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
+      // The owner's sign-in also opens the journal on the server.
       VW.Journal.setUnlocked(true);
       await VW.Journal.loadEntries();
       // Tell garden it has admin access
@@ -103,36 +101,7 @@ window.VW.Auth = (() => {
   return { isAdmin, setAdmin, login, logout };
 })();
 
-// ── Shared utilities available to all modules ─────────────────────────────
-window.VW.esc = s =>
-  String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-
-// ── Dirty-state registry ──────────────────────────────────────────────────────
-// Modules call VW.Dirty.register(pageId, { isDirty, save, label })
-// go() checks before navigating away from the current page.
-window.VW.Dirty = (() => {
-  const _registry = {};
-
-  function register(pageId, { isDirty, save, label }) {
-    _registry[pageId] = { isDirty, save, label: label || pageId };
-  }
-
-  function isDirty(pageId) {
-    return !!_registry[pageId]?.isDirty?.();
-  }
-
-  async function saveNow(pageId) {
-    const r = _registry[pageId];
-    if (r?.save) await r.save();
-  }
-
-  function label(pageId) {
-    return _registry[pageId]?.label || pageId;
-  }
-
-  return { register, isDirty, saveNow, label };
-})();
+// VW.esc and VW.Dirty are defined in core.js, which loads first.
 
 // ── Discreet gate (octopus icon in footer) ────────────────────────────────────
 function openAdminGate() { if (!_gateOpen) toggleGate(); }
@@ -143,7 +112,7 @@ function toggleGate() {
   if (!panel) return;
   panel.style.display = _gateOpen ? 'block' : 'none';
   if (_gateOpen) {
-    closeDrawer();
+    VW.Nav.closeMobile();
     setTimeout(() => document.getElementById('gatePassInput')?.focus(), 60);
   }
 }
@@ -165,6 +134,9 @@ async function tryAdminLogin() {
   if (ok) {
     closeGate();
     toast('Admin mode active — journal, garden &amp; music unlocked', 'success');
+    const next = _afterLogin;
+    _afterLogin = null;
+    if (next) go(next);
   } else {
     const err = document.getElementById('gateErrMsg');
     if (err) err.textContent = 'Incorrect password.';
@@ -226,11 +198,14 @@ window.VW.Nav = {
 let _currentPage = 'home';
 let _navigating  = false;   // prevent pushState loop during popstate handling
 
+// A private page asked for before signing in; opened once sign-in succeeds.
+let _afterLogin = null;
+
 function go(page, { pushState: push = true, skipDirtyCheck: skipDirty = false } = {}) {
-  if (page === 'admin' && !VW.Auth.isAdmin()) { openAdminGate(); return; }
+  if (page === 'admin' && !VW.Auth.isAdmin()) { _afterLogin = page; openAdminGate(); return; }
   // Journal requires admin auth
   if (page === 'journal' && !VW.Journal.isUnlocked()) {
-    toggleGate(); return;
+    _afterLogin = page; openAdminGate(); return;
   }
 
   // Check for unsaved changes on the current page
@@ -333,8 +308,8 @@ function toast(msg, type = 'success', dur = 4000) {
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // Restore server-side admin session if present
-  if (_session.adminLoggedIn) {
-    VW.Auth.setAdmin(true);
+  if (_session.adminLoggedIn) VW.Auth.setAdmin(true);
+  if (_session.journalUnlocked) {
     VW.Journal.setUnlocked(true);
     VW.Journal.loadEntries();
   }
@@ -369,12 +344,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ── Resolve initial page ──────────────────────────────────────────────────
-  // On a fresh page load always start on Home — the hash may be stale from
-  // a previous session. Hash-based routing only applies during the current
-  // session (back/forward via popstate). This prevents the app opening on
-  // whatever page the user happened to be on last time.
-  history.replaceState({ page: 'home' }, '', '#home');
-  go('home', { pushState: false });
+  // Open the page in the address (bookmarks, shared links, reload). A private
+  // page opens the sign-in prompt over Home and follows on after sign-in.
+  const requested = _pageFromHash();
+  const allowed = requested && !(requested === 'admin' && !VW.Auth.isAdmin())
+                  && !(requested === 'journal' && !VW.Journal.isUnlocked());
+  const first = allowed ? requested : 'home';
+  history.replaceState({ page: first }, '', '#' + first);
+  go(first, { pushState: false });
+  if (requested && !allowed) { _afterLogin = requested; openAdminGate(); }
 });
 
 function _pageFromHash() {

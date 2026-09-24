@@ -68,6 +68,7 @@
   <div style="font-size:10px;color:#8a9ab0;margin-top:8px">Unlocks journal + garden planner</div>
 </div>
 
+{% if chat_enabled %}
 <!-- ═══════════════════════════════════════════════════════════
      CHAT WITH WILL — floating FAB + panel
 ════════════════════════════════════════════════════════════ -->
@@ -114,6 +115,7 @@
   </div>
   <div class="chat-powered">Responses generated locally via Ollama</div>
 </div>
+{% endif %}
 
 <!-- ═══════════════════════════════════════════════════════════
      TOAST CONTAINER

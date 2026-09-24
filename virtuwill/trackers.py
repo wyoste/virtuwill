@@ -1,21 +1,27 @@
 """Private, admin-only hosting for the standalone Yoste trackers.
 
-The original HTML contains personal seed data. It belongs in private storage
-(Lakebase, or SQLite in development), never templates/static or Git. Frames run in an opaque-origin sandbox;
-only the parent admin page can call the persistence API.
+The original HTML contains personal seed data. It belongs in the database
+(virtuwill.trackers), never templates/static or Git. Frames run in an
+opaque-origin sandbox; only the parent admin page can call the persistence API.
+
+The tracker document stays the editing format. Every save is projected into
+the relational model (health.*, journal.workouts/meals, finance.*), replacing
+the rows the tracker produced before; the outcome is kept in
+virtuwill.sync_reports.
 """
 import json
-import os
+import logging
 import re
 import secrets
 from functools import wraps
 from html.parser import HTMLParser
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from flask import Blueprint, current_app, jsonify, request, session, Response
 
-import storage
+from . import db, finance, health
+
+log = logging.getLogger(__name__)
 
 bp = Blueprint("trackers", __name__)
 KINDS = {"finance": "yoste-finance-spa-v1", "health": "yoste-health-v1"}
@@ -75,28 +81,56 @@ def validate_state(kind, data):
     return encoded
 
 
-class TrackerStore:
-    def __init__(self, target=None):
-        # A directory means local SQLite; otherwise a storage backend.
-        if target is None or isinstance(target, (str, os.PathLike)):
-            target = storage.LocalBackend(target)
-        self.backend = target
+class AlreadyInstalled(Exception):
+    """A tracker document exists; installs never replace live data."""
 
-    def get(self, kind):
-        with self.backend.trackers() as trackers:
-            row = trackers.get(kind)
-            return dict(row) if row else None
 
-    def install(self, kind, document):
-        validate_document(kind, document)
-        # One-time install. Replacing executable source must never reset live data.
-        with self.backend.trackers() as trackers:
-            trackers.insert(kind, document)
+def project(conn, kind, state, document=None):
+    """Copy a tracker's records into the relational model.
 
-    def save(self, kind, state, revision):
-        encoded = validate_state(kind, state)
-        with self.backend.trackers() as trackers:
-            return trackers.update(kind, encoded, revision)
+    Runs in a savepoint: an unexpected record shape is reported and never
+    blocks saving the tracker itself.
+    """
+    source = health.SOURCE if kind == "health" else finance.SOURCE
+    try:
+        with conn.transaction():
+            report = health.project(conn, state, document) if kind == "health" else finance.project(conn, state)
+    except Exception as error:
+        log.exception("%s tracker projection failed", kind)
+        report = {"error": str(error)}
+    conn.execute("""INSERT INTO virtuwill.sync_reports (source, report) VALUES (%s, %s)
+                    ON CONFLICT (source) DO UPDATE SET report = EXCLUDED.report, synced_at = now()""",
+                 (source, db.jsonb(report)))
+    return report
+
+
+def get(kind):
+    with db.tx() as conn:
+        return conn.execute("SELECT kind, document, state, revision FROM virtuwill.trackers WHERE kind = %s", (kind,)).fetchone()
+
+
+def install(kind, document):
+    validate_document(kind, document)
+    # One-time install. Replacing executable source must never reset live data.
+    with db.tx() as conn:
+        if conn.execute("INSERT INTO virtuwill.trackers (kind, document) VALUES (%s, %s) ON CONFLICT (kind) DO NOTHING",
+                        (kind, document)).rowcount != 1:
+            raise AlreadyInstalled()
+
+
+def save(kind, state, revision):
+    """Store a new state if nobody saved since `revision`.
+
+    Returns None on a revision conflict, else the projection report (which
+    carries "error" when the record saved but the dashboards did not update).
+    """
+    encoded = validate_state(kind, state)
+    with db.tx() as conn:
+        row = conn.execute("""UPDATE virtuwill.trackers SET state = %s, revision = revision + 1, updated_at = now()
+                              WHERE kind = %s AND revision = %s RETURNING document""", (encoded, kind, revision)).fetchone()
+        if not row:
+            return None
+        return project(conn, kind, state, row["document"])
 
 
 def parent_origin():
@@ -112,11 +146,6 @@ def parent_origin():
     if parts.scheme in ("http", "https") and parts.netloc in hosts and claimed == f"{parts.scheme}://{parts.netloc}":
         return claimed
     return request.host_url.rstrip("/")
-
-
-def store():
-    backend = storage.backend()
-    return TrackerStore(backend if backend.name == "lakebase" else current_app.config["TRACKER_DATA_DIR"])
 
 
 def protected(fn):
@@ -138,8 +167,8 @@ def protected(fn):
     return wrapped
 
 
-@bp.errorhandler(storage.StorageUnavailable)
-def storage_unavailable(error):
+@bp.errorhandler(db.DatabaseUnavailable)
+def database_unavailable(error):
     return jsonify(error="The tracker database is unavailable. Try again shortly; unsaved edits stay in this tab."), 503
 
 
@@ -156,17 +185,19 @@ def private_headers(response):
 def tracker_data(kind):
     if request.method == "GET":
         session.setdefault("tracker_csrf", secrets.token_urlsafe(32))
-        row = store().get(kind)
-        return jsonify(configured=bool(row), revision=row["revision"] if row else 0, csrf=session["tracker_csrf"], storage=storage.backend().name)
+        row = get(kind)
+        return jsonify(configured=bool(row), revision=row["revision"] if row else 0, csrf=session["tracker_csrf"], storage="lakebase")
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or type(payload.get("revision")) is not int:
         return jsonify(error="A state and integer revision are required."), 400
     try:
-        if not store().save(kind, payload.get("state"), payload["revision"]):
-            return jsonify(error="Another tab or device saved newer data. Export your unsaved changes, then reload this tracker."), 409
+        report = save(kind, payload.get("state"), payload["revision"])
     except ValueError as error:
         return jsonify(error=str(error)), 400
-    return jsonify(revision=payload["revision"] + 1)
+    if report is None:
+        return jsonify(error="Another tab or device saved newer data. Export your unsaved changes, then reload this tracker."), 409
+    return jsonify(revision=payload["revision"] + 1, synced="error" not in report, syncError=report.get("error"),
+                   syncedAt=report.get("syncedAt"))
 
 
 @bp.route("/api/admin/trackers/<kind>/install", methods=["POST"])
@@ -177,10 +208,10 @@ def install_tracker(kind):
         return jsonify(error="Choose a tracker HTML file."), 400
     try:
         document = upload.stream.read(MAX_BYTES + 1).decode("utf-8")
-        store().install(kind, document)
+        install(kind, document)
     except (ValueError, UnicodeError) as error:
         return jsonify(error=str(error)), 400
-    except storage.AlreadyInstalled:
+    except AlreadyInstalled:
         return jsonify(error="Tracker already installed. Use its Restore backup option to migrate newer records."), 409
     return jsonify(ok=True), 201
 
@@ -188,12 +219,12 @@ def install_tracker(kind):
 @bp.route("/admin/trackers/<kind>/frame")
 @protected
 def tracker_frame(kind):
-    row = store().get(kind)
+    row = get(kind)
     if not row:
         return jsonify(error="Import your tracker HTML first."), 404
     # Escape script delimiters in saved user text before embedding it in HTML.
     bootstrap = json.dumps({"kind": kind, "key": KINDS[kind], "revision": row["revision"], "state": json.loads(row["state"]) if row["state"] else None, "origin": parent_origin()}).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
-    bridge = (Path(__file__).parent / "static/js/tracker-frame.js").read_text()
+    bridge = (db.ROOT / "static/js/tracker-frame.js").read_text()
     script = '<script id="vw-tracker-bridge">window.TRACKER_BOOT=' + bootstrap + ";\n" + bridge + "</script>"
     # Insert first: storage must be replaced before the imported app executes.
     document = row["document"].replace("Saved on this browser", "Saving to server…")
