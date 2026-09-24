@@ -289,3 +289,38 @@ export function textToHTML(text) {
   div.textContent = text || '';
   return div.innerHTML.replace(/\n/g, '<br>');
 }
+
+// ── Photo picker ─────────────────────────────────────────────────────────────
+// Choose or drop photos; shows a thumbnail of each, any of which can be taken
+// out before uploading. picker.files() → File[]; onchange runs on every change.
+export function photoPicker({ onchange, hint = 'or drop them here' } = {}) {
+  let chosen = [];
+  const input = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, 'data-untracked': '' });
+  const previews = h('div', { class: 'ws-thumbs' });
+  const count = h('span', { class: 'ws-note' }, 'No photos chosen');
+  const tally = h('input', { type: 'hidden', value: '0' });   // so choosing photos counts as an edit
+  const draw = () => {
+    tally.value = String(chosen.length);
+    previews.querySelectorAll('img').forEach(img => URL.revokeObjectURL(img.src));
+    previews.replaceChildren(...chosen.map((file, i) => h('div', { class: 'ws-thumb' },
+      h('img', { src: URL.createObjectURL(file), alt: file.name }), h('small', {}, file.name),
+      h('button', { type: 'button', class: 'btn small danger', 'aria-label': 'Remove ' + file.name,
+        onclick: () => { chosen.splice(i, 1); draw(); onchange?.(); } }, '×'))));
+    count.textContent = chosen.length ? `${chosen.length} photo${chosen.length === 1 ? '' : 's'} chosen` : 'No photos chosen';
+  };
+  const add = list => {
+    const images = [...list].filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(f.name));
+    if (images.length < list.length) toast('Only photos can be added (JPEG, PNG, WebP or GIF).', 'error');
+    chosen = [...chosen, ...images];
+    draw();
+    onchange?.();
+  };
+  input.onchange = () => { add(input.files); input.value = ''; };
+  const el = h('div', { class: 'ws-drop' },
+    h('button', { type: 'button', class: 'btn', onclick: () => input.click() }, 'Choose photos'), ' ', count, input,
+    h('p', { class: 'ws-note', style: { marginTop: '6px' } }, hint), previews, tally);
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('over'));
+  el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('over'); add(e.dataTransfer.files); });
+  return { el, files: () => [...chosen], clear: () => { chosen = []; draw(); } };
+}

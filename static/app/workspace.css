@@ -305,3 +305,8 @@ audio { width: 100%; height: 36px; }
 .ws-geo { margin: 0 0 8px; max-height: 180px; overflow-y: auto; }
 .ws-geo .btn.link { text-align: left; font-weight: 500; white-space: normal; }
 @media (max-width: 560px) { .ws-stop { flex-wrap: wrap; } .ws-stop .ws-row-main { flex-basis: 100%; } }
+.ws-country-chosen { font-size: 14px; margin: 2px 0 6px; color: var(--text); }
+.ws-country-list { list-style: none; margin: 6px 0 0; padding: 4px; max-height: 190px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2); }
+.ws-country-list li button { width: 100%; text-align: left; border: 0; background: none; padding: 6px 8px; border-radius: 6px; font: inherit; font-weight: 500; font-size: 13.5px; color: var(--text); cursor: pointer; }
+.ws-country-list li button:hover, .ws-country-list li[aria-selected="true"] button { background: var(--blue-lt); color: var(--blue-dk); }
+.ws-country-list li.ws-note { padding: 6px 8px; }

@@ -26,7 +26,7 @@ one sidebar and one screen at a time:
 | Journal | entries by date, editor, habits, balance check-in, photo transcription | `journal.entries`, tags, habit logs, journal balance snapshots |
 | Health | Overview · Activity · Food · Body · Goals | workouts, meals, weigh-ins, drinks, foods, profile, goals |
 | Money | Overview (full analysis, or goals only) · Transactions · Receipts · Accounts & balances · Budgets & bills · Goals & retirement · Imports · Finance tracker | bank activity, statements, paychecks and receipts through Imports; budgets, goals and the pay plan in the Finance tracker |
-| Site | Music · Career (profile & ethos, experience, projects, skills & education, CV upload) · Writing · Garden (photos tagged to beds and plant types, the bed planner, page text) · Travel (stops by city with photos, regions visited) · Messages | everything the public site shows |
+| Site | Music · Career (profile & ethos, experience, projects, skills & education, CV upload) · Writing · Garden (photos tagged to beds and plant types, the bed planner, page text) · Travel (add a stop by picking its country from a searchable list, with photos attached in the same step; stops by city; regions visited) · Messages | everything the public site shows |
 | Settings | site switches, journal check-in accounts, diagnostics | `core.settings` |
 
 Each record has one editor. The same logging forms (workout, meal, weigh-in, drink)

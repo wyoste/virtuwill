@@ -1,6 +1,6 @@
 // Site › Garden: photos tagged to beds and plant types, the bed planner, and the Garden page's text.
 import { setDirty } from '../main.js';
-import { h, api, card, pageHead, tabs, empty, toast, run, dialog, field, values, confirmDelete, editable, saveAll, isoToday } from '../lib.js';
+import { h, api, card, pageHead, tabs, empty, toast, run, dialog, field, values, confirmDelete, editable, saveAll, isoToday, photoPicker } from '../lib.js';
 
 const TABS = [['/app/site/garden', 'Photos'], ['/app/site/garden/planner', 'Beds & planner'], ['/app/site/garden/text', 'Page text']];
 
@@ -34,25 +34,17 @@ const plantOptions = d => d.species.map(s => ({ id: s.id, label: `${s.emoji ? s.
 // ── Photos ───────────────────────────────────────────────────────────────────
 function photos(view, d, ctx, redraw) {
   const beds = new Set(), plants = new Set();
-  const files = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
-  const chosen = h('span', { class: 'ws-note' }, 'No photos chosen');
-  files.onchange = () => { chosen.textContent = files.files.length ? `${files.files.length} photo${files.files.length === 1 ? '' : 's'} chosen` : 'No photos chosen'; };
-  const drop = h('div', { class: 'ws-drop' },
-    h('button', { type: 'button', class: 'btn', onclick: () => files.click() }, 'Choose photos'), ' ', chosen, files,
-    h('p', { class: 'ws-note', style: { marginTop: '6px' } }, 'or drop them here. Everything you tag below applies to each photo.'));
-  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
-  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); files.files = e.dataTransfer.files; files.onchange(); });
+  const picker = photoPicker({ onchange: () => upload.touch(), hint: 'or drop them here. Everything you tag below applies to each photo.' });
   const form = h('form', { class: 'ws-form', onsubmit: e => e.preventDefault() },
-    h('div', { class: 'ws-field wide' }, drop),
+    h('div', { class: 'ws-field wide' }, picker.el),
     chips(bedOptions(d), beds, 'Beds'),
     chips(plantOptions(d), plants, 'Plant types'),
     field('Caption', 'caption', { wide: false }), field('Taken on', 'taken_on', { kind: 'date', value: isoToday() }),
-    h('div', { class: 'ws-field wide' }, h('div', {}, h('button', { class: 'btn primary', onclick: e => saveAll(e.currentTarget) }, 'Upload'))));
+    h('div', { class: 'ws-field wide' }, h('div', {}, h('button', { class: 'btn primary', onclick: e => { if (picker.files().length) upload.touch(); saveAll(e.currentTarget); } }, 'Upload'))));
   const upload = editable(form, async () => {
-    if (!files.files.length) throw new Error('Choose photos to upload, or clear the tags.');
+    if (!picker.files().length) throw new Error('Choose photos to upload, or clear the tags.');
     const f = new FormData();
-    for (const file of files.files) f.append('files', file);
+    for (const file of picker.files()) f.append('files', file);
     const v = values(form);
     f.append('caption', v.caption || '');
     f.append('taken_on', v.taken_on || '');
@@ -60,7 +52,6 @@ function photos(view, d, ctx, redraw) {
     plants.forEach(p => f.append('species', p));
     await api('/api/v1/garden/photos', { method: 'POST', form: f, quiet: true });
   }, { then: redraw });
-  files.addEventListener('change', () => upload.touch());
 
   // Filter the gallery by bed or plant type.
   const params = ctx.params;

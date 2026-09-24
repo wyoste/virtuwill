@@ -72,6 +72,32 @@ class GardenPhotoTests(unittest.TestCase):
         self.assertEqual(self.visitor.get("/api/v1/garden").json["photos"][0]["beds"], [])
 
 
+    def test_a_photo_uploads_and_shows_when_the_app_folder_is_read_only(self):
+        from unittest import mock
+        with mock.patch("pathlib.Path.write_bytes", side_effect=OSError("read-only file system")):
+            made = upload(self.owner, "/api/v1/garden/photos", caption="Kept in the database", beds=["bed-a"])
+        self.assertEqual(made.status_code, 201, made.json)
+        url = made.json["photos"][0]["url"]
+        self.assertFalse((media.STATIC / url.removeprefix("/static/")).exists())
+        self.assertEqual(self.visitor.get(url).data, PNG)   # served from the database
+
+
+class CountryListTests(unittest.TestCase):
+    """The picklist the travel screen pins stops with."""
+
+    def test_countries_have_names_codes_and_positions(self):
+        import json
+        countries = json.loads((media.STATIC / "data" / "countries.json").read_text(encoding="utf-8"))
+        self.assertGreater(len(countries), 200)
+        codes = [c["code"] for c in countries if c["code"]]
+        self.assertEqual(len(codes), len(set(codes)))
+        self.assertTrue(all(len(c) == 2 and c.isupper() for c in codes))
+        self.assertTrue(all(-90 <= c["lat"] <= 90 and -180 <= c["lng"] <= 180 and c["name"] for c in countries))
+        by_code = {c["code"]: c for c in countries}
+        self.assertTrue({"US", "FR", "NO", "MX", "JP", "IT"} <= set(by_code))
+        self.assertAlmostEqual(by_code["FR"]["lat"], 46.6, delta=2)    # mainland France, not an overseas territory
+
+
 @needs_database
 class TravelStopTests(unittest.TestCase):
     def setUp(self):
