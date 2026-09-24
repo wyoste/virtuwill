@@ -187,8 +187,11 @@ def journal_save_entry():
     except (TypeError, ValueError):
         return jsonify({"error": "date must be YYYY-MM-DD"}), 400
 
-    # Upsert: one row per entry in Lakebase (or the JSON file locally).
-    was_new = storage.journal_upsert(entry)
+    # Upsert: one entry per calendar date in Lakebase (or the JSON file locally).
+    try:
+        was_new = storage.journal_upsert(entry)
+    except storage.JournalDateTaken:
+        return jsonify({"error": f"An entry already exists for {entry['date']}"}), 409
     return jsonify({"ok": True, "entry": entry, "wasNew": was_new}), 201 if was_new else 200
 
 
@@ -785,6 +788,60 @@ def acct_template_post():
     data = request.get_json(force=True) or []
     _save_acct_template(data)
     return jsonify({'ok': True})
+
+
+# ── Health dashboard ──────────────────────────────────────────────────────────
+# Reads the health.* views over the shared journal/health tables in Lakebase.
+
+@app.errorhandler(storage.NeedsDatabase)
+def needs_database(error):
+    return jsonify({"available": False, "error": "The health dashboard needs a Lakebase database attached to the app."}), 503
+
+
+@app.route("/api/health/dashboard")
+def health_dashboard():
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify({"available": True, **storage.health("dashboard")})
+
+
+@app.route("/api/health/workouts", methods=["POST"])
+def health_add_workout():
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        day = datetime.strptime(str(data.get("date")), "%Y-%m-%d").date()
+        minutes = float(data.get("minutes"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "date (YYYY-MM-DD) and minutes are required"}), 400
+    if not 0 <= minutes <= 1440:
+        return jsonify({"error": "minutes must be between 0 and 1440"}), 400
+    workout_id = storage.health("add_workout", day, str(data.get("activity") or "")[:100], minutes,
+                                str(data.get("note") or "")[:2000], bool(data.get("dogWalk")))
+    return jsonify({"ok": True, "id": workout_id}), 201
+
+
+@app.route("/api/health/workouts/<int:workout_id>", methods=["DELETE"])
+def health_delete_workout(workout_id):
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not storage.health("delete_workout", workout_id):
+        return jsonify({"error": "Only workouts logged here can be deleted here"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/health/goals/<metric>", methods=["PUT"])
+def health_set_goal(metric):
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        target = float((request.get_json(silent=True) or {}).get("target"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "A numeric target is required"}), 400
+    if not storage.health("set_goal", metric, target):
+        return jsonify({"error": "Unknown goal"}), 404
+    return jsonify({"ok": True})
 
 
 # ── Page settings formerly kept in browser storage ─────────────────────────────

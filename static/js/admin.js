@@ -45,6 +45,7 @@ window.VW.Admin = (() => {
       document.getElementById('adm-nav-' + s)?.classList.toggle('on', s === id);
     });
     if (id === 'finance' || id === 'health') VW.Trackers?.open(id);
+    if (id === 'health') VW.HealthDashboard?.load();
     // Lazy-load on first visit
     if (id === 'notes')    _loadNotes();
     if (id === 'blog')     VW.Blog?.initAdmin?.();

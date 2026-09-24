@@ -4,7 +4,9 @@ One data model for every feature, stored in a single Postgres schema when a
 Lakebase database is attached to the Databricks app (PGHOST is set), or in
 local files for development:
 
-  journal_entries  one row per journal entry
+  journal.* / health.*  relational journal and health model, one journal
+               entry per calendar date with meals, workouts, habits, weights
+               and goals in shared tables (see lakebase_model.py)
   collections  one JSON document per remaining feature (garden, music
                catalog, blog, messages, portfolio uploads, garden photos,
                accounts template, travel, page settings)
@@ -23,7 +25,6 @@ import os
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import date, datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).parent
@@ -60,6 +61,14 @@ class StorageUnavailable(Exception):
     """The configured database could not be reached."""
 
 
+class JournalDateTaken(Exception):
+    """Another journal entry already exists for that calendar date."""
+
+
+class NeedsDatabase(Exception):
+    """The feature needs Lakebase and the app is running on local files."""
+
+
 def _read_file(name, use_mock=True):
     filename, mock, default = COLLECTIONS[name]
     for path in [DATA_DIR / filename] + ([MOCK_DIR / mock] if mock and use_mock else []):
@@ -76,60 +85,6 @@ def _static_path(relpath):
     if STATIC_DIR.resolve() not in path.parents:
         raise ValueError("Media path must be inside static/")
     return path
-
-
-# ── Journal entries ───────────────────────────────────────────────────────────
-# The API shape (camelCase, meals as {B, L, D}) is unchanged; Lakebase stores
-# each entry as a row.
-
-def _timestamp(value):
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return datetime.now(timezone.utc)
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-
-def _entry_date(entry):
-    try:
-        return date.fromisoformat(str(entry.get("date")))
-    except ValueError:
-        return _timestamp(entry.get("createdAt")).date()
-
-
-def _journal_params(entry):
-    meals = entry.get("meals") or {}
-    return {
-        "id": str(entry["id"]),
-        "entry_date": _entry_date(entry),
-        "quote": entry.get("quote") or "",
-        "quote_author": entry.get("quoteAuthor") or "",
-        "breakfast": meals.get("B") or "",
-        "lunch": meals.get("L") or "",
-        "dinner": meals.get("D") or "",
-        "free_write": entry.get("freeWrite") or "",
-        "habits": entry.get("habits") or {},
-        "tags": entry.get("tags") or [],
-        "accounts": entry.get("accounts") or [],
-        "source": entry.get("source") or "manual",
-        "created_at": _timestamp(entry.get("createdAt")),
-    }
-
-
-def _journal_entry(row):
-    return {
-        "id": row["id"],
-        "date": row["entry_date"].isoformat(),
-        "quote": row["quote"],
-        "quoteAuthor": row["quote_author"],
-        "meals": {"B": row["breakfast"], "L": row["lunch"], "D": row["dinner"]},
-        "freeWrite": row["free_write"],
-        "habits": row["habits"],
-        "tags": row["tags"],
-        "accounts": row["accounts"],
-        "source": row["source"],
-        "createdAt": row["created_at"].astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-    }
 
 
 # ── Local files (development) ─────────────────────────────────────────────────
@@ -156,6 +111,8 @@ class LocalBackend:
     def journal_upsert(self, entry):
         entries = self.load("journal_entries")
         idx = next((i for i, e in enumerate(entries) if e.get("id") == entry["id"]), None)
+        if any(e.get("date") == entry.get("date") and e.get("id") != entry["id"] for e in entries):
+            raise JournalDateTaken(entry.get("date"))
         if idx is not None:
             entries[idx] = entry
         else:
@@ -174,6 +131,9 @@ class LocalBackend:
 
     def journal_date_exists(self, day):
         return any(e.get("date") == day for e in self.load("journal_entries"))
+
+    def health(self, action, *args):
+        raise NeedsDatabase()
 
     def put_media(self, relpath, content, content_type):
         pass  # the file on disk is the only copy
@@ -237,23 +197,6 @@ CREATE TABLE IF NOT EXISTS {SCHEMA}.media (
     content BYTEA NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE TABLE IF NOT EXISTS {SCHEMA}.journal_entries (
-    id TEXT PRIMARY KEY,
-    entry_date DATE NOT NULL,
-    quote TEXT NOT NULL DEFAULT '',
-    quote_author TEXT NOT NULL DEFAULT '',
-    breakfast TEXT NOT NULL DEFAULT '',
-    lunch TEXT NOT NULL DEFAULT '',
-    dinner TEXT NOT NULL DEFAULT '',
-    free_write TEXT NOT NULL DEFAULT '',
-    habits JSONB NOT NULL DEFAULT '{{}}',
-    tags JSONB NOT NULL DEFAULT '[]',
-    accounts JSONB NOT NULL DEFAULT '[]',
-    source TEXT NOT NULL DEFAULT 'manual',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS journal_entries_by_date ON {SCHEMA}.journal_entries (entry_date DESC, created_at DESC);
 CREATE TABLE IF NOT EXISTS {SCHEMA}.migrations (
     name TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -266,6 +209,11 @@ CREATE TABLE IF NOT EXISTS {SCHEMA}.trackers (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """
+
+
+def lakebase_model():
+    import lakebase_model as model  # needs psycopg; only loaded with Lakebase
+    return model
 
 
 def _lakebase_password():
@@ -305,11 +253,17 @@ class LakebaseBackend:
                 if not os.environ.get("PGUSER") and not os.environ.get("PGPASSWORD"):
                     from databricks.sdk import WorkspaceClient
                     kwargs["user"] = WorkspaceClient().config.client_id
-                pool = ConnectionPool(connection_class=TokenConnection, kwargs=kwargs, min_size=0, max_size=4,
-                                      max_lifetime=30 * 60, max_idle=5 * 60, timeout=15, open=True)
+                def configure(db):
+                    # "Today" and "this week" in the health views follow the owner's timezone.
+                    db.execute("SELECT set_config('TimeZone', %s, false)", (os.environ.get("APP_TIMEZONE", "UTC"),))
+                    db.commit()
+
+                pool = ConnectionPool(connection_class=TokenConnection, kwargs=kwargs, configure=configure, min_size=0,
+                                      max_size=4, max_lifetime=30 * 60, max_idle=5 * 60, timeout=15, open=True)
                 try:
                     with pool.connection() as db:
                         db.execute(DDL)
+                        db.execute(lakebase_model().DDL)
                         self._migrate(db)
                 except Exception:
                     pool.close()
@@ -333,60 +287,64 @@ class LakebaseBackend:
             raise
 
     def _migrate(self, db):
-        """One-time copy of existing journal entries into their table.
+        """One-time moves into the relational model, run once per database.
 
-        The marker row makes this run once, even with several workers starting
-        together; deleting every entry later never re-imports old ones.
+        A marker row makes each step run once, even with several workers
+        starting together; deleting every entry later never re-imports.
         """
-        claimed = db.execute(f"INSERT INTO {SCHEMA}.migrations(name) VALUES ('journal_entries_table') ON CONFLICT DO NOTHING")
-        if claimed.rowcount != 1:
-            return
-        row = db.execute(f"SELECT data FROM {SCHEMA}.collections WHERE name = 'journal_entries'").fetchone()
-        entries = row["data"] if row else _read_file("journal_entries", use_mock=False)
-        for entry in entries or []:
-            if entry.get("id"):
-                self._journal_write(db, entry, replace=False)
-        log.info("Moved %d journal entries into %s.journal_entries", len(entries or []), SCHEMA)
+        model = lakebase_model()
+        if db.execute(f"INSERT INTO {SCHEMA}.migrations(name) VALUES ('journal_schema_v1') ON CONFLICT DO NOTHING").rowcount == 1:
+            row = db.execute(f"SELECT data FROM {SCHEMA}.collections WHERE name = 'journal_entries'").fetchone()
+            entries = row["data"] if row else _read_file("journal_entries", use_mock=False)
+            conflicts = model.import_journal(db, entries)
+            if conflicts:
+                # Never silently pick one of two entries for the same date.
+                self._save(db, "journal_import_conflicts", conflicts)
+            log.info("Moved %d journal entries into journal.entries (%d same-date conflicts kept aside)",
+                     len(entries or []) - len(conflicts), len(conflicts))
+        if db.execute(f"INSERT INTO {SCHEMA}.migrations(name) VALUES ('health_projection_v1') ON CONFLICT DO NOTHING").rowcount == 1:
+            row = db.execute(f"SELECT state FROM {SCHEMA}.trackers WHERE kind = 'health' AND state IS NOT NULL").fetchone()
+            if row:
+                self._project_health(db, json.loads(row["state"]))
 
-    def _journal_write(self, db, entry, replace=True):
-        from psycopg.types.json import Jsonb
-        params = _journal_params(entry)
-        for key in ("habits", "tags", "accounts"):
-            params[key] = Jsonb(params[key])
-        conflict = """DO UPDATE SET entry_date = EXCLUDED.entry_date, quote = EXCLUDED.quote,
-            quote_author = EXCLUDED.quote_author, breakfast = EXCLUDED.breakfast, lunch = EXCLUDED.lunch,
-            dinner = EXCLUDED.dinner, free_write = EXCLUDED.free_write, habits = EXCLUDED.habits,
-            tags = EXCLUDED.tags, accounts = EXCLUDED.accounts, source = EXCLUDED.source,
-            created_at = EXCLUDED.created_at, updated_at = now()""" if replace else "DO NOTHING"
-        row = db.execute(
-            f"""INSERT INTO {SCHEMA}.journal_entries
-                (id, entry_date, quote, quote_author, breakfast, lunch, dinner, free_write, habits, tags, accounts, source, created_at)
-                VALUES (%(id)s, %(entry_date)s, %(quote)s, %(quote_author)s, %(breakfast)s, %(lunch)s, %(dinner)s,
-                        %(free_write)s, %(habits)s, %(tags)s, %(accounts)s, %(source)s, %(created_at)s)
-                ON CONFLICT (id) {conflict}
-                RETURNING (xmax = 0) AS inserted""", params).fetchone()
-        return bool(row and row["inserted"])
+    def _project_health(self, db, state):
+        """Copy the Health tracker's records into the shared tables.
+
+        Runs in a savepoint: an unexpected record shape is reported, and never
+        blocks saving the tracker itself.
+        """
+        try:
+            with db.transaction():
+                report = lakebase_model().project_health(db, state)
+        except Exception as error:
+            log.exception("Health tracker projection failed")
+            report = {"error": str(error)}
+        self._save(db, "health_sync_report", report)
 
     def journal_list(self):
         with self.connect() as db:
-            rows = db.execute(f"SELECT * FROM {SCHEMA}.journal_entries ORDER BY entry_date DESC, created_at DESC").fetchall()
-        return [_journal_entry(r) for r in rows]
+            return lakebase_model().journal_list(db)
 
     def journal_upsert(self, entry):
         with self.connect() as db:
-            return self._journal_write(db, entry)
+            return lakebase_model().journal_write(db, entry)
 
     def journal_delete(self, entry_id):
         with self.connect() as db:
-            return db.execute(f"DELETE FROM {SCHEMA}.journal_entries WHERE id = %s", (entry_id,)).rowcount == 1
+            return lakebase_model().journal_delete(db, entry_id)
 
     def journal_date_exists(self, day):
-        try:
-            day = date.fromisoformat(day)
-        except ValueError:
-            return False
         with self.connect() as db:
-            return db.execute(f"SELECT EXISTS (SELECT 1 FROM {SCHEMA}.journal_entries WHERE entry_date = %s) AS found", (day,)).fetchone()["found"]
+            return lakebase_model().journal_date_exists(db, day)
+
+    def health(self, action, *args):
+        """Dashboard reads and direct workout/goal writes (see lakebase_model)."""
+        with self.connect() as db:
+            result = getattr(lakebase_model(), action)(db, *args)
+            if action == "dashboard":
+                row = db.execute(f"SELECT data FROM {SCHEMA}.collections WHERE name = 'health_sync_report'").fetchone()
+                result["sync"] = row["data"] if row else None
+            return result
 
     def load(self, name):
         with self.connect() as db:
@@ -394,13 +352,16 @@ class LakebaseBackend:
         return row["data"] if row else _read_file(name)
 
     def save(self, name, data):
-        from psycopg.types.json import Jsonb
         with self.connect() as db:
-            db.execute(
-                f"""INSERT INTO {SCHEMA}.collections(name, data) VALUES (%s, %s)
-                    ON CONFLICT (name) DO UPDATE SET data = EXCLUDED.data,
-                    revision = {SCHEMA}.collections.revision + 1, updated_at = now()""",
-                (name, Jsonb(data)))
+            self._save(db, name, data)
+
+    def _save(self, db, name, data):
+        from psycopg.types.json import Jsonb
+        db.execute(
+            f"""INSERT INTO {SCHEMA}.collections(name, data) VALUES (%s, %s)
+                ON CONFLICT (name) DO UPDATE SET data = EXCLUDED.data,
+                revision = {SCHEMA}.collections.revision + 1, updated_at = now()""",
+            (name, Jsonb(data)))
 
     def put_media(self, relpath, content, content_type):
         with self.connect() as db:
@@ -426,12 +387,13 @@ class LakebaseBackend:
     @contextmanager
     def trackers(self):
         with self.connect() as db:
-            yield _PostgresTrackers(db)
+            yield _PostgresTrackers(db, self)
 
 
 class _PostgresTrackers:
-    def __init__(self, db):
+    def __init__(self, db, backend):
         self.db = db
+        self.backend = backend
 
     def get(self, kind):
         return self.db.execute(f"SELECT kind, document, state, revision FROM {SCHEMA}.trackers WHERE kind = %s", (kind,)).fetchone()
@@ -443,7 +405,11 @@ class _PostgresTrackers:
 
     def update(self, kind, encoded, revision):
         result = self.db.execute(f"UPDATE {SCHEMA}.trackers SET state = %s, revision = revision + 1, updated_at = now() WHERE kind = %s AND revision = %s", (encoded, kind, revision))
-        return result.rowcount == 1
+        if result.rowcount != 1:
+            return False
+        if kind == "health":
+            self.backend._project_health(self.db, json.loads(encoded))
+        return True
 
 
 # ── Active backend ────────────────────────────────────────────────────────────
@@ -484,6 +450,11 @@ def journal_delete(entry_id):
 
 def journal_date_exists(day):
     return _backend.journal_date_exists(day)
+
+
+def health(action, *args):
+    """Health dashboard and workout/goal writes; raises NeedsDatabase locally."""
+    return _backend.health(action, *args)
 
 
 def save_upload(file_storage, path):

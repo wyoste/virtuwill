@@ -60,15 +60,48 @@ across origins or devices.
 
 `storage.py` is the single persistence layer for every feature. When the app has a
 Lakebase (Databricks-managed Postgres) database resource, Databricks sets `PGHOST`,
-`PGDATABASE`, `PGUSER` and related variables, and the app stores everything in one
-`virtuwill` schema, authenticating with the app's own OAuth token:
+`PGDATABASE`, `PGUSER` and related variables, and the app authenticates with its own
+OAuth token.
+
+**Journal and health** (relational, `lakebase_model.py`):
 
 | Table | Contents |
 |---|---|
-| `journal_entries` | One row per journal entry: date, quote, author, breakfast/lunch/dinner, free-write text, source, created time, with habits, tags and accounts as JSONB. Indexed by date |
+| `journal.entries` | One entry per calendar date (primary key): quote, author, free-write text, source, account snapshots |
+| `journal.entry_tags`, `journal.habit_logs` | Tags (in order) and daily habit check-offs for an entry |
+| `journal.meals` | Meals by date and slot, from the journal (`source = 'journal'`) or the Health tracker, with calories and macros when known |
+| `journal.workouts` | Workout sessions by date: activity, minutes, note, dog-walk flag, source |
+| `health.body_measurements` | Weight by date, with unit |
+| `health.goals` | Targets: 5 qualifying workout days a week, 45 minutes to qualify, goal weight |
+
+Views the UI reads, all over those same tables:
+
+| View | One row per | Used for |
+|---|---|---|
+| `health.daily_activity` | date | Workout minutes, qualifying day, dog-walk minutes, meals, calories, weight, whether a journal entry exists |
+| `health.weekly_workout_progress` | week (Monday start) | Qualifying days against the weekly goal |
+| `health.weight_trend` | weigh-in date | Weight with a 7-day rolling average |
+| `health.goal_progress` | goal | Current value and whether the goal is met |
+
+The Health tracker keeps its own document as its editing format. Every save copies
+its workouts, meals and weights into the shared tables, replacing the rows it produced
+before; workouts logged on the dashboard (`source = 'manual'`) are kept. The copy reads
+the tracker's fields tolerantly, keeps each original record in a `details` column, and
+writes a sync report (counts, records skipped for having no date, field names seen)
+shown on the dashboard. A copy failure is reported and never blocks the tracker save.
+Journal entries include that day's workouts and weight as a read-only `health` field.
+
+Admin → Health goals shows the dashboard above the tracker (`/api/health/dashboard`).
+`APP_TIMEZONE` in `app.yaml` sets which calendar day "today" and "this week" mean.
+
+**Everything else** is in the `virtuwill` schema:
+
+| Table | Contents |
+|---|---|
 | `collections` | One JSONB document per remaining feature: `garden`, `garden_photos`, `music_catalog`, `blog`, `messages`, `portfolio_uploads`, `accounts_template`, plus `travel_pins`, `travel_visited`, `garden_gallery_note`, `garden_gallery_hero`, `portfolio_layout` |
 | `media` | Uploaded audio, photos, blog thumbnails and portfolio HTML, keyed by path under `static/` |
 | `trackers` | Finance and Health tracker documents and state |
+| `migrations` | One-time data moves that have run |
 
 Without `PGHOST` (local development), the same code reads and writes `data/*.json`,
 `static/` and the tracker SQLite file.
@@ -80,12 +113,14 @@ Set it up once:
 2. Open the app → **Edit** → **Resources** → **Add resource** → **Database**. Choose the
    instance and database (`databricks_postgres` by default) with permission
    **Can connect and create**. Save.
-3. Deploy. The app creates the `virtuwill` schema on first use.
+3. Deploy. The app creates the `virtuwill`, `journal` and `health` schemas on first use.
 
 Migration happens automatically:
 
 - Journal entries are copied once from `data/journal_entries.json` into the
-  `journal_entries` table on first start; a `migrations` row records that it ran.
+  `journal` tables on first start (a `migrations` row records it). A second entry
+  for an already-used date is kept in the `journal_import_conflicts` collection rather
+  than dropped. An existing Health tracker state is copied into the shared tables once.
 - A collection with no row yet is read from the repository's `data/*.json` (or
   `mock_data/`), so the first deploy starts from the committed data. The first save
   writes it to Lakebase; from then on the database is the source of truth.

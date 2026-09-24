@@ -11,3 +11,6 @@ env:
     valueFrom: secret-key
   - name: ADMIN_PASSWORD
     valueFrom: admin-password
+  # Calendar dates for the journal and health dashboard ("today", "this week").
+  - name: APP_TIMEZONE
+    value: America/Chicago
