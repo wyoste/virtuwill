@@ -22,10 +22,10 @@ one sidebar and one screen at a time:
 
 | Section | Screens | Owns |
 |---|---|---|
-| Today | one day: stats, habits, quick logging, that day's money | — (links into the others) |
+| Today | one day: stats, habits, quick logging, account balances, daily spending, that day's money | — (links into the others) |
 | Journal | entries by date, editor, habits, balance check-in, photo transcription | `journal.entries`, tags, habit logs, journal balance snapshots |
 | Health | Overview · Activity · Food · Body · Goals | workouts, meals, weigh-ins, drinks, foods, profile, goals |
-| Money | Overview · Transactions · Receipts · Accounts & balances · Budgets & bills · Goals & retirement · Finance tracker | read-only views over `finance.*`; edited in the Finance tracker for now |
+| Money | Overview (full analysis, or goals only) · Transactions · Receipts · Accounts & balances · Budgets & bills · Goals & retirement · Imports · Finance tracker | bank activity, statements, paychecks and receipts through Imports; budgets, goals and the pay plan in the Finance tracker |
 | Site | Music · Projects · Writing · Garden · Travel · Messages | everything the public site shows |
 | Settings | site switches, journal check-in accounts, diagnostics | `core.settings` |
 
@@ -40,10 +40,49 @@ The **Health tracker is retired**: Health in the workspace owns those records. I
 document and last state stay in the database (and exportable from Settings); saves
 to it are refused so nothing overwrites records edited natively.
 
-The **Finance tracker** is still the editor for Money until statement, CSV and
-receipt imports arrive: open it at **Money › Finance tracker**. Every save projects
-its records into the `finance` tables that the Money screens read, and the status
-bar reports separately whether the record saved and whether the screens updated.
+The **Finance tracker** still edits budgets, bills, savings goals and the pay plan:
+open it at **Money › Finance tracker**. Every save projects its records into the
+`finance` tables that the Money screens read, and the status bar reports separately
+whether the record saved and whether the screens updated. Bank activity and receipts
+it holds are replaced by imported copies of the same rows (below): once a transaction
+or receipt has been imported, the tracker's copy is not re-created.
+
+## Finance imports
+
+Portal exports become structured data, then load into Lakebase in two steps: extract
+and review, then commit. **Money › Imports** does both; the scripts do the same from
+a terminal.
+
+| File | Read by | Gives |
+|---|---|---|
+| Chase Spending Summary report (PDF) | `chase.spending_report` | card charges and refunds with categories; category totals checked |
+| Chase card statement (PDF) | `chase.card_statement` | the statement, opening/closing balances, charges and payments; statement totals checked |
+| Payroll earning statements (PDF) | `payroll.earning_statements` | one paycheck per advice: earnings, deductions, taxes, and the account (last four only) each deposit went to; net pay checked |
+| Grocery receipts + receipt items (CSV) | `grocery_receipts_csv`, `grocery_items_csv` | receipts with line items; each receipt's lines checked against its net |
+| `.finance.json`, or the CSVs below | `canonical` | anything above, or data from another source written in the same shape |
+
+The structured form (`virtuwill-finance/1`, `virtuwill/importers/canonical.py`) is one
+JSON document, or one CSV per record type: `accounts`, `statements`, `balances`,
+`transactions`, `receipts`, `receipt_items`, `paychecks`, `paycheck_lines`,
+`paycheck_deposits`. Amounts use the site's sign (positive is money leaving an
+account); accounts are identified by their last four digits only.
+
+```bash
+python scripts/extract_finance.py statement.pdf --csv out/     # → statement.finance.json and out/*.csv
+python scripts/load_finance.py statement.finance.json --dry-run  # what it would add, match or replace
+python scripts/load_finance.py statement.finance.json            # stage and commit
+```
+
+Committing is safe to repeat: a file already loaded (same SHA-256) changes nothing; a
+transaction already in the model (same account and amount, within three days) is
+matched rather than added; a tracker row for it is taken over, keeping its id,
+category and receipt links. The uploaded originals are kept as private media.
+
+Today and the Money overview show each account's latest known balance. When both
+charges and payments have loaded since that balance, they show an estimate carried
+forward; otherwise the balance with how much was charged since. **Record a balance**
+adds one read off the bank's app. The overview's **Full analysis / Goals only**
+switch is saved as the `money.overview_mode` setting.
 
 The trackers need `SECRET_KEY` of 32+ characters and `ADMIN_PASSWORD` of 12+
 characters; the documented development defaults cannot unlock them. To install the
@@ -166,13 +205,15 @@ virtuwill/
 │   ├── db.py, migrate.py  Connection pool, versioned schema, one-time data moves
 │   ├── records.py         Record-level API resources (validated list/create/update/delete)
 │   ├── today.py           The Today screen's day across every domain
+│   ├── importers/         Portal exports → structured finance data (chase, payroll, kroger, canonical, load)
+│   ├── money_imports.py   Money › Imports: upload, preview, commit, download
 │   └── journal.py, health.py, finance.py, music.py, content.py, garden.py, travel.py, site.py, trackers.py
 ├── db/schema/             The data model, applied in name order, once each (see db/README.md)
 ├── templates/
 │   ├── index.html         Public site shell; pages/ holds each page's markup
 │   └── workspace.html     The workspace shell (/app)
 ├── static/
-│   ├── app/               The workspace: main.js (router, sidebar), lib.js, forms.js, screens/*.js
+│   ├── app/               The workspace: main.js (router, sidebar), lib.js, forms.js, moneyparts.js, screens/*.js
 │   ├── js/                Public pages: app.js (router), music.js (pages + player), projects.js,
 │   │                      writing.js, garden.js/viewer.js/gallery.js, travel.js, resume.js, contact.js
 │   └── css/               theme.css (tokens), site.css (public pages), page styles
@@ -217,7 +258,13 @@ Lakebase (PostgreSQL); see "Data: one relational model in Lakebase" above.
 | GET  | `/api/v1/today?date=` | Owner | One day across journal, health and money |
 | GET/POST/PUT/DELETE | `/api/v1/health/{workouts,meals,weigh-ins,drinks}` | Owner | Health records (list by `?date=` or `?from=&to=`) |
 | GET/PUT | `/api/v1/health/{overview,profile,goals,foods,recipes,days}` | Owner | Health screens |
-| GET | `/api/v1/money/{overview,transactions,receipts,accounts,budgets,goals,months}` | Owner | Money screens (read-only) |
+| GET | `/api/v1/money/{overview,transactions,receipts,accounts,budgets,goals,months}` | Owner | Money screens |
+| GET/POST | `/api/v1/money/balances` | Owner | Balances now; POST `{account_id, balance, as_of}` records one |
+| GET/POST | `/api/v1/money/imports` | Owner | Recent imports; POST files to extract and stage one |
+| GET/DELETE | `/api/v1/money/imports/<id>` | Owner | One import's preview and report; DELETE discards a staged one |
+| POST | `/api/v1/money/imports/<id>/commit` | Owner | Load a staged import |
+| GET | `/api/v1/money/imports/<id>/bundle[?format=csv]` | Owner | Its structured data as JSON or zipped CSVs |
+| POST | `/api/v1/money/extract[?format=csv]` | Owner | Files → structured data, nothing staged |
 | GET | `/api/v1/music`, `/api/v1/music/songs/<slug>` | — | Published songs, versions and albums (`?view=owner` for everything) |
 | POST/PUT/DELETE | `/api/v1/music/{songs,recordings,albums}` | Owner | Songs, versions, albums |
 | GET/PUT/DELETE | `/api/v1/projects[/<id>]` | — / Owner | Projects |

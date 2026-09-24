@@ -80,6 +80,13 @@ Checks the views provide:
 | `transaction_line_items` | Which receipt lines make up a bank charge, with tax and tip shared across lines and scaled to the part of the receipt that charge paid. |
 | `balance_timeline`, `latest_balances` | Every known balance of every account over time, and the latest. |
 
+Imports (`97_finance_imports.sql`) add `staged_imports` (each upload's extracted
+records, its preview and, once committed, what it did; one committed import per file
+hash), `paychecks` with `paycheck_lines` and `paycheck_splits` (actual pay, beside the
+planned `pay_profile`), and the views `daily_spending`, `current_balances` (latest
+balance, activity since, and an estimate flagged `estimate_complete` only when both
+charges and payments/deposits have loaded since) and `monthly_pay`.
+
 For credit cards and loans the balance is the amount owed, so charges raise it
 (`account_types.is_liability`); for deposit accounts charges lower it.
 

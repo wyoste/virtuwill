@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from flask import Blueprint, jsonify, request
 
-from . import db, health, journal
+from . import db, finance, health, journal
 from .auth import admin_required
 from .util import in_calendar, parse_date, plain
 
@@ -48,12 +48,12 @@ def today():
             "drinks": _rows(conn, "SELECT * FROM health.alcohol WHERE drink_date = %s ORDER BY drink_id", day),
             "money": {
                 "through": through.isoformat() if through else None,
+                "balances": finance.balances(conn),
+                "spend": finance.spend_summary(conn, day),
                 "transactions": _rows(conn, """
                     SELECT t.transaction_id, t.merchant, t.amount, t.kind, t.category, a.name AS account_name,
                            EXISTS (SELECT 1 FROM finance.receipt_payments p WHERE p.transaction_id = t.transaction_id) AS has_receipt
                     FROM finance.transactions t LEFT JOIN finance.accounts a USING (account_id)
                     WHERE t.posted_on = %s ORDER BY t.amount DESC""", day),
-                "weekSpending": float(conn.execute("""SELECT COALESCE(SUM(amount), 0) AS s FROM finance.spending
-                                                      WHERE day BETWEEN %s AND %s""", (week_start, day)).fetchone()["s"]),
             },
         })
