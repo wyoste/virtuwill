@@ -1,6 +1,6 @@
 // Site › Career: everything the public Career page shows — the header and ethos,
 // experience, projects, skills, certifications and education.
-import { h, api, card, pageHead, tabs, empty, toast, run, dialog, field, values, confirmDelete } from '../lib.js';
+import { h, api, card, pageHead, tabs, empty, toast, run, dialog, field, values, confirmDelete, editable, saveAll } from '../lib.js';
 
 const TABS = [['/app/site/career', 'Profile & ethos'], ['/app/site/career/experience', 'Experience'],
               ['/app/site/career/projects', 'Projects'], ['/app/site/career/skills', 'Skills & education']];
@@ -81,10 +81,8 @@ function profile(view, d, redraw) {
     field('Ethos eyebrow', 'ethos_eyebrow', { value: p.ethos_eyebrow }),
     field('Ethos headline', 'ethos_headline', { value: p.ethos_headline, wide: true }),
     field('Ethos summary', 'ethos_summary', { kind: 'textarea', value: p.ethos_summary, wide: true }),
-    h('div', { style: { flexBasis: '100%' } }, h('button', { class: 'btn primary', onclick: e => run(e.currentTarget, async () => {
-      await api('/api/v1/career/profile', { method: 'PUT', body: values(form) });
-      toast('Profile saved');
-    }) }, 'Save profile')));
+    h('div', { style: { flexBasis: '100%' } }, h('button', { class: 'btn primary', onclick: e => saveAll(e.currentTarget) }, 'Save profile')));
+  editable(form, () => api('/api/v1/career/profile', { method: 'PUT', body: values(form) }));
 
   const cvInput = h('input', { type: 'file', accept: 'application/pdf', hidden: true });
   cvInput.onchange = () => run(null, async () => {

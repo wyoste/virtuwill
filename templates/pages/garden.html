@@ -1,77 +1,9 @@
 <div class="page" id="page-garden">
-
-  <!-- ── 1. Quote banner ──────────────────────────────────────────── -->
-  <div class="gal-quote-wrap" id="gal-quote-wrap">
-    <div class="gal-quote-display" id="gal-quote-display" onclick="GDN.Gallery.editNote()">
-      <div class="gal-quote-text" id="gal-quote-text">Life's a Garden — Dig it..</div>
-      <div class="gal-quote-edit-hint" id="gal-quote-hint" style="display:none">&#9998; click to edit</div>
-    </div>
-    <div class="gal-quote-editor" id="gal-quote-editor" style="display:none">
-      <textarea class="gal-quote-input" id="gal-quote-input" rows="3" placeholder="Your garden note or quote…"></textarea>
-      <div class="gal-quote-editor-btns">
-        <button class="gal-q-save" onclick="GDN.Gallery.saveNote()">Save</button>
-        <button class="gal-q-cancel" onclick="GDN.Gallery.cancelNote()">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── 2. Hero banner — illustrated garden + philosophy blurb ───── -->
-  <div class="gdn-hero">
-    <div class="gdn-hero-img-wrap">
-      <img class="gdn-hero-img" src="/static/91070B97-0D46-40F6-8858-1C32F1E88A41.jpeg" alt="The garden"/>
-    </div>
-    <div class="gdn-hero-blurb">
-      <div class="gdn-hero-blurb-inner" id="gdn-hero-blurb">
-        <h2 class="gdn-hero-title">My Gardening Philosophy</h2>
-        <p class="gdn-hero-text" id="gdn-hero-text">
-          Gardening is how I stay grounded. Every bed is an experiment, every plant a small bet on the future. I grow things that attract attract life to the garden, and things that simply make me happy to look at. I have a vision and Im excited to watch it bloom.
-        </p>
-        <button class="gdn-hero-edit-btn" id="gdn-hero-edit-btn" style="display:none"
-          onclick="GDN.Gallery.editHero()">&#9998; Edit</button>
-      </div>
-      <div class="gdn-hero-editor" id="gdn-hero-editor" style="display:none">
-        <textarea class="gal-quote-input" id="gdn-hero-input" rows="5"
-          placeholder="Your gardening philosophy…"></textarea>
-        <div class="gal-quote-editor-btns">
-          <button class="gal-q-save" onclick="GDN.Gallery.saveHero()">Save</button>
-          <button class="gal-q-cancel" onclick="GDN.Gallery.cancelHero()">Cancel</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── 3. Explorer — By Bed / By Plant tabs + cards ─────────────── -->
-  <div class="gdn-explorer">
-    <div class="gdn-explorer-hd">
-      <h2 class="gdn-explorer-title">Explore the Garden</h2>
-      <div class="gdn-explorer-tabs">
-        <button class="gdn-exp-tab on" id="gxt-bed"
-          onclick="GDN.Gallery.groupBy('bed')">🌱 By Bed</button>
-        <button class="gdn-exp-tab" id="gxt-plant"
-          onclick="GDN.Gallery.groupBy('plant')">🌼 By Plant</button>
-        <button class="gdn-exp-tab" id="gxt-all"
-          onclick="GDN.Gallery.groupBy('all')">&#128247; All Photos</button>
-      </div>
-      <!-- Admin upload -->
-      <button class="gal-upload-btn" id="gal-upload-btn" style="display:none"
-        onclick="GDN.Gallery.openUpload()">
-        &#128247; Upload Photos
-      </button>
-    </div>
-
-    <!-- Photo grid / groups -->
-    <div class="gal-body" id="gal-body">
-      <div class="gal-empty">
-        <div style="font-size:52px;margin-bottom:14px">&#127807;</div>
-        <div>No photos yet — check back soon.</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── 4. Canvas viewer (anchored to bottom) ─────────────────────── -->
-  <div class="gdn-viewer-section">
+  <!-- Header, photos and beds are drawn by garden-page.js; the map below is moved between them. -->
+  <div id="garden-root" aria-live="polite"></div>
+  <div class="gdn-viewer-section" id="gdn-viewer-section">
     <div class="gdn-viewer-section-hd">
-      <span class="gdn-viewer-section-title">&#128205; Garden Map</span>
+      <span class="gdn-viewer-section-title">The garden map</span>
       <span class="gdn-viewer-section-sub">Pan &amp; zoom to explore</span>
     </div>
     <div class="gdn-viewer-frame" id="gdn-viewer-frame">
@@ -87,68 +19,5 @@
       </div>
     </div>
   </div>
-
-  <!-- ── Upload modal (admin only) ────────────────────────────────── -->
-  <div class="vw-modal-bg" id="gal-upload-modal"
-    onclick="if(event.target===this)GDN.Gallery.closeUpload()">
-    <div class="vw-modal" style="max-width:600px">
-      <div class="vw-modal-hd">
-        <span class="vw-modal-title">&#128247; Upload Garden Photos</span>
-        <button class="vw-modal-close" onclick="GDN.Gallery.closeUpload()">&#215;</button>
-      </div>
-      <div class="vw-modal-body">
-        <!-- Drop zone -->
-        <div class="gal-drop-zone" id="gal-drop-zone"
-          onclick="document.getElementById('gal-file-input').click()"
-          ondragover="event.preventDefault();this.classList.add('over')"
-          ondragleave="this.classList.remove('over')"
-          ondrop="GDN.Gallery.handleDrop(event)">
-          <input type="file" id="gal-file-input" accept="image/*" multiple style="display:none"
-            onchange="GDN.Gallery.filesChosen(this.files)"/>
-          <div class="gal-drop-icon">&#128247;</div>
-          <div class="gal-drop-text">Drop photos here or <span class="gal-drop-link">browse</span></div>
-          <div id="gal-files-chosen" style="font-size:11px;color:var(--text3);margin-top:6px"></div>
-        </div>
-
-        <!-- Category (broad) -->
-        <div class="gal-f-group">
-          <label class="gal-f-lbl">Category <span style="font-weight:400;color:var(--text3)">(for whole-garden shots)</span></label>
-          <div class="gal-tag-chips" id="gal-cat-chips"></div>
-        </div>
-
-        <!-- Bed tags from planner -->
-        <div class="gal-f-group">
-          <label class="gal-f-lbl">Bed <span style="font-weight:400;color:var(--text3)">(select one or more)</span></label>
-          <div class="gal-tag-chips" id="gal-bed-chips"></div>
-        </div>
-
-        <!-- Plant tags from planner -->
-        <div class="gal-f-group">
-          <label class="gal-f-lbl">Plant species <span style="font-weight:400;color:var(--text3)">(optional, multi-select)</span></label>
-          <div class="gal-tag-chips" id="gal-plant-chips"></div>
-        </div>
-
-        <div class="gal-f-group">
-          <label class="gal-f-lbl">Caption</label>
-          <input class="gal-f-input" id="gal-caption" placeholder="Optional caption for these photos…"/>
-        </div>
-      </div>
-      <div class="vw-modal-ft">
-        <button class="gal-btn-cancel" onclick="GDN.Gallery.closeUpload()">Cancel</button>
-        <button class="gal-btn-save"   onclick="GDN.Gallery.uploadPhotos()">Upload</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Lightbox ─────────────────────────────────────────────────── -->
-  <div class="gal-lightbox" id="gal-lightbox" onclick="GDN.Gallery.closeLightbox()">
-    <button class="gal-lb-prev" onclick="event.stopPropagation();GDN.Gallery.lightboxNav(-1)">&#8249;</button>
-    <div class="gal-lb-content">
-      <img id="gal-lb-img" src="" alt=""/>
-      <div class="gal-lb-caption" id="gal-lb-caption"></div>
-      <div class="gal-lb-tags" id="gal-lb-tags"></div>
-    </div>
-    <button class="gal-lb-next" onclick="event.stopPropagation();GDN.Gallery.lightboxNav(1)">&#8250;</button>
-  </div>
-
+  <dialog class="gd-lightbox" id="gd-lightbox" aria-label="Photo"></dialog>
 </div>

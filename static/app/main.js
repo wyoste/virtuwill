@@ -1,5 +1,5 @@
 // The workspace: one sidebar, one screen at a time, real URLs under /app.
-import { h, api, toast, dialog } from './lib.js';
+import { h, api, toast, dialog, unsaved, saveAll, forgetEdits, setDiscard } from './lib.js';
 
 const NAV = [
   { href: '/app', label: 'Today', icon: '☀' },
@@ -35,6 +35,7 @@ const SCREENS = [
 
 let cleanup = null;
 let dirtyCheck = null;
+let shown = location.pathname + location.search;   // the screen on view, for Back/Forward that is cancelled
 
 // Screens with unsaved edits register a check; leaving asks first.
 export function setDirty(fn) { dirtyCheck = fn; }
@@ -45,11 +46,16 @@ export function navigate(href, { replace = false } = {}) {
 }
 
 async function confirmLeave() {
-  if (!dirtyCheck?.()) return true;
+  const own = dirtyCheck?.(), edited = unsaved();
+  if (!own && !edited) return true;
+  // Screens with their own editor (journal, song, post) save through it; the rest can be saved from here.
   const choice = await dialog('Leave without saving?', h('p', {}, 'You have unsaved changes on this screen.'),
-    [['Stay', false], ['Leave', true]]);
-  if (choice) dirtyCheck = null;
-  return !!choice;
+    [['Stay', null], ['Discard changes', 'discard'], ...(edited && !own ? [['Save & leave', 'save']] : [])]);
+  if (!choice) return false;
+  if (choice === 'save' && !(await saveAll())) return false;
+  dirtyCheck = null;
+  forgetEdits();
+  return true;
 }
 
 function sidebar() {
@@ -80,6 +86,8 @@ async function render() {
   const main = document.getElementById('ws-main');
   if (cleanup) { try { cleanup(); } catch { /* screen already gone */ } cleanup = null; }
   dirtyCheck = null;
+  forgetEdits();
+  shown = location.pathname + location.search;
   const match = SCREENS.find(([prefix]) => path === prefix || path.startsWith(prefix + '/'));
   main.replaceChildren(h('div', { class: 'ws-loading' }, 'Loading…'));
   try {
@@ -106,8 +114,13 @@ document.addEventListener('click', async event => {
   if (url.pathname + url.search === location.pathname + location.search) return;
   if (await confirmLeave()) navigate(url.pathname + url.search);
 });
-addEventListener('popstate', render);
-addEventListener('beforeunload', event => { if (dirtyCheck?.()) { event.preventDefault(); event.returnValue = ''; } });
+// Back and Forward ask too; staying puts the address back.
+addEventListener('popstate', async () => {
+  if (await confirmLeave()) render();
+  else history.pushState({}, '', shown);
+});
+setDiscard(() => render());
+addEventListener('beforeunload', event => { if (dirtyCheck?.() || unsaved()) { event.preventDefault(); event.returnValue = ''; } });
 
 // ── Sign-in ──────────────────────────────────────────────────────────────────
 function signIn() {

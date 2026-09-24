@@ -199,6 +199,144 @@ def photo_upload():
     return jsonify({"ok": True, "added": [by_id[i] for i in added if i in by_id]})
 
 
+# ── v1: the Garden page and photo tags ───────────────────────────────────────
+
+# The page's words until they're edited in the workspace (they used to be written into the page).
+DEFAULT_TEXT = {
+    "hero": "Gardening is how I stay grounded. Every bed is an experiment, every plant a small bet on the future. I grow things that "
+            "attract attract life to the garden, and things that simply make me happy to look at. I have a vision and Im excited to "
+            "watch it bloom.",
+    "gallery_note": "Life's a Garden — Dig it..",
+}
+
+
+def overview(conn):
+    """Everything the public Garden page shows: beds with what grows in them, plant types, tagged photos, page text."""
+    beds = [dict(r) for r in conn.execute("""
+        SELECT b.bed_id AS id, b.name, b.color,
+               COUNT(p.planting_id) AS plants,
+               COALESCE(jsonb_agg(DISTINCT jsonb_build_object('id', s.species_id, 'name', s.name, 'emoji', s.emoji))
+                        FILTER (WHERE s.species_id IS NOT NULL), '[]') AS species
+        FROM garden.beds b
+        LEFT JOIN garden.plantings p ON p.bed_id = b.bed_id AND p.removed_on IS NULL
+        LEFT JOIN garden.species s ON s.species_id = p.species_id
+        GROUP BY b.bed_id ORDER BY b.position NULLS LAST, b.name""")]
+    for b in beds:
+        b["species"] = sorted(b["species"], key=lambda x: x["name"])
+    # Plant types: those growing now, and any a photo is tagged with.
+    species = [dict(r) for r in conn.execute("""
+        SELECT s.species_id AS id, s.name, s.emoji, s.category,
+               COUNT(p.planting_id) AS plants, COUNT(DISTINCT p.bed_id) AS beds
+        FROM garden.species s
+        LEFT JOIN garden.plantings p ON p.species_id = s.species_id AND p.removed_on IS NULL
+        WHERE p.planting_id IS NOT NULL
+           OR s.species_id IN (SELECT subject_ref FROM garden.photo_subjects WHERE subject_type = 'species')
+        GROUP BY s.species_id ORDER BY s.name""")]
+    photo_rows = conn.execute("""
+        SELECT ph.photo_id, ph.caption, ph.taken_on, m.path,
+               COALESCE(array_agg(DISTINCT b.bed_id) FILTER (WHERE b.bed_id IS NOT NULL), '{}') AS beds,
+               COALESCE(array_agg(DISTINCT COALESCE(sp.species_id, pl.species_id))
+                        FILTER (WHERE COALESCE(sp.species_id, pl.species_id) IS NOT NULL), '{}') AS species
+        FROM garden.photos ph
+        JOIN core.media_assets m USING (asset_id)
+        LEFT JOIN garden.photo_subjects t USING (photo_id)
+        LEFT JOIN garden.beds b ON t.subject_type = 'bed' AND b.bed_id = t.subject_ref
+        LEFT JOIN garden.species sp ON t.subject_type = 'species' AND sp.species_id = t.subject_ref
+        LEFT JOIN garden.plantings pl ON t.subject_type = 'planting' AND pl.planting_id = t.subject_ref
+        GROUP BY ph.photo_id, m.path
+        ORDER BY ph.taken_on DESC NULLS LAST, ph.photo_id""").fetchall()
+    photos_out = [{"id": r["photo_id"], "url": media.url(r["path"]), "caption": r["caption"],
+                   "date": r["taken_on"].isoformat() if r["taken_on"] else None,
+                   "beds": sorted(r["beds"]), "species": sorted(r["species"])} for r in photo_rows]
+    counts = {"beds": {}, "species": {}}
+    for ph in photos_out:
+        for key in ("beds", "species"):
+            for ref in ph[key]:
+                counts[key][ref] = counts[key].get(ref, 0) + 1
+    for b in beds:
+        b["photos"] = counts["beds"].get(b["id"], 0)
+    for sp in species:
+        sp["photos"] = counts["species"].get(sp["id"], 0)
+    text = {r["text_key"].split(".", 1)[1]: r["value"] for r in conn.execute(
+        "SELECT text_key, value FROM content.site_text WHERE text_key IN ('garden.hero', 'garden.gallery_note')")}
+    return {"beds": beds, "species": species, "photos": photos_out,
+            "text": {"philosophy": text.get("hero", DEFAULT_TEXT["hero"]), "note": text.get("gallery_note", DEFAULT_TEXT["gallery_note"])},
+            "totals": {"beds": len(beds), "plants": sum(b["plants"] for b in beds),
+                       "species": sum(1 for sp in species if sp["plants"]), "photos": len(photos_out)}}
+
+
+def _tags(conn, data):
+    """Checked bed and plant-type ids from a request (JSON lists or repeated form fields)."""
+    get = (lambda k: data.getlist(k)) if hasattr(data, "getlist") else (lambda k: data.get(k) or [])
+    beds = {r["bed_id"] for r in conn.execute("SELECT bed_id FROM garden.beds WHERE bed_id = ANY(%s)", ([str(x) for x in get("beds")],))}
+    species = {r["species_id"] for r in conn.execute("SELECT species_id FROM garden.species WHERE species_id = ANY(%s)",
+                                                     ([str(x) for x in get("species")],))}
+    return sorted(beds), sorted(species)
+
+
+def _retag(conn, photo_id, beds, species):
+    conn.execute("DELETE FROM garden.photo_subjects WHERE photo_id = %s", (photo_id,))
+    for bed in beds:
+        conn.execute("INSERT INTO garden.photo_subjects VALUES (%s, 'bed', %s)", (photo_id, bed))
+    for sp in species:
+        conn.execute("INSERT INTO garden.photo_subjects VALUES (%s, 'species', %s)", (photo_id, sp))
+
+
+@bp.route("/api/v1/garden")
+def garden_v1():
+    with db.tx() as conn:
+        return jsonify(overview(conn))
+
+
+@bp.route("/api/v1/garden/photos", methods=["POST"])
+@admin_required
+def photos_add_v1():
+    """Upload photos, all tagged alike: files, caption, taken_on, beds[], species[]."""
+    files = [f for f in request.files.getlist("files") if f and f.filename]
+    if not files:
+        return jsonify({"error": "Choose one or more photos"}), 400
+    taken_on = parse_date(request.form.get("taken_on")) or datetime.now().date()
+    if not in_calendar(taken_on):
+        return jsonify({"error": "taken_on must be a date (YYYY-MM-DD)"}), 400
+    caption = request.form.get("caption", "").strip()[:500]
+    with db.tx() as conn:
+        beds, species = _tags(conn, request.form)
+        for f in files:
+            ext = os.path.splitext(f.filename)[1].lower()
+            if ext not in media.IMAGES:
+                return jsonify({"error": f"{f.filename}: only JPEG, PNG, WebP or GIF images"}), 400
+            asset = media.save_upload(conn, f, f"{PHOTOS_DIR}/{uuid.uuid4().hex[:12]}{ext}")
+            photo_id = str(uuid.uuid4())
+            conn.execute("INSERT INTO garden.photos (photo_id, asset_id, taken_on, caption) VALUES (%s, %s, %s, %s)",
+                         (photo_id, asset, taken_on, caption))
+            _retag(conn, photo_id, beds, species)
+        return jsonify(overview(conn)), 201
+
+
+@bp.route("/api/v1/garden/photos/<photo_id>", methods=["PUT"])
+@admin_required
+def photo_update_v1(photo_id):
+    """Change a photo's caption, date or tags: {caption, taken_on, beds: [...], species: [...]}."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Expected a JSON object"}), 400
+    with db.tx() as conn:
+        if not conn.execute("SELECT 1 FROM garden.photos WHERE photo_id = %s", (photo_id,)).fetchone():
+            return jsonify({"error": "Not found"}), 404
+        if "caption" in data:
+            conn.execute("UPDATE garden.photos SET caption = %s WHERE photo_id = %s", (str(data["caption"] or "").strip()[:500], photo_id))
+        if "taken_on" in data:
+            day = parse_date(data["taken_on"]) if data["taken_on"] else None
+            if data["taken_on"] and not in_calendar(day):
+                return jsonify({"error": "taken_on must be a date (YYYY-MM-DD)"}), 400
+            conn.execute("UPDATE garden.photos SET taken_on = %s WHERE photo_id = %s", (day, photo_id))
+        if "beds" in data or "species" in data:
+            current = next(p for p in overview(conn)["photos"] if p["id"] == photo_id)
+            beds, species = _tags(conn, {"beds": data.get("beds", current["beds"]), "species": data.get("species", current["species"])})
+            _retag(conn, photo_id, beds, species)
+        return jsonify(next(p for p in overview(conn)["photos"] if p["id"] == photo_id))
+
+
 @bp.route("/api/garden/photo/<photo_id>", methods=["DELETE"])
 @admin_required
 def photo_delete(photo_id):

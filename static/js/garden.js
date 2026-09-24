@@ -267,7 +267,7 @@ window.VW.Garden = (() => {
 
   function init() {
     _loadBg();
-    _loadData().then(() => { _fitAll(); _buildSpeciesDropdown(); _renderBedList(); render(); });
+    _loadData().then(() => { _savedSnapshot = _snapshot(); _fitAll(); _buildSpeciesDropdown(); _renderBedList(); render(); });
     if (!_eventsOk) { _attachEvents(); _eventsOk = true; }
   }
 
@@ -308,12 +308,18 @@ window.VW.Garden = (() => {
     } catch { /* use empty state */ }
   }
 
+  // What was last loaded or saved, to tell whether there are unsaved changes.
+  let _savedSnapshot = null;
+  const _snapshot = () => JSON.stringify(state.beds);
+  function isDirty() { return _savedSnapshot !== null && _snapshot() !== _savedSnapshot; }
+
   async function save() {
     // Strip legacy fields before saving
     const clean = { ...state, beds: state.beds.map(b => {
       const { nodes: _, ...rest } = b;
       return rest;
     })};
+    const saving = _snapshot();
     try {
       const r = await fetch('/api/garden', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -321,7 +327,7 @@ window.VW.Garden = (() => {
       });
       const d = await r.json();
       window.toast?.(d.ok ? '💾 Garden saved' : 'Save failed', d.ok?'success':'error');
-      if (d.ok) { GDN?.Viewer?.init?.(); _renderBedList(); }
+      if (d.ok) { _savedSnapshot = saving; GDN?.Viewer?.init?.(); _renderBedList(); }
     } catch {
       window.toast?.('Save failed', 'error');
     }
@@ -1427,7 +1433,7 @@ window.VW.Garden = (() => {
   }
 
   return {
-    init, onAdminLogin, save,
+    init, onAdminLogin, save, isDirty,
     goBack()  { _exitEdit(); },
     _clickBedCard, _bedDragStart, _bedDragOver, _bedDrop, _bedDragEnd,
     _renderBedList,

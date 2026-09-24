@@ -414,7 +414,10 @@ window.VW.Travel = (() => {
   function _bindPopup(marker, pin) {
     const t = PIN_TYPES[pin.type] || PIN_TYPES.visited;
     const admin = window.VW?.Auth?.isAdmin?.() || false;
-    const photos = (pin.photos||[]).map(u => '<img src="' + u + '" style="width:100%;border-radius:4px;margin-top:6px;object-fit:cover;max-height:120px"/>').join('');
+    // Photos attached in the workspace, each with its caption.
+    const items = pin.photoItems || (pin.photos || []).map(url => ({ url, caption: '' }));
+    const photos = items.map(p => '<figure style="margin:6px 0 0"><img src="' + _esc(p.url) + '" alt="' + _esc(p.caption || pin.name) + '" loading="lazy" style="width:100%;border-radius:4px;object-fit:cover;max-height:140px;display:block"/>'
+      + (p.caption ? '<figcaption style="font-size:11px;color:#555;margin-top:2px">' + _esc(p.caption) + '</figcaption>' : '') + '</figure>').join('');
     const adminRow = admin
       ? '<div style="margin-top:8px;display:flex;gap:12px;align-items:center"><a href="#" onclick="VW.Travel.removePin(' + pin.id + ');return false;" style="font-size:11px;color:#e84235">Remove</a><span style="font-size:10px;color:#aaa">Drag to reposition</span></div>'
       : '';

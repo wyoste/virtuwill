@@ -157,17 +157,94 @@ export function values(form) {
 }
 
 // A modal dialog; resolves with the button value, or null when dismissed.
+// Cancelling (a null/false button, Escape) after editing its fields asks before the edits are thrown away.
 export function dialog(title, body, buttons = [['Cancel', null], ['OK', true]]) {
   return new Promise(resolve => {
-    const box = h('dialog', { class: 'ws-dialog' },
-      h('h2', {}, title), h('div', { class: 'ws-dialog-body' }, body),
-      h('div', { class: 'ws-dialog-actions' }, buttons.map(([label, value], i) =>
-        h('button', { class: i === buttons.length - 1 ? 'btn primary' : 'btn', onclick: () => { box.close(); resolve(value); } }, label))));
-    box.addEventListener('cancel', () => resolve(null));
+    const bodyEl = h('div', { class: 'ws-dialog-body' }, body);
+    const start = fieldState(bodyEl);
+    const actions = h('div', { class: 'ws-dialog-actions' });
+    const box = h('dialog', { class: 'ws-dialog' }, h('h2', {}, title), bodyEl, actions);
+    const finish = value => { box.close(); resolve(value); };
+    const leave = value => {
+      if (value || fieldState(bodyEl) === start) return finish(value);
+      // Edited, then cancelled: confirm in place.
+      actions.replaceChildren(h('span', { class: 'ws-dialog-ask', role: 'alert' }, 'Discard your changes?'),
+        h('button', { class: 'btn', onclick: showButtons }, 'Keep editing'),
+        h('button', { class: 'btn danger', onclick: () => finish(value) }, 'Discard'));
+      actions.querySelector('.btn').focus();
+    };
+    const showButtons = () => actions.replaceChildren(...buttons.map(([label, value], i) =>
+      h('button', { class: i === buttons.length - 1 ? 'btn primary' : 'btn', onclick: () => leave(value) }, label)));
+    showButtons();
+    box.addEventListener('cancel', event => { event.preventDefault(); leave(null); });
     box.addEventListener('close', () => setTimeout(() => box.remove(), 0));
     document.body.append(box);
     box.showModal();
   });
+}
+
+// ── Unsaved changes ──────────────────────────────────────────────────────────
+// editable(area, save) watches an area's fields. While any area has unsaved
+// edits a bar offers Save all / Discard; any Save on the screen saves every
+// edited area (saveAll); leaving the screen asks first (main.js).
+function fieldState(root) {
+  return JSON.stringify([...root.querySelectorAll('input, select, textarea, [aria-pressed]')]
+    .filter(el => el.type !== 'file' && !el.closest('[data-untracked]'))
+    .map(el => el.hasAttribute('aria-pressed') ? el.getAttribute('aria-pressed') : el.type === 'checkbox' ? el.checked : el.value));
+}
+
+const areas = new Set();
+let onDiscard = null;
+
+// then: runs once after a Save all that saved this area (e.g. redraw derived values).
+export function editable(root, save, { then } = {}) {
+  const area = { root, save, then, base: fieldState(root), touched: false };
+  area.dirty = () => area.touched || fieldState(root) !== area.base;
+  area.reset = () => { area.base = fieldState(root); area.touched = false; };
+  area.touch = () => { area.touched = true; saveBar(); };   // edits the fields can't show, e.g. a removed row
+  root.addEventListener('input', saveBar);
+  root.addEventListener('change', saveBar);
+  root.addEventListener('click', () => setTimeout(saveBar, 0));   // toggled chips
+  areas.add(area);
+  return area;
+}
+
+export function unsaved() {
+  for (const area of areas) if (!area.root.isConnected) areas.delete(area);
+  return [...areas].some(area => area.dirty());
+}
+
+// Save every edited area; true when all saved.
+export async function saveAll(button) {
+  const edited = [...areas].filter(area => area.root.isConnected && area.dirty());
+  if (button) button.disabled = true;
+  try {
+    for (const area of edited) { await area.save(); area.reset(); }
+    if (edited.length) toast(edited.length > 1 ? `Saved ${edited.length} sections` : 'Saved');
+    for (const then of new Set(edited.map(area => area.then).filter(Boolean))) then();
+    return true;
+  } catch (error) {
+    toast(error.message, 'error');
+    return false;
+  } finally {
+    if (button) button.disabled = false;
+    saveBar();
+  }
+}
+
+export function forgetEdits() { areas.clear(); saveBar(); }
+export function setDiscard(fn) { onDiscard = fn; }
+
+function saveBar() {
+  let bar = document.getElementById('ws-savebar');
+  if (!bar) {
+    bar = h('div', { id: 'ws-savebar', class: 'ws-savebar', role: 'status', hidden: true },
+      h('span', {}, 'Unsaved changes'),
+      h('button', { class: 'btn', onclick: () => { forgetEdits(); onDiscard?.(); } }, 'Discard'),
+      h('button', { class: 'btn primary', onclick: e => saveAll(e.currentTarget) }, 'Save all'));
+    document.body.append(bar);
+  }
+  bar.hidden = !unsaved();
 }
 
 export async function confirmDelete(what) {

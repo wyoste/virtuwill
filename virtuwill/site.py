@@ -7,10 +7,12 @@ content.site_text and content.portfolio_projects.
 """
 import json
 import os
+import time
+import uuid
 
 from flask import Blueprint, jsonify, request
 
-from . import content, db, travel
+from . import content, db, media, travel
 from .auth import admin_required, is_admin
 
 bp = Blueprint("site", __name__)
@@ -176,6 +178,80 @@ def travel_places_v1():
     with db.tx() as conn:
         travel.set_pins(conn, items)
         return jsonify({"places": travel.pins(conn)})
+
+
+@bp.route("/api/v1/travel/places", methods=["POST"])
+@admin_required
+def travel_place_add_v1():
+    data = request.get_json(silent=True) or {}
+    place_id = str(int(time.time() * 1000))
+    with db.tx() as conn:
+        problem = travel.write_place(conn, place_id, data)
+        if problem:
+            return jsonify({"error": problem}), 400
+        return jsonify(next(p for p in travel.pins(conn) if str(p["id"]) == place_id)), 201
+
+
+@bp.route("/api/v1/travel/places/<place_id>", methods=["PUT", "DELETE"])
+@admin_required
+def travel_place_v1(place_id):
+    with db.tx() as conn:
+        if not conn.execute("SELECT 1 FROM travel.places WHERE place_id = %s", (place_id,)).fetchone():
+            return jsonify({"error": "Not found"}), 404
+        if request.method == "DELETE":
+            paths = [r["path"] for r in conn.execute("""SELECT m.path FROM travel.place_photos ph JOIN core.media_assets m USING (asset_id)
+                                                        WHERE ph.place_id = %s""", (place_id,))]
+            conn.execute("DELETE FROM travel.places WHERE place_id = %s", (place_id,))
+            for path in paths:
+                media.delete(conn, path)
+            return jsonify({"ok": True})
+        current = next(p for p in travel.pins(conn) if str(p["id"]) == place_id)
+        problem = travel.write_place(conn, place_id, {**current, **(request.get_json(silent=True) or {})})
+        if problem:
+            return jsonify({"error": problem}), 400
+        return jsonify(next(p for p in travel.pins(conn) if str(p["id"]) == place_id))
+
+
+@bp.route("/api/v1/travel/places/<place_id>/photos", methods=["POST"])
+@admin_required
+def travel_photos_add_v1(place_id):
+    """Attach photos to a place: files, caption."""
+    files = [f for f in request.files.getlist("files") if f and f.filename]
+    if not files:
+        return jsonify({"error": "Choose one or more photos"}), 400
+    caption = request.form.get("caption", "").strip()[:500]
+    with db.tx() as conn:
+        if not conn.execute("SELECT 1 FROM travel.places WHERE place_id = %s", (place_id,)).fetchone():
+            return jsonify({"error": "Not found"}), 404
+        position = conn.execute("SELECT COALESCE(MAX(position) + 1, 0) AS n FROM travel.place_photos WHERE place_id = %s",
+                                (place_id,)).fetchone()["n"]
+        for f in files:
+            ext = os.path.splitext(f.filename)[1].lower()
+            if ext not in media.IMAGES:
+                return jsonify({"error": f"{f.filename}: only JPEG, PNG, WebP or GIF images"}), 400
+            asset = media.save_upload(conn, f, f"travel/photos/{uuid.uuid4().hex[:12]}{ext}")
+            conn.execute("INSERT INTO travel.place_photos (place_id, position, asset_id, caption) VALUES (%s, %s, %s, %s)",
+                         (place_id, position, asset, caption))
+            position += 1
+        return jsonify(next(p for p in travel.pins(conn) if str(p["id"]) == place_id)), 201
+
+
+@bp.route("/api/v1/travel/places/<place_id>/photos/<int:position>", methods=["PUT", "DELETE"])
+@admin_required
+def travel_photo_v1(place_id, position):
+    with db.tx() as conn:
+        row = conn.execute("""SELECT ph.asset_id, m.path FROM travel.place_photos ph LEFT JOIN core.media_assets m USING (asset_id)
+                              WHERE ph.place_id = %s AND ph.position = %s""", (place_id, position)).fetchone()
+        if not row:
+            return jsonify({"error": "Not found"}), 404
+        if request.method == "DELETE":
+            conn.execute("DELETE FROM travel.place_photos WHERE place_id = %s AND position = %s", (place_id, position))
+            if row["path"]:
+                media.delete(conn, row["path"])
+        else:
+            caption = str((request.get_json(silent=True) or {}).get("caption") or "").strip()[:500]
+            conn.execute("UPDATE travel.place_photos SET caption = %s WHERE place_id = %s AND position = %s", (caption, place_id, position))
+        return jsonify(next(p for p in travel.pins(conn) if str(p["id"]) == place_id))
 
 
 @bp.route("/api/v1/travel/visited", methods=["PUT"])
