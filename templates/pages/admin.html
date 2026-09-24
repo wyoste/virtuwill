@@ -64,6 +64,11 @@
           <span class="adm-nav-icon">&#128172;</span>
           <span>Chat history</span>
         </button>
+        <button class="adm-nav-item" id="adm-nav-settings"
+          onclick="VW.Admin.showSection('settings')">
+          <span class="adm-nav-icon">&#9881;</span>
+          <span>Settings</span>
+        </button>
       </nav>
 
       <div class="adm-sidebar-footer">
@@ -235,6 +240,29 @@
           <div class="adm-sec-sub">Conversation threads from the local LLAMA chat server</div>
         </div>
         <div id="adm-chat-body"><div class="adm-loading">Connecting&#8230;</div></div>
+      </section>
+
+      <!-- Settings -->
+      <section class="adm-section hidden" id="adm-sec-settings">
+        <div class="adm-sec-hd">
+          <h1 class="adm-sec-title">&#9881; Settings</h1>
+          <div class="adm-sec-sub">Site switches, and what is deployed and working</div>
+        </div>
+        <div class="adm-subsection">
+          <div class="adm-subsec-hd"><div class="adm-subsec-title">Site</div></div>
+          <label class="adm-setting">
+            <input type="checkbox" id="adm-set-chat" onchange="VW.Admin.setSetting('site.chat_enabled', this.checked)"/>
+            <span><strong>Show the &ldquo;Chat with Will&rdquo; button</strong><br/>
+              <small>Visitors see it on every page. It needs the chat server to be reachable from their browser.</small></span>
+          </label>
+        </div>
+        <div class="adm-subsection">
+          <div class="adm-subsec-hd">
+            <div class="adm-subsec-title">Diagnostics</div>
+            <button class="adm-btn-secondary" onclick="VW.Admin.loadSettings()">&#8635; Refresh</button>
+          </div>
+          <div id="adm-diagnostics"><div class="adm-loading">Loading&#8230;</div></div>
+        </div>
       </section>
 
     </main>

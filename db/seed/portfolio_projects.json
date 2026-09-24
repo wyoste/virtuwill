@@ -1,0 +1,196 @@
+[
+ {
+  "id": "dmp",
+  "tag": "Data platform",
+  "tagClass": "data",
+  "title": "Greystar DataMarketplace (DMP)",
+  "desc": "Databricks lakehouse with gold/silver/bronze layers serving 40+ property management domains across 2,000+ properties.",
+  "chips": [
+   "Databricks",
+   "ADF",
+   "Snowflake"
+  ],
+  "subtitle": "A production Databricks lakehouse powering Greystar's complete property management data estate — from raw source ingestion through curated gold entities consumed by 50+ stakeholders.",
+  "metrics": [
+   {
+    "val": "$6M",
+    "lbl": "Annual savings"
+   },
+   {
+    "val": "2,000+",
+    "lbl": "Properties"
+   },
+   {
+    "val": "50+",
+    "lbl": "Stakeholders"
+   }
+  ],
+  "overview": "Led migration and reconciliation of the Greystar Analytics Reporting Schema onto Databricks. Delivered an internal payroll calculation portal estimated to save $6M annually. Redesigned Databricks platform security for granular, scalable permission grants.",
+  "timeline": [
+   {
+    "period": "2025",
+    "phase": "Analytics migration",
+    "desc": "Led full migration of Greystar Analytics Reporting Schema onto Databricks, reconciling legacy data structures."
+   },
+   {
+    "period": "2025",
+    "phase": "Payroll portal",
+    "desc": "Delivered internal payroll calculation portal replacing an external vendor — estimated $6M annual savings."
+   },
+   {
+    "period": "2025",
+    "phase": "Security redesign",
+    "desc": "Redesigned Databricks platform security for granular, scalable permission grants across data engineering pods."
+   },
+   {
+    "period": "2025",
+    "phase": "Source integrations",
+    "desc": "Integrated Yardi Canada PMS, Yardi Investment Management EU, and Anaplan Budgeting into the data warehouse."
+   }
+  ],
+  "visible": true
+ },
+ {
+  "id": "snc",
+  "tag": "Regulatory",
+  "tagClass": "analytics",
+  "title": "SNC Federal Regulatory Automation",
+  "desc": "Automated the Shared National Credit federal regulatory reporting process at Texas Capital, eliminating manual effort and reducing compliance risk.",
+  "chips": [
+   "Snowflake",
+   "Azure",
+   "SQL"
+  ],
+  "subtitle": "Automated the Shared National Credit federal regulatory reporting process at Texas Capital, eliminating manual effort and reducing compliance risk.",
+  "metrics": [
+   {
+    "val": "100%",
+    "lbl": "Process automated"
+   },
+   {
+    "val": "Federal",
+    "lbl": "Regulatory compliance"
+   },
+   {
+    "val": "0",
+    "lbl": "Manual steps remaining"
+   }
+  ],
+  "overview": "Migrated the Credit Datamart from Azure Cloud to Snowflake and automated the SNC regulatory reporting pipeline. Also led integration of Private Wealth Credit data into the Supernova platform for unified portfolio management.",
+  "timeline": [
+   {
+    "period": "2023",
+    "phase": "Datamart migration",
+    "desc": "Migrated Credit Datamart from Azure to Snowflake, establishing clean medallion architecture."
+   },
+   {
+    "period": "2024",
+    "phase": "SNC automation",
+    "desc": "Automated SNC Federal Regulatory Report — eliminating manual quarterly reporting process."
+   },
+   {
+    "period": "2024",
+    "phase": "Supernova integration",
+    "desc": "Integrated Private Wealth Credit data into Supernova, giving Wealth Managers a unified portfolio view."
+   }
+  ],
+  "visible": true
+ },
+ {
+  "id": "virtuwill",
+  "tag": "Personal project",
+  "tagClass": "personal",
+  "title": "VirtuWill Application",
+  "desc": "This site — modular Flask SPA with a private journal, music portfolio, illustrated garden planner, and local LLaVA chat agent.",
+  "chips": [
+   "Flask",
+   "Ollama",
+   "Vanilla JS"
+  ],
+  "subtitle": "A personal digital dashboard — modular Flask SPA with a private journal, music portfolio, garden planner with satellite imagery, and locally-run LLaVA chat agent.",
+  "metrics": [
+   {
+    "val": "6",
+    "lbl": "App modules"
+   },
+   {
+    "val": "0",
+    "lbl": "npm dependencies"
+   },
+   {
+    "val": "14",
+    "lbl": "Garden beds mapped"
+   }
+  ],
+  "overview": "Built from scratch as a personal platform — zero build tooling, modular IIFE architecture, satellite+illustrated aerial garden planner with plat-calibrated bed polygons, season snapshots, and a 30-plant inventory with space-requirement circles.",
+  "timeline": [
+   {
+    "period": "Phase 1",
+    "phase": "Flask SPA scaffold",
+    "desc": "Refactored from React prototype to Flask with session-based journal auth and modular JS namespace pattern."
+   },
+   {
+    "period": "Phase 2",
+    "phase": "Garden planner",
+    "desc": "Canvas-based property map with satellite imagery, 3\" dot grid, highlighter boundary tool, and plant placement."
+   },
+   {
+    "period": "Phase 3",
+    "phase": "Chat with Will",
+    "desc": "Integrated LLaVA via Ollama with FastAPI proxy and persona grounding for an on-brand chat agent."
+   },
+   {
+    "period": "Phase 4",
+    "phase": "AI coursework",
+    "desc": "Built multi-modal conversational agent on Google Vertex AI for UTD Special Topics: Generative AI Fundamentals."
+   }
+  ],
+  "visible": true
+ },
+ {
+  "id": "drm",
+  "tag": "Nonprofit tech",
+  "tagClass": "platform",
+  "title": "AHA Donor Revenue Management",
+  "desc": "Integrated donation management systems, migrated the Direct Mail platform, and delivered digital assets for 3 national peer-to-peer campaigns at the American Heart Association.",
+  "chips": [
+   "Boomi ETL",
+   "Salesforce",
+   "Data Warehouse"
+  ],
+  "subtitle": "Integrated new donation management systems, migrated the Direct Mail platform, and delivered digital assets for 3 national peer-to-peer fundraising campaigns at American Heart Association.",
+  "metrics": [
+   {
+    "val": "3",
+    "lbl": "National campaigns"
+   },
+   {
+    "val": "1",
+    "lbl": "DMS migration"
+   },
+   {
+    "val": "1",
+    "lbl": "New virtual platform"
+   }
+  ],
+  "overview": "Led migration of the Direct Mail Donation Management System, delivered Go Red for Women / Women of Impact / Teen of Impact digital assets, and onboarded Bizzabo virtual event software with full DWH integration.",
+  "timeline": [
+   {
+    "period": "2020",
+    "phase": "DMS migration",
+    "desc": "Led migration of Direct Mail Donation Management System with zero data loss."
+   },
+   {
+    "period": "2021",
+    "phase": "Campaign delivery",
+    "desc": "Delivered digital assets for 3 national Peer-to-Peer Fundraising Campaigns."
+   },
+   {
+    "period": "2022",
+    "phase": "Virtual events",
+    "desc": "Onboarded Bizzabo and integrated campaign data into DRM application and Data Warehouse."
+   }
+  ],
+  "visible": true
+ }
+]

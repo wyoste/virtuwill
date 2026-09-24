@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS health.body_measurements (
     metric TEXT NOT NULL DEFAULT 'weight' CHECK (metric IN ('weight')),
     value NUMERIC NOT NULL CHECK (value > 0),
     unit TEXT NOT NULL DEFAULT 'lb' CHECK (unit IN ('lb', 'kg')),
+    -- The canonical unit for every calculation; value/unit keep what was entered.
+    value_lb NUMERIC GENERATED ALWAYS AS (CASE unit WHEN 'kg' THEN value / 0.45359237 ELSE value END) STORED,
     is_morning BOOLEAN,                     -- morning readings drive the trend; others are references
     note TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL CHECK (source IN ('health_tracker', 'manual')),
@@ -20,6 +22,8 @@ CREATE TABLE IF NOT EXISTS health.body_measurements (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS measurements_by_date ON health.body_measurements (metric, measured_on, measured_at);
+-- A tracker record keeps its row (and id) across saves.
+CREATE UNIQUE INDEX IF NOT EXISTS measurements_by_tracker_ref ON health.body_measurements (source_ref) WHERE source = 'health_tracker';
 
 CREATE TABLE IF NOT EXISTS health.alcohol (
     drink_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -36,6 +40,7 @@ CREATE TABLE IF NOT EXISTS health.alcohol (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS alcohol_by_date ON health.alcohol (drink_date);
+CREATE UNIQUE INDEX IF NOT EXISTS alcohol_by_tracker_ref ON health.alcohol (source_ref) WHERE source = 'health_tracker';
 
 -- Days marked "entire day logged": a missing day means unknown intake, not zero.
 CREATE TABLE IF NOT EXISTS health.daily_logs (
@@ -113,7 +118,8 @@ INSERT INTO health.goals (metric, target, unit, period, direction) VALUES
 ON CONFLICT (metric) DO NOTHING;
 
 -- ── Views ────────────────────────────────────────────────────────────────────
--- Rebuilt on every start so their columns always match this file.
+-- Weights are in pounds (value_lb). A later change to a view goes in a new
+-- schema file that drops and recreates it.
 DROP VIEW IF EXISTS health.goal_progress, health.weight_trend, health.weekly_workout_progress,
                     health.daily_activity CASCADE;
 
@@ -151,13 +157,13 @@ WITH days AS (
     SELECT measured_on AS day,
            COUNT(*) AS weigh_ins,
            COUNT(*) FILTER (WHERE is_morning) AS morning_weigh_ins,
-           (ARRAY_AGG(value ORDER BY measured_at NULLS FIRST, measurement_id))[1] AS first_weight,
-           (ARRAY_AGG(value ORDER BY measured_at DESC NULLS LAST, measurement_id DESC))[1] AS weight,
-           (ARRAY_AGG(unit ORDER BY measured_at DESC NULLS LAST, measurement_id DESC))[1] AS weight_unit,
+           (ARRAY_AGG(value_lb ORDER BY measured_at NULLS FIRST, measurement_id))[1] AS first_weight,
+           (ARRAY_AGG(value_lb ORDER BY measured_at DESC NULLS LAST, measurement_id DESC))[1] AS weight,
+           'lb'::text AS weight_unit,
            (ARRAY_AGG(is_morning ORDER BY measured_at DESC NULLS LAST, measurement_id DESC))[1] AS weight_is_morning,
-           MIN(value) AS min_weight,
-           MAX(value) AS max_weight,
-           ROUND(AVG(value) FILTER (WHERE is_morning), 1) AS morning_weight
+           MIN(value_lb) AS min_weight,
+           MAX(value_lb) AS max_weight,
+           ROUND(AVG(value_lb) FILTER (WHERE is_morning), 1) AS morning_weight
     FROM health.body_measurements WHERE metric = 'weight'
     GROUP BY measured_on
 ), profile AS (

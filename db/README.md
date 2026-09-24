@@ -1,20 +1,21 @@
 # VirtuWill data model
 
-The target model for the Lakebase (PostgreSQL) database. `db/schema/*.sql` run in
-name order; each file is idempotent and safe to rerun on every start. Views are
-dropped and recreated so their columns always match the files.
+The Lakebase (PostgreSQL) data model the whole app runs on. `db/schema/*.sql` is a
+versioned sequence: each file runs once, in name order, recorded with its checksum in
+`virtuwill.schema_versions`. Never edit a file that has run; put a change (a new
+column, a rebuilt view) in a new, higher-numbered file.
 
 A browsable version with the semantic model, diagrams and every table is in
 [`docs/lakebase-model.html`](../docs/lakebase-model.html) (open it in a browser).
 
-This is the model only. The application still reads and writes through
-`storage.py` / `lakebase_model.py`; moving the app onto these schemas is the next step.
+The application reads and writes these tables through the `virtuwill/` package, one
+module per schema. `virtuwill/migrate.py` moved the earlier Lakebase layout in once.
 
 ## Schemas
 
 | Schema | Holds | Visibility |
 |---|---|---|
-| `core` | `calendar` (conformed date dimension, 2015–2040), `media_assets` (every file), `daily_summary` view | shared |
+| `core` | `calendar` (conformed date dimension, 1900–2100), `media_assets` (every file), `daily_summary` view | shared |
 | `journal` | `entries` (one per date), `entry_tags`, `habits`, `habit_logs`, `meals`, `workout_types`, `workouts` | private |
 | `health` | `body_measurements` (many weigh-ins per date), `alcohol`, `daily_logs`, `foods`, `recipes`, `recipe_ingredients`, `profile`, `profile_history`, `goals` + 4 views | private |
 | `finance` | `account_types`, `accounts`, `account_aliases`, `import_profiles`, `import_batches`, `source_documents`, `statements`, `categories`, `movement_types`, `transactions`, `transaction_sources`, `receipts`, `item_categories`, `item_catalog`, `receipt_items`, `receipt_payments`, `shopping_list`, `budgets`, `budget_categories`, `recurring_expenses`, `pay_profile`, `paycheck_deposits`, `other_incomes`, `allocations`, `savings_goals`, `balance_snapshots`, `retirement_plan` + 18 views | private |
@@ -22,7 +23,7 @@ This is the model only. The application still reads and writes through
 | `music` | `albums`, `songs`, `song_sections`, `recordings`, `gallery_photos` + `public_catalog` view | published rows public |
 | `content` | `blog_posts`, `portfolio_projects`, `project_metrics`, `project_timeline`, `site_text`, `messages` + `public_posts` view | posts/projects public; messages private |
 | `travel` | `places`, `place_photos`, `visited_regions` | public read |
-| `virtuwill` | `migrations`, `trackers` (Finance/Health tracker documents), `sync_reports` | private |
+| `virtuwill` | `schema_versions`, `migrations`, `trackers` (Finance/Health tracker documents), `sync_reports` | private |
 
 ## Conventions
 
@@ -30,11 +31,15 @@ This is the model only. The application still reads and writes through
   The calendar is the conformed dimension every domain joins on.
 - **Money** is `NUMERIC(12,2)` US dollars. Transaction amounts keep the bank's sign:
   positive is money leaving the account, negative is money coming in.
-- **Sources**: rows copied from an embedded tracker carry `source` and `source_ref`
-  (the tracker's own id) and keep the original record in `details`. Each writer
-  replaces only its own rows.
+- **Sources**: rows copied from an embedded tracker carry `source` and a stable
+  `source_ref` (unique per source) and keep the original record in `details`. A save
+  upserts by `source_ref` and removes only that source's rows that disappeared, so
+  unchanged records keep their ids. Each writer touches only its own rows.
+- **Units**: weights keep what was entered (`value`, `unit`) and every calculation uses
+  the generated `value_lb`.
 - **Unknown is not zero**: missing calories, minutes, prices or balances stay `NULL`.
 - **Single owner**: there is no `user_id`; every row belongs to the site owner.
+- **Settings**: `core.settings` holds owner switches such as `site.chat_enabled`.
 
 ## Statements, exports and receipts
 

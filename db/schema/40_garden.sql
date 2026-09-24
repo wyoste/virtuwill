@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS garden.plantings (
     grid_j INTEGER NOT NULL,
     health SMALLINT NOT NULL DEFAULT 2 REFERENCES garden.health_levels,
     notes TEXT NOT NULL DEFAULT '',
+    radius_ft NUMERIC CHECK (radius_ft IS NULL OR radius_ft > 0),   -- overrides the species' mature size
+    age_years NUMERIC CHECK (age_years IS NULL OR age_years >= 0),
     planted_on DATE REFERENCES core.calendar (day),
     removed_on DATE REFERENCES core.calendar (day)
 );

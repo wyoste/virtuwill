@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS music.songs (
     musical_key TEXT NOT NULL DEFAULT '',
     bpm NUMERIC CHECK (bpm IS NULL OR bpm > 0),
     published BOOLEAN NOT NULL DEFAULT false,
+    position INTEGER,                       -- the owner's order in the catalog
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

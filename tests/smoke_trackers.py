@@ -1,6 +1,8 @@
 """Optional browser check with user-supplied HTML; inputs never enter Git.
 
+Needs a scratch PostgreSQL database (its app schemas are reset):
 pip install playwright
+VIRTUWILL_TEST_PG="host=localhost dbname=scratch user=app password=pw sslmode=disable" \
 python tests/smoke_trackers.py --finance /private/Yoste-Finance.html \
     --health /private/Yoste-Health.html --chromium /path/to/chromium
 """
@@ -17,9 +19,16 @@ from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.support import fresh_database
+fresh_database()
 from app import app
 import config
-from trackers import TrackerStore
+from virtuwill import trackers
+
+
+class _Store:
+    install = staticmethod(trackers.install)
+    get = staticmethod(trackers.get)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--finance', required=True, type=Path)
@@ -29,8 +38,8 @@ args = parser.parse_args()
 logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
 with tempfile.TemporaryDirectory() as folder, sync_playwright() as p:
-    app.config.update(SECRET_KEY=secrets.token_hex(32), TRACKER_AUTH_CONFIGURED=True, TRACKER_DATA_DIR=folder)
-    store = TrackerStore(folder)
+    app.config.update(SECRET_KEY=secrets.token_hex(32), TRACKER_AUTH_CONFIGURED=True)
+    store = _Store()
     store.install('finance', args.finance.read_text())
     store.install('health', args.health.read_text())
     server = make_server('127.0.0.1', 0, app, threaded=True)

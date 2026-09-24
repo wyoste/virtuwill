@@ -64,7 +64,8 @@
   <script>
     const FLASK_SESSION = {
       journalUnlocked: {{ 'true' if journal_unlocked else 'false' }},
-      adminLoggedIn: {{ 'true' if admin_logged_in else 'false' }}
+      adminLoggedIn: {{ 'true' if admin_logged_in else 'false' }},
+      chatEnabled: {{ 'true' if chat_enabled else 'false' }}
     };
   </script>
 </head>
@@ -146,7 +147,7 @@
 </div>
 
 <!-- Admin mode banner — shown when logged in as admin -->
-<div id="admin-banner" style="display:none;height:3px;background:linear-gradient(90deg,#1D9E75,#109ACC,#1D9E75);background-size:200%;animation:adminBannerShimmer 3s linear infinite;position:relative;z-index:50"></div>
+<div id="admin-banner-strip" style="display:none;height:3px;background:linear-gradient(90deg,#1D9E75,#109ACC,#1D9E75);background-size:200%;animation:adminBannerShimmer 3s linear infinite;position:relative;z-index:50"></div>
 <div id="admin-bar" style="display:none;background:#0a1f14;border-bottom:0.5px solid rgba(29,158,117,.25);padding:5px 20px;display:none;align-items:center;gap:10px;font-size:11px;color:#5DCAA5;z-index:49;position:relative">
   <span style="font-size:14px">&#9881;</span>
   <span style="font-weight:600">Admin mode</span>
@@ -178,6 +179,7 @@
   {% include 'modals/shared.html' %}
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='js/core.js') }}"></script>
 <script src="{{ url_for('static', filename='js/store.js') }}"></script>
 <script src="{{ url_for('static', filename='js/travel.js') }}"></script>
 <script src="{{ url_for('static', filename='js/viewer.js') }}"></script>

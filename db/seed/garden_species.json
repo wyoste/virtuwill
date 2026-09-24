@@ -1,0 +1,212 @@
+[
+ {
+  "species_id": "hybrid-tea-rose",
+  "name": "Hybrid Tea Rose",
+  "category": "Rose",
+  "mature_diameter_ft": 4,
+  "emoji": "🌹"
+ },
+ {
+  "species_id": "floribunda-rose",
+  "name": "Floribunda Rose",
+  "category": "Rose",
+  "mature_diameter_ft": 4,
+  "emoji": "🌹"
+ },
+ {
+  "species_id": "climbing-rose",
+  "name": "Climbing Rose",
+  "category": "Rose",
+  "mature_diameter_ft": 8,
+  "emoji": "🌹"
+ },
+ {
+  "species_id": "salvia-farinacea",
+  "name": "Salvia Farinacea",
+  "category": "Perennial",
+  "mature_diameter_ft": 2,
+  "emoji": "💜"
+ },
+ {
+  "species_id": "rudbeckia",
+  "name": "Rudbeckia",
+  "category": "Perennial",
+  "mature_diameter_ft": 3,
+  "emoji": "🌻"
+ },
+ {
+  "species_id": "shasta-daisy",
+  "name": "Shasta Daisy",
+  "category": "Perennial",
+  "mature_diameter_ft": 2,
+  "emoji": "🌼"
+ },
+ {
+  "species_id": "dahlia-baja-aztec",
+  "name": "Dahlia Baja Aztec",
+  "category": "Bulb",
+  "mature_diameter_ft": 2.5,
+  "emoji": "🌸"
+ },
+ {
+  "species_id": "day-lily",
+  "name": "Day Lily",
+  "category": "Perennial",
+  "mature_diameter_ft": 2,
+  "emoji": "🌷"
+ },
+ {
+  "species_id": "cone-flower",
+  "name": "Cone Flower",
+  "category": "Perennial",
+  "mature_diameter_ft": 2,
+  "emoji": "🌺"
+ },
+ {
+  "species_id": "marigold",
+  "name": "Marigold",
+  "category": "Annual",
+  "mature_diameter_ft": 1,
+  "emoji": "🟡"
+ },
+ {
+  "species_id": "hollyhock",
+  "name": "Holly Hock",
+  "category": "Biennial",
+  "mature_diameter_ft": 2,
+  "emoji": "🌸"
+ },
+ {
+  "species_id": "canna",
+  "name": "Canna",
+  "category": "Tropical",
+  "mature_diameter_ft": 3,
+  "emoji": "🌺"
+ },
+ {
+  "species_id": "columbine",
+  "name": "Columbine",
+  "category": "Perennial",
+  "mature_diameter_ft": 1.5,
+  "emoji": "🔵"
+ },
+ {
+  "species_id": "daffodil",
+  "name": "Daffodil",
+  "category": "Bulb",
+  "mature_diameter_ft": 0.5,
+  "emoji": "🌼"
+ },
+ {
+  "species_id": "dutch-iris",
+  "name": "Dutch Iris",
+  "category": "Bulb",
+  "mature_diameter_ft": 0.5,
+  "emoji": "💜"
+ },
+ {
+  "species_id": "gladiolus",
+  "name": "Gladiolus",
+  "category": "Bulb",
+  "mature_diameter_ft": 0.5,
+  "emoji": "🌸"
+ },
+ {
+  "species_id": "mammoth-sunflower",
+  "name": "Mammoth Sunflower",
+  "category": "Annual",
+  "mature_diameter_ft": 2,
+  "emoji": "🌻"
+ },
+ {
+  "species_id": "teddybear-sunflower",
+  "name": "Teddybear Sunflower",
+  "category": "Annual",
+  "mature_diameter_ft": 1.5,
+  "emoji": "🌻"
+ },
+ {
+  "species_id": "august-beauty-gardenia",
+  "name": "August Beauty Gardenia",
+  "category": "Shrub",
+  "mature_diameter_ft": 5,
+  "emoji": "⚪"
+ },
+ {
+  "species_id": "petunia",
+  "name": "Petunia",
+  "category": "Annual",
+  "mature_diameter_ft": 1,
+  "emoji": "🌸"
+ },
+ {
+  "species_id": "rocket-larkspur",
+  "name": "Rocket Larkspur",
+  "category": "Annual",
+  "mature_diameter_ft": 1,
+  "emoji": "💙"
+ },
+ {
+  "species_id": "zinnia",
+  "name": "Zinnia",
+  "category": "Annual",
+  "mature_diameter_ft": 1,
+  "emoji": "🌸"
+ },
+ {
+  "species_id": "lantana",
+  "name": "Lantana",
+  "category": "Perennial",
+  "mature_diameter_ft": 4,
+  "emoji": "🟠"
+ },
+ {
+  "species_id": "asiatic-lily",
+  "name": "Asiatic Lily",
+  "category": "Bulb",
+  "mature_diameter_ft": 1,
+  "emoji": "🌷"
+ },
+ {
+  "species_id": "morning-glory",
+  "name": "Morning Glory",
+  "category": "Annual Vine",
+  "mature_diameter_ft": 3,
+  "emoji": "💙"
+ },
+ {
+  "species_id": "blanket-flower",
+  "name": "Blanket Flower",
+  "category": "Perennial",
+  "mature_diameter_ft": 2,
+  "emoji": "🌺"
+ },
+ {
+  "species_id": "milkweed",
+  "name": "MilkWeed",
+  "category": "Perennial",
+  "mature_diameter_ft": 2,
+  "emoji": "🟣"
+ },
+ {
+  "species_id": "plumeria",
+  "name": "Plumeria",
+  "category": "Tropical",
+  "mature_diameter_ft": 6,
+  "emoji": "🌸"
+ },
+ {
+  "species_id": "hydrangea",
+  "name": "Hydrangea",
+  "category": "Shrub",
+  "mature_diameter_ft": 6,
+  "emoji": "💠"
+ },
+ {
+  "species_id": "hibiscus",
+  "name": "Hybiscus",
+  "category": "Shrub",
+  "mature_diameter_ft": 6,
+  "emoji": "🌺"
+ }
+]

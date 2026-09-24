@@ -207,9 +207,9 @@ window.VW.HealthDashboard = (() => {
     if (sync.error) return el('div', 'hd-note tracker-error', 'Health tracker sync failed: ' + sync.error + '. The tracker itself still saved.');
     const skipped = Object.entries(sync.skipped || {}).map(([k, n]) => `${n} ${k}`).join(', ');
     return el('div', 'hd-note',
-      `Health tracker sync: ${sync.workouts} workouts, ${sync.meals} meals, ${sync.weights} weigh-ins, ` +
+      `Health tracker sync: ${sync.workouts ?? 0} workouts, ${sync.meals ?? 0} meals, ${sync['weigh-ins'] ?? 0} weigh-ins, ` +
       `${sync.drinks ?? 0} drinks, ${sync.foods ?? 0} foods` +
-      (skipped ? ` · skipped (no date): ${skipped}` : '') +
+      (skipped ? ` · skipped (missing or invalid date/value): ${skipped}` : '') +
       ` · ${new Date(sync.syncedAt).toLocaleString()}`);
   }
 
