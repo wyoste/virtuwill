@@ -10,7 +10,7 @@ const NAV = [
   { href: '/app/money', label: 'Money', icon: '$', children: [
     ['/app/money', 'Overview'], ['/app/money/transactions', 'Transactions'], ['/app/money/receipts', 'Receipts'],
     ['/app/money/accounts', 'Accounts & balances'], ['/app/money/budgets', 'Budgets & bills'],
-    ['/app/money/goals', 'Goals & retirement'], ['/app/money/editor', 'Finance tracker']] },
+    ['/app/money/goals', 'Goals & retirement'], ['/app/money/imports', 'Imports'], ['/app/money/editor', 'Finance tracker']] },
   { href: '/app/site', label: 'Site', icon: '◎', children: [
     ['/app/site/music', 'Music'], ['/app/site/projects', 'Projects'], ['/app/site/writing', 'Writing'],
     ['/app/site/garden', 'Garden'], ['/app/site/travel', 'Travel'], ['/app/site/messages', 'Messages']] },

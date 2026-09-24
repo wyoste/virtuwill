@@ -1,23 +1,24 @@
-// Money: Overview · Transactions · Receipts · Accounts · Budgets · Goals, plus
-// the Finance tracker, which still owns and edits these records until the
-// import screens replace it.
-import { h, api, fmt, card, stat, pageHead, tabs, empty } from '../lib.js';
+// Money: Overview · Transactions · Receipts · Accounts · Budgets · Goals ·
+// Imports, plus the Finance tracker, which still edits budgets, goals and the
+// pay plan. Bank activity, receipts and pay statements load through Imports.
+import { h, api, fmt, card, stat, pageHead, tabs, empty, run, toast } from '../lib.js';
 import { setDirty } from '../main.js';
+import { balanceList, balanceTotals, spendStrip, spendSummary } from '../moneyparts.js';
 
 const TABS = [['/app/money', 'Overview'], ['/app/money/transactions', 'Transactions'], ['/app/money/receipts', 'Receipts'],
               ['/app/money/accounts', 'Accounts & balances'], ['/app/money/budgets', 'Budgets & bills'],
-              ['/app/money/goals', 'Goals & retirement'], ['/app/money/editor', 'Finance tracker']];
+              ['/app/money/goals', 'Goals & retirement'], ['/app/money/imports', 'Imports'], ['/app/money/editor', 'Finance tracker']];
 
 export async function render(view, ctx) {
   const tab = ctx.path.split('/')[3] || 'overview';
   view.append(pageHead('Money', {
-    overview: 'Balances, this month’s budgets and goals', transactions: 'Bank activity with receipt lines and sources',
+    overview: 'Balances, spending, pay and goals', imports: 'Load statements, pay stubs and receipt exports', transactions: 'Bank activity with receipt lines and sources',
     receipts: 'Receipts and the bank charge each one explains', accounts: 'Every account and its balance over time',
     budgets: 'Budgets against spending, and recurring bills', goals: 'Savings goals, retirement and the pay plan',
     editor: 'Where these records are edited for now' }[tab]), tabs(TABS, ctx.path));
-  if (tab !== 'editor') view.append(h('p', { class: 'ws-note' },
-    'Read-only here: the Finance tracker still owns these records. Edit them in ', h('a', { href: '/app/money/editor' }, 'Finance tracker'), '.'));
-  const screens = { overview, transactions, receipts, accounts, budgets, goals, editor };
+  if (['budgets', 'goals'].includes(tab)) view.append(h('p', { class: 'ws-note' },
+    'Budgets, goals and the pay plan are edited in the ', h('a', { href: '/app/money/editor' }, 'Finance tracker'), '.'));
+  const screens = { overview, transactions, receipts, accounts, budgets, goals, imports, editor };
   return (screens[tab] || overview)(view, ctx);
 }
 
@@ -33,36 +34,122 @@ function bar(value, max, tone) {
 }
 
 // ── Overview ─────────────────────────────────────────────────────────────────
-async function overview(view) {
+// Full analysis by default; "Goals only" shows savings goals and retirement.
+// The choice is a site setting, so it sticks across devices.
+async function overview(view, ctx) {
   const d = await api('/api/v1/money/overview');
-  const assets = d.balances.filter(b => !b.is_liability).reduce((s, b) => s + (b.balance || 0), 0);
-  const owed = d.balances.filter(b => b.is_liability).reduce((s, b) => s + (b.balance || 0), 0);
+  const reload = () => { view.replaceChildren(); return render(view, ctx); };
+  const mode = d.mode === 'goals' ? 'goals' : 'full';
+  const toggle = h('div', { class: 'ws-seg', role: 'group', 'aria-label': 'Overview shows' },
+    [['full', 'Full analysis'], ['goals', 'Goals only']].map(([value, label]) => h('button', {
+      type: 'button', 'aria-pressed': String(mode === value),
+      onclick: e => mode !== value && run(e.currentTarget, async () => {
+        await api('/api/settings', { method: 'PUT', body: { 'money.overview_mode': value } });
+        await reload();
+      }) }, label)));
+  view.append(h('div', { class: 'ws-filters', style: { justifyContent: 'space-between', alignItems: 'center' } },
+    toggle, h('span', { class: 'ws-note' }, d.through ? `Bank data through ${fmt.day(d.through)}` : 'No bank data yet — load some in Imports')));
+
+  if (mode === 'goals') return goalsView(view, d);
+
+  const totals = balanceTotals(d.balances);
   const spent = d.budgets.reduce((s, b) => s + (b.actual || 0), 0);
   const budgeted = d.budgets.reduce((s, b) => s + (b.budget || 0), 0);
+  const days = new Date(d.spend.days.at(-1)?.day.slice(0, 4), Number(d.spend.days.at(-1)?.day.slice(5, 7)), 0).getDate() || 30;
   view.append(
     h('div', { class: 'ws-stats' },
-      stat('Assets', fmt.money(assets), `${d.balances.filter(b => !b.is_liability).length} accounts, latest known balances`),
-      stat('Owed', fmt.money(owed), 'cards and loans'),
-      stat(`Spent in ${fmt.month(d.month)}`, fmt.money(spent), `of ${fmt.money(budgeted)} budgeted`, spent > budgeted && budgeted ? 'bad' : null),
-      stat('Bank data through', d.through ? fmt.day(d.through) : '—', 'the latest transaction loaded')),
+      stat('Net worth', fmt.money(totals.net), totals.stale ? `${totals.stale} balance${totals.stale === 1 ? ' is' : 's are'} out of date or missing` : 'cash and savings less what’s owed', totals.net < 0 ? 'bad' : null),
+      stat('Cash & savings', fmt.money(totals.cash), `${d.balances.filter(b => !b.is_liability).length} accounts`),
+      stat('Owed', fmt.money(totals.owed), 'cards and loans'),
+      stat(`Spent in ${fmt.month(d.month)}`, fmt.money(spent), budgeted ? `of ${fmt.money(budgeted)} budgeted` : 'no budgets set',
+           budgeted && spent > budgeted ? 'bad' : null)),
+    h('div', { class: 'ws-grid two' },
+      card('Balances', balanceList(d.balances, reload)),
+      card(h('span', {}, 'Daily spending', h('span', { class: 'ws-note' }, 'last 14 days')),
+        spendSummary(d.spend),
+        spendStrip(d.spend.days, { selected: d.spend.days.at(-1)?.day, budgetPerDay: d.spend.month_budget ? d.spend.month_budget / days : 0 }))),
     h('div', { class: 'ws-grid two' },
       card(`Budgets · ${fmt.month(d.month)}`, d.budgets.length ? h('ul', { class: 'ws-list' }, d.budgets.map(b => h('li', { class: 'ws-row', style: { display: 'block' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px' } }, h('strong', {}, b.name),
-          h('span', { class: 'ws-amount' }, `${fmt.money(b.actual || 0)} / ${fmt.money(b.budget)}`)),
-        bar(b.actual || 0, b.budget || 0, b.over_budget ? 'over' : null)))) : empty('No budgets yet.')),
-      card('Balances', h('ul', { class: 'ws-list' }, d.balances.map(b => h('li', { class: 'ws-row' },
-        h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, b.name),
-          h('div', { class: 'ws-row-meta' }, [b.account_type.replace('_', ' '), b.as_of ? 'as of ' + fmt.day(b.as_of) : null, b.balance_kind].filter(Boolean).join(' · '))),
-        h('span', { class: 'ws-amount' }, fmt.money(b.balance))))))),
+          h('span', { class: 'ws-amount' }, fmt.money(b.actual || 0) + (b.budget ? ' / ' + fmt.money(b.budget) : ''))),
+        b.budget ? bar(b.actual || 0, b.budget, b.over_budget ? 'over' : null) : h('div', { class: 'ws-row-meta' }, 'no amount set')))) : empty('No budgets yet.')),
+      card(`Spending by category · ${fmt.month(d.month)}`, hbars(d.spendingByCategory.map(s => [s.category, s.amount, `${s.transactions} transactions`]))
+        || empty('No spending this month.'))),
     h('div', { class: 'ws-grid two' },
-      card('Savings goals', d.goals.length ? h('ul', { class: 'ws-list' }, d.goals.map(g => h('li', { class: 'ws-row', style: { display: 'block' } },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px' } }, h('strong', {}, g.name),
-          h('span', { class: 'ws-amount' }, `${fmt.money(g.balance)} / ${fmt.money(g.target)}`)),
-        bar(g.balance || 0, g.target || 0, 'good'),
-        h('div', { class: 'ws-row-meta' }, [g.due_on ? 'by ' + fmt.day(g.due_on) : null, g.contribution_per_check ? fmt.money(g.contribution_per_check) + ' per paycheck' : null].filter(Boolean).join(' · '))))) : empty('No savings goals.')),
-      card(`Spending by category · ${fmt.month(d.month)}`, d.spendingByCategory.length ? h('table', { class: 'ws-table' },
-        h('tbody', {}, d.spendingByCategory.map(s => h('tr', {}, h('td', {}, s.category), h('td', { class: 'ws-note' }, s.category_group || ''),
-          h('td', { class: 'num' }, fmt.money(s.amount)))))) : empty('No spending this month.'))));
+      card('Spending by month', hbars([...d.monthlySpending].reverse().map(m => [fmt.month(m.month_start), m.amount])) || empty('No spending loaded.')),
+      card(h('span', {}, 'Top merchants', h('span', { class: 'ws-note' }, 'last 90 days')),
+        hbars(d.topMerchants.map(m => [m.merchant || '—', m.amount, `${m.transactions} transactions`])) || empty('No spending in the last 90 days.'))),
+    h('div', { class: 'ws-grid two' },
+      card('Pay', payCard(d)),
+      card('Cash flow by pay period', d.cashFlow.length ? h('div', { class: 'ws-table-wrap' }, h('table', { class: 'ws-table' },
+        h('thead', {}, h('tr', {}, h('th', {}, 'Period'), h('th', { class: 'num' }, 'In'), h('th', { class: 'num' }, 'Spent'), h('th', { class: 'num' }, 'Card payments'), h('th', { class: 'num' }, 'Left'))),
+        h('tbody', {}, d.cashFlow.map(c => {
+          const left = (c.income_received || 0) - (c.spending || 0);
+          return h('tr', {}, h('td', {}, `${fmt.day(c.period_start)} – ${fmt.day(c.period_end)}`),
+            h('td', { class: 'num' }, fmt.money(c.income_received)), h('td', { class: 'num' }, fmt.money(c.spending)),
+            h('td', { class: 'num' }, fmt.money(c.card_payments)), h('td', { class: 'num' }, h('span', { class: left < 0 ? 'bad' : '' }, fmt.money(left))));
+        })))) : empty('No pay periods yet.'))),
+    h('div', { class: 'ws-grid two' },
+      card(h('span', {}, 'Groceries by item category', h('span', { class: 'ws-note' }, 'last 6 months, from receipt lines')),
+        hbars(d.groceries.map(g => [g.item_category || 'Review', g.amount, `${fmt.num(g.lines)} lines`])) || empty('No receipt lines loaded.')),
+      card('Savings goals', goalList(d.goals))));
+  view.append(retirementStats(d.retirement));
+}
+
+function goalsView(view, d) {
+  const saved = d.goals.reduce((s, g) => s + (g.balance || 0), 0);
+  const target = d.goals.reduce((s, g) => s + (g.target || 0), 0);
+  view.append(
+    h('div', { class: 'ws-stats' },
+      stat('Saved toward goals', fmt.money(saved), (target ? `of ${fmt.money(target)} · ` : '') + `${d.goals.length} goals`),
+      stat('Per paycheck', fmt.money(d.goals.reduce((s, g) => s + (g.contribution_per_check || 0), 0)), 'set aside for goals')),
+    card('Savings goals', goalList(d.goals)),
+    retirementStats(d.retirement));
+}
+
+function goalList(goals) {
+  return goals.length ? h('ul', { class: 'ws-list' }, goals.map(g => h('li', { class: 'ws-row', style: { display: 'block' } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px' } }, h('strong', {}, g.name),
+      h('span', { class: 'ws-amount' }, fmt.money(g.balance ?? 0) + (g.target ? ' / ' + fmt.money(g.target) : ''))),
+    g.target ? bar(g.balance || 0, g.target, 'good') : null,
+    h('div', { class: 'ws-row-meta' }, [g.target ? fmt.pct(g.pct_of_target) : 'no target set', g.due_on ? 'by ' + fmt.day(g.due_on) : null,
+      g.contribution_per_check ? fmt.money(g.contribution_per_check) + ' per paycheck' : null].filter(Boolean).join(' · ')))))
+    : empty('No savings goals.');
+}
+
+function retirementStats(r = {}) {
+  if (r.total_balance == null && r.deferral_limit == null) return null;
+  return h('div', { class: 'ws-stats' },
+    stat('Retirement balance', fmt.money(r.total_balance), r.balances_as_of ? 'as of ' + fmt.day(r.balances_as_of) : ''),
+    stat('401(k) this year', fmt.money(r.employee_ytd), `you · ${fmt.money(r.employer_ytd)} employer match`),
+    stat('401(k) room left', fmt.money(r.deferral_room), `limit ${fmt.money(r.deferral_limit)} · ${fmt.money(r.projected_remaining_deferrals)} more on plan`),
+    stat('IRA', fmt.money(r.ira_actual), `of ${fmt.money(r.ira_limit)} · ${fmt.money(r.ira_per_check)} per check`));
+}
+
+function payCard(d) {
+  const p = d.lastPaycheck;
+  if (!p?.paycheck_id) return empty('No pay statements loaded. Import one in Imports.');
+  return h('div', {},
+    h('div', { class: 'ws-note', style: { marginBottom: '8px' } }, `Last paycheck ${fmt.day(p.pay_date)}${p.employer ? ' · ' + p.employer : ''}`),
+    h('div', { class: 'ws-kv' },
+      h('span', {}, 'Gross'), h('span', {}, fmt.money(p.gross)),
+      h('span', {}, 'Before-tax deductions'), h('span', {}, '−' + fmt.money(p.pre_tax)),
+      h('span', {}, 'Taxes'), h('span', {}, '−' + fmt.money(p.taxes)),
+      h('span', {}, 'After-tax deductions'), h('span', {}, '−' + fmt.money(p.post_tax)),
+      h('strong', { class: 'total' }, 'Net'), h('span', { class: 'total' }, fmt.money(p.net)),
+      ...(p.splits || []).flatMap(s => [h('span', { class: 'ws-note' }, '→ account ••' + s.account_mask), h('span', { class: 'ws-note' }, fmt.money(s.amount))])),
+    d.pay.length ? h('table', { class: 'ws-table', style: { marginTop: '12px' } },
+      h('thead', {}, h('tr', {}, h('th', {}, 'Month'), h('th', { class: 'num' }, 'Checks'), h('th', { class: 'num' }, 'Gross'), h('th', { class: 'num' }, 'Net'))),
+      h('tbody', {}, d.pay.slice(0, 6).map(m => h('tr', {}, h('td', {}, fmt.month(m.month_start)), h('td', { class: 'num' }, m.paychecks),
+        h('td', { class: 'num' }, fmt.money(m.gross)), h('td', { class: 'num' }, fmt.money(m.net)))))) : null);
+}
+
+// Horizontal bars: [[label, amount, title?]] scaled to the largest.
+function hbars(rows) {
+  if (!rows.length) return null;
+  const max = Math.max(...rows.map(r => r[1] || 0));
+  return h('div', { class: 'ws-hbars' }, rows.map(([label, value, title]) => h('div', { class: 'ws-hbar', title: title || null },
+    h('span', {}, label), bar(value || 0, max), h('span', { class: 'ws-amount' }, fmt.money(value)))));
 }
 
 // ── Transactions ─────────────────────────────────────────────────────────────
@@ -198,10 +285,132 @@ async function goals(view) {
           h('span', { class: 'ws-amount' }, fmt.money(x.amount)))))))));
 }
 
+// ── Imports ──────────────────────────────────────────────────────────────────
+// Upload what a portal exports (statement or spending-report PDFs, pay
+// statements, receipt CSVs) or a structured finance file (.finance.json or the
+// CSVs this screen downloads). Nothing is loaded until the preview is committed.
+const PARSERS = {
+  chase_spending_report: 'Card spending report', chase_card_statement: 'Card statement',
+  payroll_earning_statement: 'Pay statements', grocery_receipts_csv: 'Grocery receipts',
+  grocery_items_csv: 'Grocery receipt lines', canonical_csv: 'Structured CSV', merged: 'Several files',
+};
+
+async function imports(view, ctx) {
+  const reload = () => { view.replaceChildren(); return render(view, ctx); };
+  const input = h('input', { type: 'file', multiple: true, accept: '.pdf,.csv,.json' });
+  const chosen = h('p', { class: 'ws-note' }, 'No files chosen');
+  const picked = () => [...input.files];
+  input.onchange = () => { chosen.textContent = picked().map(f => f.name).join(', ') || 'No files chosen'; };
+  const drop = h('label', { class: 'ws-drop' }, input,
+    h('p', { style: { margin: '0 0 6px', fontWeight: 600 } }, 'Drop files here, or click to choose'),
+    h('p', { class: 'ws-note' }, 'PDF statements and pay stubs, receipt CSVs, or a structured .finance.json / CSV. Receipts and their line items can go together.'),
+    chosen);
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); input.files = e.dataTransfer.files; input.onchange(); });
+  const form = () => {
+    if (!picked().length) throw new Error('Choose one or more files first.');
+    const f = new FormData();
+    picked().forEach(file => f.append('files', file));
+    return f;
+  };
+  const result = h('div', {});
+  view.append(
+    card('Load files',
+      drop,
+      h('div', { class: 'ws-filters', style: { marginTop: '12px' } },
+        h('button', { class: 'btn primary', onclick: e => run(e.currentTarget, async () => {
+          const staged = await api('/api/v1/money/imports', { method: 'POST', form: form() });
+          result.replaceChildren(importCard(staged, reload, true));
+          result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }) }, 'Preview import'),
+        h('button', { class: 'btn', onclick: e => run(e.currentTarget, () => download('/api/v1/money/extract', form())) }, 'Convert to JSON'),
+        h('button', { class: 'btn', onclick: e => run(e.currentTarget, () => download('/api/v1/money/extract?format=csv', form())) }, 'Convert to CSV')),
+      h('p', { class: 'ws-note', style: { marginTop: '8px' } },
+        'Convert only turns the files into structured data to keep or edit; nothing is loaded. ',
+        'The same conversion runs from the command line: scripts/extract_finance.py, then scripts/load_finance.py.')),
+    result);
+  const history = await api('/api/v1/money/imports');
+  view.append(card('Recent imports', history.length ? h('div', {}, history.map(i => importCard(i, reload, false))) : empty('Nothing imported yet.')));
+}
+
+async function download(url, form) {
+  const response = await fetch(url, { method: 'POST', body: form });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `Conversion failed (${response.status})`);
+  const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || 'finance.json';
+  const href = URL.createObjectURL(await response.blob());
+  h('a', { href, download: name }).click();
+  setTimeout(() => URL.revokeObjectURL(href), 10000);
+}
+
+const STATUS = { staged: ['info', 'ready to commit'], committed: ['good', 'loaded'], discarded: ['', 'discarded'] };
+
+function importCard(i, reload, open) {
+  const p = i.preview || {};
+  const doc = p.document || {};
+  const c = p.counts || {};
+  const tx = c.transactions || {};
+  const summary = [PARSERS[i.parser] || i.parser, p.range ? `${fmt.day(p.range[0])} – ${fmt.day(p.range[1])}` : null,
+                   tx.new + tx.seen + tx.taken_over ? `${tx.new + tx.seen + tx.taken_over} transactions` : null,
+                   c.paychecks && (c.paychecks.new + c.paychecks.seen) ? `${c.paychecks.new + c.paychecks.seen} paychecks` : null,
+                   c.receipts && (c.receipts.new + c.receipts.seen + c.receipts.taken_over) ? `${c.receipts.new + c.receipts.seen + c.receipts.taken_over} receipts` : null]
+    .filter(Boolean).join(' · ');
+  const checks = Object.entries(p.checks || {}).filter(([, v]) => v && typeof v === 'object' && 'ok' in v);
+  const failed = checks.filter(([, v]) => !v.ok);
+  const actions = h('div', { class: 'ws-filters', style: { marginTop: '10px' } },
+    i.status === 'staged' ? h('button', { class: 'btn primary', onclick: e => run(e.currentTarget, async () => {
+      const done = await api(`/api/v1/money/imports/${i.import_id}/commit`, { method: 'POST' });
+      toast(done.report?.skipped || 'Loaded into Money.');
+      await reload();
+    }) }, 'Commit') : null,
+    i.status === 'staged' ? h('button', { class: 'btn', onclick: e => run(e.currentTarget, async () => {
+      await api(`/api/v1/money/imports/${i.import_id}`, { method: 'DELETE' });
+      await reload();
+    }) }, 'Discard') : null,
+    h('a', { class: 'btn', href: `/api/v1/money/imports/${i.import_id}/bundle` }, 'Download JSON'),
+    h('a', { class: 'btn', href: `/api/v1/money/imports/${i.import_id}/bundle?format=csv` }, 'Download CSV'));
+  const row = (label, counts) => counts && h('div', {}, h('strong', {}, label),
+    [['new', 'new'], ['taken_over', 'replace tracker rows'], ['seen', 'already loaded']]
+      .filter(([k]) => counts[k]).map(([k, t]) => h('div', {}, `${fmt.num(counts[k])} ${t}`)),
+    !Object.values(counts).some(Boolean) ? h('div', { class: 'ws-note' }, 'none') : null);
+  const r = i.report;
+  return h('details', { class: 'ws-expand', open: open || null },
+    h('summary', { class: 'ws-row' },
+      h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, i.filename),
+        h('div', { class: 'ws-row-meta' }, summary || 'no records found')),
+      h('div', { class: 'ws-row-end' },
+        failed.length ? h('span', { class: 'ws-chip bad' }, `${failed.length} totals off`) : checks.length ? h('span', { class: 'ws-chip good' }, 'totals check') : null,
+        h('span', { class: 'ws-chip ' + (STATUS[i.status]?.[0] || '') }, STATUS[i.status]?.[1] || i.status))),
+    h('div', { class: 'ws-lines', style: { display: 'block' } },
+      (p.warnings || []).map(w => h('p', { class: 'ws-note warn' }, w)),
+      h('div', { class: 'ws-counts' },
+        row('Transactions', c.transactions), row('Receipts', c.receipts), row('Paychecks', c.paychecks && { new: c.paychecks.new, seen: c.paychecks.seen }),
+        c.statements || c.balances ? h('div', {}, h('strong', {}, 'Statements'), h('div', {}, `${c.statements || 0} statements · ${c.balances || 0} balances`)) : null),
+      (p.accounts || []).length ? h('p', { class: 'ws-note' }, 'Accounts: ' + p.accounts.map(a => `••${a.mask}${a.new ? ' (new)' : ''}`).join(', ')) : null,
+      checks.length ? h('p', { class: 'ws-note' + (failed.length ? ' warn' : '') },
+        failed.length ? `Totals that don’t match the document: ${failed.map(([k]) => k).slice(0, 6).join(', ')}` : `${checks.length} document totals match what was read.`) : null,
+      samples(p.samples),
+      r && !r.skipped ? h('p', { class: 'ws-note' }, `Loaded ${i.committed_at ? fmt.day(i.committed_at.slice(0, 10)) : ''}: ` + [
+        r.transactions && `${r.transactions.new} new, ${r.transactions.taken_over} replaced, ${r.transactions.seen} already there`,
+        r.receipts && (r.receipts.new + r.receipts.taken_over + r.receipts.seen) ? `${r.receipts.new + r.receipts.taken_over} receipts (${r.receipt_payments_matched} matched to a charge)` : null,
+        r.paychecks ? `${r.paychecks} paychecks` : null, r.statements ? `${r.statements} statements` : null,
+        r.accounts_created ? `${r.accounts_created} new accounts` : null].filter(Boolean).join(' · ')) : null,
+      r?.skipped ? h('p', { class: 'ws-note' }, r.skipped) : null,
+      actions));
+}
+
+function samples(s) {
+  const rows = [...(s?.new || []).map(t => ['new', t]), ...(s?.taken_over || []).map(t => ['replaces tracker', t])].slice(0, 6);
+  if (!rows.length) return null;
+  return h('table', { class: 'ws-table', style: { margin: '8px 0' } },
+    h('tbody', {}, rows.map(([kind, t]) => h('tr', {}, h('td', {}, fmt.day(t.posted_on)), h('td', {}, t.description),
+      h('td', { class: 'ws-note' }, kind), h('td', { class: 'num' }, amount(t.amount))))));
+}
+
 // ── The Finance tracker ──────────────────────────────────────────────────────
 function editor(view) {
   view.append(
-    h('p', { class: 'ws-note' }, 'Your original Finance tracker, running privately. Its saves update every Money screen. It will be retired once statements and receipts import here directly.'),
+    h('p', { class: 'ws-note' }, 'Your original Finance tracker, running privately. Its saves update every Money screen. Bank activity, receipts and pay statements now load through Imports; rows loaded there replace the tracker’s copies.'),
     h('div', { class: 'ws-tracker', id: 'adm-tracker-finance' }));
   window.VW.Trackers.open('finance');
   setDirty(() => window.VW.Trackers.isDirty());   // a save in flight must finish before leaving

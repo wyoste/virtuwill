@@ -10,7 +10,7 @@ only ever created, never overwritten, so names and types set by hand stick.
 import collections
 import hashlib
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
 
@@ -54,8 +54,8 @@ def _retirement_type(name):
 def account_for(conn, text, hint=None):
     """The account a source's name refers to, created on first sight.
 
-    Names that end in the same four digits are one account ('Chase 7237' and
-    'VISA 7237 $76.57'); every spelling is kept as an alias.
+    Names that end in the same four digits are one account ('Chase 1234' and
+    'VISA 1234 $10.00'); every spelling is kept as an alias.
     """
     text = re.sub(r"\s+\$[\d,.]+$", "", str(text or "")).strip()
     if not text:
@@ -200,6 +200,7 @@ def project(conn, state):
 
     # Bank activity: expenses and movements.
     seen = collections.Counter()
+    claimed = set()
     for t in (state.get("transactions") or []) + (state.get("movements") or []):
         day = parse_date(t.get("date"))
         amount = number(t.get("amount"))
@@ -219,6 +220,17 @@ def project(conn, state):
                           "unconfirmed" not in str(t.get("classification")).lower()))
         else:
             _category(conn, t.get("category") or "Review")
+        # The same bank transaction loaded from a statement or export belongs to that import now.
+        # Each imported row stands in for at most one tracker row (its own id first, if it took that one over).
+        imported = conn.execute("""SELECT transaction_id FROM finance.transactions WHERE source = 'import' AND account_id = %s
+                                   AND amount = %s AND posted_on BETWEEN %s AND %s AND NOT (transaction_id = ANY(%s))
+                                   ORDER BY (transaction_id = %s) DESC, abs(posted_on - %s::date) LIMIT 1""",
+                                (account_id, amount, day - timedelta(days=3), day + timedelta(days=3), list(claimed),
+                                 t["id"], day)).fetchone()
+        if imported:
+            claimed.add(imported["transaction_id"])
+            skip("transactions (already imported from a statement or export)")
+            continue
         inserted = conn.execute(
             """INSERT INTO finance.transactions (transaction_id, account_id, account_text, posted_on, description_raw, merchant,
                                                  amount, kind, category, movement_type, classification, fingerprint, source)
@@ -252,6 +264,10 @@ def project(conn, state):
         net, tax, total = number(r.get("net")) or 0, number(r.get("tax")) or 0, number(r.get("total"))
         if abs(net + tax - total) > 0.01:
             skip("receipts (totals don't add up)")
+            continue
+        if conn.execute("""SELECT 1 FROM finance.receipts WHERE source = 'import'
+                           AND (receipt_id = %s OR (purchased_on = %s AND total = %s))""", (r["id"], day, total)).fetchone():
+            skip("receipts (already imported)")
             continue
         conn.execute("""INSERT INTO finance.receipts (receipt_id, purchased_on, merchant, store_location, category, net, tax,
                                                       total, savings, payment_text, source)
@@ -394,6 +410,48 @@ def _rows(conn, sql, *args):
     return [plain(r) for r in conn.execute(sql, args)]
 
 
+def balances(conn):
+    """Every active account's latest known balance and what has posted since (finance.current_balances)."""
+    return _rows(conn, """SELECT * FROM finance.current_balances
+                          WHERE is_active AND (balance IS NOT NULL OR transactions_since > 0)
+                          ORDER BY is_liability, account_type, name""")
+
+
+def spend_summary(conn, day):
+    """Spending on a day, its week (Monday start) and month, and the last 14 days."""
+    q = lambda sql, *a: float(conn.execute(sql, a).fetchone()["s"] or 0)
+    week_start = day - timedelta(days=day.isoweekday() - 1)
+    month_start = day.replace(day=1)
+    budget = conn.execute("SELECT COALESCE(SUM(monthly_amount), 0) AS s FROM finance.effective_budgets").fetchone()["s"]
+    return {
+        "day": q("SELECT SUM(amount) AS s FROM finance.spending WHERE day = %s", day),
+        "week": q("SELECT SUM(amount) AS s FROM finance.spending WHERE day BETWEEN %s AND %s", week_start, day),
+        "month": q("SELECT SUM(amount) AS s FROM finance.spending WHERE day BETWEEN %s AND %s", month_start, day),
+        "month_budget": float(budget or 0),
+        "days": _rows(conn, """SELECT c.day, COALESCE(d.amount, 0) AS amount, COALESCE(d.transactions, 0) AS transactions
+                               FROM core.calendar c LEFT JOIN finance.daily_spending d USING (day)
+                               WHERE c.day BETWEEN %s AND %s ORDER BY c.day""", day - timedelta(days=13), day),
+    }
+
+
+@bp.route("/api/v1/money/balances", methods=["GET", "POST"])
+@admin_required
+def balances_route():
+    """GET: accounts with balances. POST {account_id, balance, as_of?}: record a balance read off a portal or app."""
+    with db.tx() as conn:
+        if request.method == "POST":
+            data = request.get_json(silent=True) or {}
+            balance, day = number(data.get("balance")), parse_date(data.get("as_of")) or datetime.now().date()
+            account = conn.execute("SELECT account_id FROM finance.accounts WHERE account_id = %s", (data.get("account_id"),)).fetchone()
+            if not account or balance is None or not in_calendar(day) or abs(balance) > 1e9:
+                return jsonify({"error": "An account, a balance and a date (YYYY-MM-DD) are required"}), 400
+            conn.execute("""INSERT INTO finance.balance_snapshots (as_of, account_id, balance, balance_kind, source)
+                            VALUES (%s, %s, %s, 'reported', 'manual')""", (day, account["account_id"], balance))
+        return jsonify({"balances": balances(conn),
+                        "accounts": _rows(conn, """SELECT account_id, name, institution, mask, account_type FROM finance.accounts
+                                                   WHERE is_active ORDER BY name""")})
+
+
 @bp.route("/api/v1/money/overview")
 @admin_required
 def money_overview():
@@ -401,17 +459,31 @@ def money_overview():
         through = conn.execute("SELECT MAX(posted_on) AS d FROM finance.transactions").fetchone()["d"]
         month = conn.execute("""SELECT COALESCE(MAX(month_start), date_trunc('month', current_date)::date) AS m
                                 FROM finance.budget_vs_actual WHERE actual IS NOT NULL AND actual <> 0""").fetchone()["m"]
+        mode = conn.execute("SELECT value FROM core.settings WHERE key = 'money.overview_mode'").fetchone()
+        today = conn.execute("SELECT current_date AS d").fetchone()["d"]
         return jsonify({
+            "mode": mode["value"] if mode else "full",
             "through": through.isoformat() if through else None,
             "month": month.isoformat(),
-            "balances": _rows(conn, """SELECT l.*, a.institution, a.is_active FROM finance.latest_balances l
-                                       JOIN finance.accounts a USING (account_id) WHERE a.is_active ORDER BY l.account_type, l.name"""),
+            "balances": balances(conn),
+            "spend": spend_summary(conn, min(today, through) if through else today),
             "budgets": _rows(conn, "SELECT * FROM finance.budget_vs_actual WHERE month_start = %s ORDER BY name", month),
             "goals": _rows(conn, "SELECT * FROM finance.goal_progress ORDER BY name"),
             "retirement": plain(conn.execute("SELECT * FROM finance.retirement_summary").fetchone() or {}),
             "cashFlow": _rows(conn, "SELECT * FROM finance.pay_period_cash_flow ORDER BY period_start DESC LIMIT 6"),
             "spendingByCategory": _rows(conn, """SELECT category, category_group, amount, transactions FROM finance.monthly_spending
                                                  WHERE month_start = %s ORDER BY amount DESC""", month),
+            "monthlySpending": _rows(conn, """SELECT month_start, SUM(amount) AS amount FROM finance.monthly_spending
+                                              GROUP BY 1 ORDER BY 1 DESC LIMIT 12"""),
+            "topMerchants": _rows(conn, """SELECT merchant, COUNT(*) AS transactions, SUM(amount) AS amount FROM finance.spending
+                                           WHERE day > current_date - 90 GROUP BY 1 ORDER BY 3 DESC LIMIT 8"""),
+            "pay": _rows(conn, "SELECT * FROM finance.monthly_pay ORDER BY month_start DESC LIMIT 12"),
+            "lastPaycheck": plain(conn.execute("""SELECT p.*, (SELECT jsonb_agg(jsonb_build_object('account_mask', s.account_mask,
+                                                          'amount', s.amount) ORDER BY s.position) FROM finance.paycheck_splits s
+                                                          WHERE s.paycheck_id = p.paycheck_id) AS splits
+                                                   FROM finance.paychecks p ORDER BY pay_date DESC LIMIT 1""").fetchone() or {}),
+            "groceries": _rows(conn, """SELECT item_category, SUM(amount) AS amount, SUM(lines) AS lines FROM finance.item_spending
+                                        WHERE month_start > current_date - 180 GROUP BY 1 ORDER BY 2 DESC LIMIT 10"""),
         })
 
 

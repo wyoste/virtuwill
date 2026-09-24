@@ -16,7 +16,9 @@ from .auth import admin_required, is_admin
 bp = Blueprint("site", __name__)
 
 # Settings the owner can change, their type, and whether visitors may read them.
-SETTINGS = {"site.chat_enabled": (bool, True)}
+SETTINGS = {"site.chat_enabled": (bool, True),
+            # Money overview: everything, or only the goals.
+            "money.overview_mode": (str, False, {"full", "goals"})}
 
 
 def settings(conn, public_only=False):
@@ -51,6 +53,8 @@ def settings_put():
             return jsonify({"error": f"Unknown setting: {key}"}), 404
         if not isinstance(value, SETTINGS[key][0]):
             return jsonify({"error": f"{key} must be a {SETTINGS[key][0].__name__}"}), 400
+        if len(SETTINGS[key]) > 2 and value not in SETTINGS[key][2]:
+            return jsonify({"error": f"{key} must be one of: {', '.join(sorted(SETTINGS[key][2]))}"}), 400
     with db.tx() as conn:
         for key, value in payload.items():
             conn.execute("""INSERT INTO core.settings (key, value) VALUES (%s, %s)

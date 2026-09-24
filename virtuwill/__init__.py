@@ -13,10 +13,10 @@ from flask import Flask, Response, abort, jsonify, redirect, render_template, re
 from werkzeug.exceptions import NotFound
 
 import config
-from . import auth, content, db, finance, garden, health, journal, media, music, site, today, trackers
+from . import auth, content, db, finance, garden, health, journal, media, money_imports, music, site, today, trackers
 
 log = logging.getLogger(__name__)
-BLUEPRINTS = (auth, journal, health, finance, garden, music, content, site, today, trackers)
+BLUEPRINTS = (auth, journal, health, finance, money_imports, garden, music, content, site, today, trackers)
 
 
 def create_app():
