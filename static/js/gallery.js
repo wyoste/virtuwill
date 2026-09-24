@@ -29,6 +29,10 @@ window.GDN.Gallery = (() => {
 
   function init() {
     _loadNote();
+    Promise.all([VW.Store?.pull(NOTE_KEY), VW.Store?.pull(HERO_KEY)]).then(([note, hero]) => {
+      if (note) _loadNote();
+      if (hero) _renderPhilosophy();
+    });
     _loadGardenData().then(() => _loadPhotos()).then(() => {
       _renderGallery();
       _renderPhilosophy();
@@ -69,6 +73,7 @@ window.GDN.Gallery = (() => {
     const val = document.getElementById('gal-quote-input')?.value?.trim();
     if (val) {
       localStorage.setItem(NOTE_KEY, val);
+      VW.Store?.push(NOTE_KEY);
       const el = document.getElementById('gal-quote-text');
       if (el) el.textContent = val;
     }
@@ -249,6 +254,7 @@ window.GDN.Gallery = (() => {
     const val = document.getElementById('gdn-hero-input')?.value?.trim();
     if (val) {
       localStorage.setItem(HERO_KEY, val);
+      VW.Store?.push(HERO_KEY);
       const el = document.getElementById('gdn-hero-text');
       if (el) el.textContent = val;
     }

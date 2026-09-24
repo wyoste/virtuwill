@@ -5,9 +5,9 @@ Single-page application served via templates/index.html.
 All page routing and UI logic lives in the frontend JS modules.
 Flask provides JSON API endpoints only.
 
-Data fallback hierarchy:
-  1. data/journal_entries.json  (persisted user data — auto-created on first write)
-  2. mock_data/journal_entries.json  (bundled sample entries — no config needed)
+Persistence goes through storage.py: one data model stored in Lakebase
+(Databricks-managed Postgres) when a database resource is attached, or in
+data/*.json and static/ files during local development.
 """
 
 import json
@@ -20,6 +20,7 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request, session
 
 import config
+import storage
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
@@ -39,44 +40,60 @@ DATA_DIR = Path(__file__).parent / "data"
 MOCK_DIR = Path(__file__).parent / "mock_data"
 
 
+@app.errorhandler(storage.StorageUnavailable)
+def storage_unavailable(error):
+    return jsonify({"error": "The database is unavailable. Try again shortly."}), 503
+
+
+# Uploads are kept in the database; serve any not yet restored to static/.
+_serve_static = app.view_functions["static"]
+
+
+def _static_or_stored(filename):
+    from werkzeug.exceptions import NotFound
+    try:
+        return _serve_static(filename=filename)
+    except NotFound:
+        media = storage.get_media(filename)
+        if not media:
+            raise
+        from flask import Response
+        return Response(media[1], mimetype=media[0])
+
+
+app.view_functions["static"] = _static_or_stored
+
+
+def _restore_media():
+    try:
+        count = storage.restore_media()
+        if count:
+            app.logger.info("Restored %d uploaded files from the database", count)
+    except Exception:
+        app.logger.exception("Could not restore uploaded files")
+
+
+if storage.backend().name == "lakebase":
+    import threading
+    threading.Thread(target=_restore_media, daemon=True).start()
+
+
 # ── Data helpers ───────────────────────────────────────────────────────────────
 
-def _load(live_path, mock_filename, default):
-    """Load JSON from live path, fall back to mock, then to default."""
-    for path in [Path(live_path), MOCK_DIR / mock_filename]:
-        try:
-            if path.exists():
-                return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return default
-
-
-def _save(filename, data):
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    (DATA_DIR / filename).write_text(
-        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
-
-
-def load_journal():
-    return _load("data/journal_entries.json", "journal_entries.json", [])
-
-
-def save_journal(entries):
-    _save("journal_entries.json", entries)
-
-
 def load_music():
-    return _load("mock_data/music_library.json", "music_library.json", [])
+    # Bundled, read-only sample library.
+    try:
+        return json.loads((MOCK_DIR / "music_library.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
 
 
 def load_garden():
-    return _load("data/garden.json", "garden.json", {"beds": []})
+    return storage.load("garden")
 
 
 def save_garden(data):
-    _save("garden.json", data)
+    storage.save("garden", data)
 
 
 # ── Auth decorator ─────────────────────────────────────────────────────────────
@@ -133,7 +150,7 @@ def journal_status():
 @app.route("/api/journal/entries")
 @journal_required
 def journal_entries():
-    return jsonify(load_journal())
+    return jsonify(storage.journal_list())
 
 
 @app.route("/api/journal/entry", methods=["POST"])
@@ -146,7 +163,6 @@ def journal_save_entry():
     We store in the same camelCase format so reads and writes are symmetric.
     """
     data    = request.get_json(force=True) or {}
-    entries = load_journal()
 
     entry = {
         "id":          data.get("id") or str(uuid.uuid4()),
@@ -166,36 +182,31 @@ def journal_save_entry():
         "createdAt": data.get("createdAt", datetime.utcnow().isoformat() + "Z"),
     }
 
-    # Upsert: update in place if ID exists, else prepend and sort
-    idx = next((i for i, e in enumerate(entries) if e.get("id") == entry["id"]), None)
-    if idx is not None:
-        entries[idx] = entry
-        was_new = False
-    else:
-        entries.insert(0, entry)
-        entries.sort(key=lambda e: e.get("date", ""), reverse=True)
-        was_new = True
+    try:
+        datetime.strptime(entry["date"], "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return jsonify({"error": "date must be YYYY-MM-DD"}), 400
 
-    save_journal(entries)
+    # Upsert: one entry per calendar date in Lakebase (or the JSON file locally).
+    try:
+        was_new = storage.journal_upsert(entry)
+    except storage.JournalDateTaken:
+        return jsonify({"error": f"An entry already exists for {entry['date']}"}), 409
     return jsonify({"ok": True, "entry": entry, "wasNew": was_new}), 201 if was_new else 200
 
 
 @app.route("/api/journal/entry/<entry_id>", methods=["DELETE"])
 @journal_required
 def journal_delete_entry(entry_id):
-    entries     = load_journal()
-    new_entries = [e for e in entries if e.get("id") != entry_id]
-    if len(new_entries) == len(entries):
+    if not storage.journal_delete(entry_id):
         return jsonify({"error": "Entry not found"}), 404
-    save_journal(new_entries)
     return jsonify({"ok": True})
 
 
 @app.route("/api/journal/check/<date_str>")
 @journal_required
 def journal_check_date(date_str):
-    entries = load_journal()
-    return jsonify({"date": date_str, "exists": any(e.get("date") == date_str for e in entries)})
+    return jsonify({"date": date_str, "exists": storage.journal_date_exists(date_str)})
 
 
 @app.route("/api/journal/ocr", methods=["POST"])
@@ -311,25 +322,18 @@ def resume_download():
 
 
 # ── Music catalog API ─────────────────────────────────────────────────────────
-# Tracks stored in data/music_catalog.json (admin-managed via music.js)
-# Audio files saved to static/audio/
+# Tracks stored in the music_catalog collection (admin-managed via music.js)
+# Audio files saved to static/audio/ (and the database media table)
 # Gallery photos saved to static/music/photos/
 
-MUSIC_CATALOG_FILE = DATA_DIR / "music_catalog.json"
 MUSIC_AUDIO_DIR    = Path(__file__).parent / "static" / "audio"
 MUSIC_PHOTOS_DIR   = Path(__file__).parent / "static" / "music" / "photos"
 
 def load_music_catalog():
-    try:
-        with open(MUSIC_CATALOG_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {"tracks": []}
+    return storage.load("music_catalog")
 
 def save_music_catalog(data):
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(MUSIC_CATALOG_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    storage.save("music_catalog", data)
 
 @app.route("/api/music/catalog")
 def music_catalog_get():
@@ -373,7 +377,7 @@ def music_upload():
         safe_album = _re.sub(r"[^a-zA-Z0-9 ._-]", "_", album)
         dest_dir   = os.path.join(MUSIC_AUDIO_DIR, safe_album)
         os.makedirs(dest_dir, exist_ok=True)
-        f.save(os.path.join(dest_dir, safe_name))
+        storage.save_upload(f, os.path.join(dest_dir, safe_name))
         audio_url = f"/static/audio/{safe_album}/{safe_name}"
 
         # Save album art alongside the audio if provided
@@ -381,12 +385,12 @@ def music_upload():
         if art and art.filename:
             ext     = os.path.splitext(art.filename)[1].lower() or ".jpg"
             art_fn  = safe_album + ext          # art named same as album folder
-            art.save(os.path.join(MUSIC_AUDIO_DIR, art_fn))
+            storage.save_upload(art, os.path.join(MUSIC_AUDIO_DIR, art_fn))
             art_url = f"/static/audio/{art_fn}"
     else:
         # Single — save at root
         os.makedirs(MUSIC_AUDIO_DIR, exist_ok=True)
-        f.save(os.path.join(MUSIC_AUDIO_DIR, safe_name))
+        storage.save_upload(f, os.path.join(MUSIC_AUDIO_DIR, safe_name))
         audio_url = f"/static/audio/{safe_name}"
 
         # Save art with same stem as the mp3
@@ -395,7 +399,7 @@ def music_upload():
             stem    = os.path.splitext(safe_name)[0]
             ext     = os.path.splitext(art.filename)[1].lower() or ".jpg"
             art_fn  = stem + ext
-            art.save(os.path.join(MUSIC_AUDIO_DIR, art_fn))
+            storage.save_upload(art, os.path.join(MUSIC_AUDIO_DIR, art_fn))
             art_url = f"/static/audio/{art_fn}"
 
     return jsonify({"ok": True, "url": audio_url, "art": art_url})
@@ -495,7 +499,7 @@ def music_photo_upload():
     import re as _re
     safe = _re.sub(r"[^a-zA-Z0-9._-]", "_", f.filename)
     os.makedirs(MUSIC_PHOTOS_DIR, exist_ok=True)
-    f.save(os.path.join(MUSIC_PHOTOS_DIR, safe))
+    storage.save_upload(f, os.path.join(MUSIC_PHOTOS_DIR, safe))
     return jsonify({"ok": True, "url": f"/static/music/photos/{safe}"})
 
 @app.route("/api/music/photos")
@@ -515,16 +519,12 @@ def api_music():
 
 
 # ── Contact form API ──────────────────────────────────────────────────────────
-MESSAGES_FILE = "data/messages.json"
 
 def _load_messages():
-    try:
-        with open(MESSAGES_FILE) as f: return json.load(f)
-    except: return []
+    return storage.load("messages")
 
 def _save_messages(data):
-    os.makedirs("data", exist_ok=True)
-    with open(MESSAGES_FILE, "w") as f: json.dump(data, f, indent=2)
+    storage.save("messages", data)
 
 @app.route("/api/contact", methods=["POST"])
 def contact_submit():
@@ -564,16 +564,12 @@ def contact_mark_read(msg_id):
 
 # ── Portfolio HTML upload API ─────────────────────────────────────────────────
 PORTFOLIO_DIR  = "static/portfolio"
-PORTFOLIO_META = "data/portfolio_uploads.json"
 
 def _load_portfolio_uploads():
-    try:
-        with open(PORTFOLIO_META) as f: return json.load(f)
-    except: return []
+    return storage.load("portfolio_uploads")
 
 def _save_portfolio_uploads(data):
-    os.makedirs("data", exist_ok=True)
-    with open(PORTFOLIO_META, "w") as f: json.dump(data, f, indent=2)
+    storage.save("portfolio_uploads", data)
 
 @app.route("/api/portfolio/upload", methods=["POST"])
 def portfolio_upload():
@@ -588,7 +584,7 @@ def portfolio_upload():
     safe = _re.sub(r"[^a-zA-Z0-9._-]", "_", f.filename)
     os.makedirs(PORTFOLIO_DIR, exist_ok=True)
     path = os.path.join(PORTFOLIO_DIR, safe)
-    f.save(path)
+    storage.save_upload(f, path)
     # Build metadata
     title   = request.form.get("title", safe.replace(".html","").replace("_"," ").title())
     tag     = request.form.get("tag",  "Project")
@@ -619,25 +615,20 @@ def portfolio_upload_delete(filename):
     uploads = _load_portfolio_uploads()
     uploads = [u for u in uploads if u.get("filename") != filename]
     _save_portfolio_uploads(uploads)
-    try: os.remove(os.path.join(PORTFOLIO_DIR, filename))
-    except: pass
+    storage.delete_upload(os.path.join(PORTFOLIO_DIR, os.path.basename(filename)))
     return jsonify({"ok": True})
 
 
 # ── Blog / Newsletter API ─────────────────────────────────────────────────────
 import uuid as _uuid
 
-BLOG_FILE = "data/blog.json"
 BLOG_DIR  = "static/blog"
 
 def _load_blog():
-    try:
-        with open(BLOG_FILE) as f: return json.load(f)
-    except: return []
+    return storage.load("blog")
 
 def _save_blog(posts):
-    os.makedirs("data", exist_ok=True)
-    with open(BLOG_FILE, "w") as f: json.dump(posts, f, indent=2)
+    storage.save("blog", posts)
 
 @app.route("/api/blog")
 def blog_list():
@@ -706,7 +697,7 @@ def blog_thumbnail():
     ext  = os.path.splitext(f.filename)[1].lower() or ".jpg"
     name = str(_uuid.uuid4())[:8] + ext
     os.makedirs(BLOG_DIR, exist_ok=True)
-    f.save(os.path.join(BLOG_DIR, name))
+    storage.save_upload(f, os.path.join(BLOG_DIR, name))
     return jsonify({"ok": True, "url": f"/static/blog/{name}"})
 
 
@@ -714,13 +705,12 @@ def blog_thumbnail():
 # ── Garden photos API ──────────────────────────────────────────────────────────
 
 GARDEN_PHOTOS_DIR  = "static/garden/photos"
-GARDEN_PHOTOS_META = "data/garden_photos.json"
 
 def _load_garden_photos():
-    return _load(GARDEN_PHOTOS_META, "garden_photos.json", [])
+    return storage.load("garden_photos")
 
 def _save_garden_photos(data):
-    _save("garden_photos.json", data)
+    storage.save("garden_photos", data)
 
 
 @app.route("/api/garden/photos", methods=["GET"])
@@ -747,7 +737,7 @@ def garden_photo_upload():
             continue
         ext  = os.path.splitext(f.filename)[1].lower() or ".jpg"
         name = str(_uuid.uuid4())[:12] + ext
-        f.save(os.path.join(GARDEN_PHOTOS_DIR, name))
+        storage.save_upload(f, os.path.join(GARDEN_PHOTOS_DIR, name))
         entry = {
             "id":       str(_uuid.uuid4()),
             "url":      f"/static/garden/photos/{name}",
@@ -771,11 +761,7 @@ def garden_photo_delete(photo_id):
     target = next((p for p in photos if p["id"] == photo_id), None)
     if target:
         # Remove file
-        try:
-            fname = os.path.basename(target["url"])
-            os.remove(os.path.join(GARDEN_PHOTOS_DIR, fname))
-        except Exception:
-            pass
+        storage.delete_upload(os.path.join(GARDEN_PHOTOS_DIR, os.path.basename(target["url"])))
         photos = [p for p in photos if p["id"] != photo_id]
         _save_garden_photos(photos)
     return jsonify({"ok": True})
@@ -784,10 +770,10 @@ def garden_photo_delete(photo_id):
 # ── Accounts template API ─────────────────────────────────────────────────────
 
 def _load_acct_template():
-    return _load("data/accounts_template.json", "accounts_template.json", [])
+    return storage.load("accounts_template")
 
 def _save_acct_template(data):
-    _save("accounts_template.json", data)
+    storage.save("accounts_template", data)
 
 
 @app.route('/api/accounts-template', methods=['GET'])
@@ -802,6 +788,114 @@ def acct_template_post():
     data = request.get_json(force=True) or []
     _save_acct_template(data)
     return jsonify({'ok': True})
+
+
+# ── Health dashboard ──────────────────────────────────────────────────────────
+# Reads the health.* views over the shared journal/health tables in Lakebase.
+
+@app.errorhandler(storage.NeedsDatabase)
+def needs_database(error):
+    return jsonify({"available": False, "error": "The health dashboard needs a Lakebase database attached to the app."}), 503
+
+
+@app.route("/api/health/dashboard")
+def health_dashboard():
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify({"available": True, **storage.health("dashboard")})
+
+
+@app.route("/api/health/workouts", methods=["POST"])
+def health_add_workout():
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        day = datetime.strptime(str(data.get("date")), "%Y-%m-%d").date()
+        minutes = float(data.get("minutes"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "date (YYYY-MM-DD) and minutes are required"}), 400
+    if not 0 <= minutes <= 1440:
+        return jsonify({"error": "minutes must be between 0 and 1440"}), 400
+    workout_id = storage.health("add_workout", day, str(data.get("activity") or "")[:100], minutes,
+                                str(data.get("note") or "")[:2000], bool(data.get("dogWalk")))
+    return jsonify({"ok": True, "id": workout_id}), 201
+
+
+@app.route("/api/health/weigh-ins", methods=["POST"])
+def health_add_weigh_in():
+    """Log a weigh-in; a date can have any number of them."""
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        day = datetime.strptime(str(data.get("date")), "%Y-%m-%d").date()
+        value = float(data.get("value"))
+        measured_at = datetime.fromisoformat(str(data["at"]).replace("Z", "+00:00")) if data.get("at") else None
+    except (TypeError, ValueError):
+        return jsonify({"error": "date (YYYY-MM-DD), a weight, and an optional ISO time are required"}), 400
+    if not 50 <= value <= 1000:
+        return jsonify({"error": "weight must be between 50 and 1000 lb"}), 400
+    measurement_id = storage.health("add_weigh_in", day, value, measured_at, bool(data.get("morning")),
+                                    str(data.get("note") or "")[:2000])
+    return jsonify({"ok": True, "id": measurement_id}), 201
+
+
+@app.route("/api/health/weigh-ins/<int:measurement_id>", methods=["DELETE"])
+def health_delete_weigh_in(measurement_id):
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not storage.health("delete_weigh_in", measurement_id):
+        return jsonify({"error": "Only weigh-ins logged here can be deleted here"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/health/workouts/<int:workout_id>", methods=["DELETE"])
+def health_delete_workout(workout_id):
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not storage.health("delete_workout", workout_id):
+        return jsonify({"error": "Only workouts logged here can be deleted here"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/health/goals/<metric>", methods=["PUT"])
+def health_set_goal(metric):
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        target = float((request.get_json(silent=True) or {}).get("target"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "A numeric target is required"}), 400
+    if not storage.health("set_goal", metric, target):
+        return jsonify({"error": "Unknown goal"}), 404
+    return jsonify({"ok": True})
+
+
+# ── Page settings formerly kept in browser storage ─────────────────────────────
+# Travel pins/visited places, garden gallery text, and portfolio layout. Values
+# are the strings the pages previously wrote to localStorage.
+PAGE_DATA = {"travel_pins", "travel_visited", "garden_gallery_note", "garden_gallery_hero", "portfolio_layout"}
+
+
+@app.route("/api/data/<name>", methods=["GET"])
+def page_data_get(name):
+    if name not in PAGE_DATA:
+        return jsonify({"error": "Unknown data"}), 404
+    return jsonify({"data": storage.load(name)})
+
+
+@app.route("/api/data/<name>", methods=["PUT"])
+def page_data_put(name):
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    if name not in PAGE_DATA:
+        return jsonify({"error": "Unknown data"}), 404
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not isinstance(payload.get("data"), str) or len(payload["data"]) > 1_000_000:
+        return jsonify({"error": "Expected a data string under 1 MB"}), 400
+    storage.save(name, payload["data"])
+    return jsonify({"ok": True})
 
 
 # ── Run ────────────────────────────────────────────────────────────────────────

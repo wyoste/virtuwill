@@ -858,3 +858,21 @@
 .tracker-setup { padding:24px; border:1px solid var(--border); border-radius:12px; line-height:1.6; }
 .tracker-setup input { max-width:100%; }
 @media(max-width:640px) { .tracker-frame { min-height:650px; height:calc(100dvh - 200px); } .tracker-toolbar { align-items:flex-start; } }
+
+/* Health goals and metrics above the Health tracker. */
+.hd-summary { margin-bottom:18px; }
+.hd-summary .adm-stat-grid { margin-bottom:14px; }
+.hd-label { font-size:11px; font-weight:600; color:var(--text2); margin-bottom:6px; }
+.hd-strip { display:flex; gap:4px; margin-bottom:14px; }
+.hd-day { flex:1; max-width:28px; height:18px; border-radius:4px; background:var(--border); }
+.hd-day-some { background:var(--amber); }
+.hd-day-met { background:var(--green); }
+.hd-form { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+.hd-form .adm-input { flex:1 1 140px; }
+.hd-form .hd-minutes { flex:0 1 80px; }
+.hd-check { font-size:12px; color:var(--text2); display:flex; align-items:center; gap:4px; }
+.hd-list { list-style:none; margin:0 0 10px; padding:0; font-size:12px; color:var(--text2); }
+.hd-list li { display:flex; gap:8px; align-items:center; padding:4px 0; border-bottom:0.5px solid var(--border); }
+.hd-source { margin-left:auto; color:var(--text3); }
+.hd-del { border:none; background:none; color:var(--text3); cursor:pointer; font-size:14px; padding:0 4px; }
+.hd-note { font-size:12px; color:var(--text3); overflow-wrap:anywhere; }

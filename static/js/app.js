@@ -30,7 +30,7 @@ window.VW.Auth = (() => {
 
   function setAdmin(val) {
     _admin = val;
-    if (!val) VW.Trackers?.clear?.();
+    if (!val) { VW.Trackers?.clear?.(); VW.HealthDashboard?.clear?.(); }
     // Green admin banner across all pages
     const banner = document.getElementById('admin-banner');
     if (banner) banner.style.display = val ? 'flex' : 'none';

@@ -1,21 +1,21 @@
 """Private, admin-only hosting for the standalone Yoste trackers.
 
-The original HTML contains personal seed data. It belongs in the private SQLite
-store, never templates/static or Git. Frames run in an opaque-origin sandbox;
+The original HTML contains personal seed data. It belongs in private storage
+(Lakebase, or SQLite in development), never templates/static or Git. Frames run in an opaque-origin sandbox;
 only the parent admin page can call the persistence API.
 """
 import json
 import os
 import re
 import secrets
-import sqlite3
-from contextlib import contextmanager
 from functools import wraps
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from flask import Blueprint, current_app, jsonify, request, session, Response
+
+import storage
 
 bp = Blueprint("trackers", __name__)
 KINDS = {"finance": "yoste-finance-spa-v1", "health": "yoste-health-v1"}
@@ -76,39 +76,27 @@ def validate_state(kind, data):
 
 
 class TrackerStore:
-    def __init__(self, directory):
-        self.directory = Path(directory)
-
-    @contextmanager
-    def connect(self):
-        self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        path = self.directory / "trackers.sqlite3"
-        db = sqlite3.connect(path, timeout=10)
-        os.chmod(path, 0o600)
-        db.row_factory = sqlite3.Row
-        try:
-            with db:
-                db.execute("CREATE TABLE IF NOT EXISTS trackers (kind TEXT PRIMARY KEY, document TEXT NOT NULL, state TEXT, revision INTEGER NOT NULL DEFAULT 0)")
-                yield db
-        finally:
-            db.close()
+    def __init__(self, target=None):
+        # A directory means local SQLite; otherwise a storage backend.
+        if target is None or isinstance(target, (str, os.PathLike)):
+            target = storage.LocalBackend(target)
+        self.backend = target
 
     def get(self, kind):
-        with self.connect() as db:
-            row = db.execute("SELECT * FROM trackers WHERE kind = ?", (kind,)).fetchone()
+        with self.backend.trackers() as trackers:
+            row = trackers.get(kind)
             return dict(row) if row else None
 
     def install(self, kind, document):
         validate_document(kind, document)
         # One-time install. Replacing executable source must never reset live data.
-        with self.connect() as db:
-            db.execute("INSERT INTO trackers(kind, document) VALUES (?, ?)", (kind, document))
+        with self.backend.trackers() as trackers:
+            trackers.insert(kind, document)
 
     def save(self, kind, state, revision):
         encoded = validate_state(kind, state)
-        with self.connect() as db:
-            result = db.execute("UPDATE trackers SET state = ?, revision = revision + 1 WHERE kind = ? AND revision = ?", (encoded, kind, revision))
-            return result.rowcount == 1
+        with self.backend.trackers() as trackers:
+            return trackers.update(kind, encoded, revision)
 
 
 def parent_origin():
@@ -127,7 +115,8 @@ def parent_origin():
 
 
 def store():
-    return TrackerStore(current_app.config["TRACKER_DATA_DIR"])
+    backend = storage.backend()
+    return TrackerStore(backend if backend.name == "lakebase" else current_app.config["TRACKER_DATA_DIR"])
 
 
 def protected(fn):
@@ -149,6 +138,11 @@ def protected(fn):
     return wrapped
 
 
+@bp.errorhandler(storage.StorageUnavailable)
+def storage_unavailable(error):
+    return jsonify(error="The tracker database is unavailable. Try again shortly; unsaved edits stay in this tab."), 503
+
+
 @bp.after_request
 def private_headers(response):
     response.headers["Cache-Control"] = "no-store, private"
@@ -163,7 +157,7 @@ def tracker_data(kind):
     if request.method == "GET":
         session.setdefault("tracker_csrf", secrets.token_urlsafe(32))
         row = store().get(kind)
-        return jsonify(configured=bool(row), revision=row["revision"] if row else 0, csrf=session["tracker_csrf"])
+        return jsonify(configured=bool(row), revision=row["revision"] if row else 0, csrf=session["tracker_csrf"], storage=storage.backend().name)
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or type(payload.get("revision")) is not int:
         return jsonify(error="A state and integer revision are required."), 400
@@ -186,7 +180,7 @@ def install_tracker(kind):
         store().install(kind, document)
     except (ValueError, UnicodeError) as error:
         return jsonify(error=str(error)), 400
-    except sqlite3.IntegrityError:
+    except storage.AlreadyInstalled:
         return jsonify(error="Tracker already installed. Use its Restore backup option to migrate newer records."), 409
     return jsonify(ok=True), 201
 

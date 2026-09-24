@@ -45,6 +45,7 @@ window.VW.Admin = (() => {
       document.getElementById('adm-nav-' + s)?.classList.toggle('on', s === id);
     });
     if (id === 'finance' || id === 'health') VW.Trackers?.open(id);
+    if (id === 'health') VW.HealthDashboard?.load();
     // Lazy-load on first visit
     if (id === 'notes')    _loadNotes();
     if (id === 'blog')     VW.Blog?.initAdmin?.();
@@ -203,7 +204,8 @@ window.VW.Admin = (() => {
     } catch {}
   }
 
-  function _fetchTravelStats() {
+  async function _fetchTravelStats() {
+    await VW.Store?.pull('vw_travel_visited');
     try {
       const vis = JSON.parse(localStorage.getItem('vw_travel_visited') || '{"countries":[],"states":[]}');
       const ccEl = document.getElementById('adm-travel-count');
@@ -471,9 +473,10 @@ window.VW.Admin = (() => {
   // ════════════════════════════════════════════════════════════
   //  SECTION: Travel
   // ════════════════════════════════════════════════════════════
-  function _renderTravelSection() {
+  async function _renderTravelSection() {
     const el = document.getElementById('adm-travel-body');
     if (!el) return;
+    await Promise.all([VW.Store?.pull('vw_travel_visited'), VW.Store?.pull('vw_travel_pins')]);
 
     let vis = { countries:[], states:[] };
     let pins = [];

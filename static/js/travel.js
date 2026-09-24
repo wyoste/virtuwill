@@ -8,7 +8,7 @@
  *   • Photo overlays on the map
  *   • Google My Maps iframe embed
  *
- * Data stored in localStorage:
+ * Data stored on the server (/api/data/travel_*), cached in localStorage:
  *   vw_travel_pins    → [{id,name,city,lat,lng,type,note,photos}]
  *   vw_travel_visited → { countries:['US','MX',...], states:['TX','MS',...] }
  *
@@ -55,9 +55,10 @@ window.VW.Travel = (() => {
   let _sidebarTab     = 'pins'; // 'pins' | 'visited'
 
   // ── Init ───────────────────────────────────────────────────────────────────
-  function init() {
+  async function init() {
     if (_inited) { _map?.invalidateSize(); return; }
     _inited = true;
+    await Promise.all([VW.Store?.pull(PIN_KEY), VW.Store?.pull(VISITED_KEY)]);
     _loadPins();
     _loadVisited();
     setTimeout(_buildMap, 120);
@@ -197,6 +198,7 @@ window.VW.Travel = (() => {
 
   function _saveVisited() {
     localStorage.setItem(VISITED_KEY, JSON.stringify(_visited));
+    VW.Store?.push(VISITED_KEY);
   }
 
   function toggleCountry(code, name) {
@@ -354,6 +356,7 @@ window.VW.Travel = (() => {
 
   function _savePins() {
     localStorage.setItem(PIN_KEY, JSON.stringify(_pins));
+    VW.Store?.push(PIN_KEY);
   }
 
   function addPin() {
