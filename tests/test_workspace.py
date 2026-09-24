@@ -11,11 +11,11 @@ class PageRouteTests(unittest.TestCase):
 
     def test_public_urls_serve_the_site_and_old_admin_moves_to_the_workspace(self):
         client = app.test_client()
-        for path in ("/", "/music", "/music/some-song", "/projects", "/projects/dmp", "/writing", "/writing/abc",
+        for path in ("/", "/music", "/music/some-song", "/career", "/career/projects/dmp", "/projects", "/projects/dmp", "/writing", "/writing/abc",
                      "/garden", "/travel", "/resume", "/contact"):
             page = client.get(path)
             self.assertEqual(page.status_code, 200, path)
-            self.assertIn('id="nl-projects"', page.text)
+            self.assertIn('id="nl-career"', page.text)
             self.assertNotIn('Admin Mode', page.text)
         self.assertEqual(client.get("/admin").headers["Location"], "/app")
 

@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/home.css') }}"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery.css') }}"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/garden.css') }}"/>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/resume.css') }}"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/career.css') }}"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/chat.css') }}"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}"/>
@@ -38,11 +38,10 @@
   <div class="nav-links" id="navLinks">
     <a class="nav-link" id="nl-home"     href="/"         data-link>Home</a>
     <a class="nav-link" id="nl-music"    href="/music"    data-link>Music</a>
-    <a class="nav-link" id="nl-projects" href="/projects" data-link>Projects</a>
+    <a class="nav-link" id="nl-career"   href="/career"   data-link>Career</a>
     <a class="nav-link" id="nl-writing"  href="/writing"  data-link>Writing</a>
     <a class="nav-link" id="nl-garden"   href="/garden"   data-link>Garden</a>
     <a class="nav-link" id="nl-travel"   href="/travel"   data-link>Travel</a>
-    <a class="nav-link" id="nl-resume"   href="/resume"   data-link>Resume</a>
     <a class="nav-link nav-link-cta" id="nl-contact" href="/contact" data-link>Say hi</a>
     {% if admin_logged_in %}<a class="nav-link nav-link-owner" href="/app">Workspace</a>{% endif %}
   </div>
@@ -58,11 +57,10 @@
 <div class="nav-mobile-drawer" id="nav-mobile-drawer" role="navigation" aria-label="Site">
   <a class="nav-drawer-link" id="nmd-home"     href="/"         data-link>Home</a>
   <a class="nav-drawer-link" id="nmd-music"    href="/music"    data-link>Music</a>
-  <a class="nav-drawer-link" id="nmd-projects" href="/projects" data-link>Projects</a>
+  <a class="nav-drawer-link" id="nmd-career"   href="/career"   data-link>Career</a>
   <a class="nav-drawer-link" id="nmd-writing"  href="/writing"  data-link>Writing</a>
   <a class="nav-drawer-link" id="nmd-garden"   href="/garden"   data-link>Garden</a>
   <a class="nav-drawer-link" id="nmd-travel"   href="/travel"   data-link>Travel</a>
-  <a class="nav-drawer-link" id="nmd-resume"   href="/resume"   data-link>Resume</a>
   <a class="nav-drawer-link" id="nmd-contact"  href="/contact"  data-link>Say hi</a>
   {% if admin_logged_in %}<div class="nav-drawer-hr"></div><a class="nav-drawer-link" href="/app">Workspace</a>{% endif %}
 </div>
@@ -70,11 +68,10 @@
 <main id="main" tabindex="-1">
   {% include 'pages/home.html' %}
   {% include 'pages/music.html' %}
-  {% include 'pages/projects.html' %}
+  {% include 'pages/career.html' %}
   {% include 'pages/writing.html' %}
   {% include 'pages/garden.html' %}
   {% include 'pages/travel.html' %}
-  {% include 'pages/resume.html' %}
   {% include 'pages/contact.html' %}
   <div class="page" id="page-notfound">
     <div class="site-wrap site-empty"><h1>Page not found</h1><p><a href="/" data-link>Go home</a></p></div>
@@ -109,10 +106,9 @@
 <script src="{{ url_for('static', filename='js/gallery.js') }}"></script>
 <script src="{{ url_for('static', filename='js/garden.js') }}"></script>
 <script src="{{ url_for('static', filename='js/music.js') }}"></script>
-<script src="{{ url_for('static', filename='js/projects.js') }}"></script>
+<script src="{{ url_for('static', filename='js/career.js') }}"></script>
 <script src="{{ url_for('static', filename='js/writing.js') }}"></script>
 <script src="{{ url_for('static', filename='js/contact.js') }}"></script>
-<script src="{{ url_for('static', filename='js/resume.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 <script src="{{ url_for('static', filename='js/blog.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>

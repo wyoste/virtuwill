@@ -1,8 +1,9 @@
 /**
  * app.js — the public site's router.
  *
- * Real URLs: /music/<song>, /projects/<id>, /writing/<post>, /garden, /travel,
- * /resume, /contact. Old #page links still work. The public site is read-only:
+ * Real URLs: /music/<song>, /career (CV, ethos and projects; /career/projects/<id>),
+ * /writing/<post>, /garden, /travel, /contact. Old #page links and the former
+ * /resume and /projects pages still work. The public site is read-only:
  * editing happens in the owner's workspace at /app.
  *
  * Load order: page modules first, app.js last.
@@ -12,9 +13,9 @@
 window.VW = window.VW || {};
 const _session = (typeof FLASK_SESSION !== 'undefined') ? FLASK_SESSION : {};
 
-const PAGES = ['home', 'music', 'projects', 'writing', 'garden', 'travel', 'resume', 'contact'];
+const PAGES = ['home', 'music', 'career', 'writing', 'garden', 'travel', 'contact'];
 // Old hash routes and pages that moved.
-const MOVED = { portfolio: '/projects', project: '/projects', blog: '/writing', notes: '/contact',
+const MOVED = { blog: '/writing', notes: '/contact',
                 admin: '/app', journal: '/app/journal', planner: '/app/site/garden' };
 
 // Public pages never show edit controls; the owner edits in the workspace.
@@ -43,14 +44,26 @@ window.VW.Nav = {
 // ── Router ────────────────────────────────────────────────────────────────────
 function parse(pathname) {
   const parts = pathname.replace(/\/+$/, '').split('/').filter(Boolean).map(decodeURIComponent);
-  return { page: parts[0] || 'home', sub: parts[1] || null };
+  return { page: parts[0] || 'home', sub: parts[1] || null, rest: parts[2] || null };
+}
+
+// Resume and Projects became one Career page; their old addresses land on the right part of it.
+function careerPath(page, sub) {
+  if (page === 'resume') return '/career';
+  if (['projects', 'portfolio', 'project'].includes(page)) return sub ? '/career/projects/' + encodeURIComponent(sub) : '/career#projects';
+  return null;
 }
 
 function go(target, { push = true } = {}) {
   // go('music') and go('/music/voodoo') both work.
   const path = target.startsWith('/') ? target : (target === 'home' ? '/' : '/' + target);
-  const { page, sub } = parse(path);
+  const { page, sub, rest } = parse(path.split('#')[0]);
   if (MOVED[page]) { location.href = MOVED[page]; return; }
+  const moved = careerPath(page, sub);
+  if (moved) {
+    history.replaceState({}, '', moved);
+    return go(moved, { push: false });
+  }
   const known = PAGES.includes(page);
 
   document.querySelectorAll('.page').forEach(el => { el.classList.remove('active'); el.style.display = ''; });
@@ -63,22 +76,21 @@ function go(target, { push = true } = {}) {
     if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
 
-  if (push && location.pathname !== path) history.pushState({}, '', path);
+  if (push && location.pathname + location.hash !== path) history.pushState({}, '', path);
   VW.Nav.closeMobile();
-  window.scrollTo(0, 0);
+  if (!location.hash) window.scrollTo(0, 0);
 
   const titles = { home: 'Will Yoste', garden: 'Garden · Will Yoste', travel: 'Travel · Will Yoste',
-                   resume: 'Resume · Will Yoste', contact: 'Say hi · Will Yoste' };
+                   contact: 'Say hi · Will Yoste' };
   if (titles[page]) document.title = titles[page];
   if (!known) { document.title = 'Not found · Will Yoste'; return; }
 
   if (page === 'home')     VW.Blog?.initHome?.();
   if (page === 'music')    VW.Music.onEnter(sub);
-  if (page === 'projects') VW.Projects.onEnter(sub);
+  if (page === 'career')   VW.Career.onEnter(sub, rest);
   if (page === 'writing')  VW.Writing.onEnter(sub);
   if (page === 'garden')   { GDN?.Gallery?.init?.(); GDN?.Viewer?.init?.(); }
   if (page === 'travel')   VW.Travel?.init?.();
-  if (page === 'resume')   VW.Resume?.onEnter?.();
   if (page === 'contact')  VW.Contact?.init?.();
   document.getElementById('main')?.focus({ preventScroll: true });
 }
@@ -88,10 +100,10 @@ document.addEventListener('click', event => {
   const a = event.target.closest('a[href]');
   if (!a || a.target || a.hasAttribute('download') || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
   const url = new URL(a.href, location.href);
-  if (url.origin !== location.origin || /^\/(app|api|static|resume\/download)(\/|$)/.test(url.pathname)) return;
+  if (url.origin !== location.origin || /^\/(app|api|static|resume\/download|career\/cv)(\/|$)/.test(url.pathname)) return;
   if (!a.hasAttribute('data-link') && !PAGES.includes(parse(url.pathname).page)) return;
   event.preventDefault();
-  go(url.pathname);
+  go(url.pathname + url.hash);
 });
 
 window.addEventListener('popstate', () => go(location.pathname, { push: false }));
@@ -110,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
   VW.Chat?.init?.();
   // Old links like /#resume keep working.
   const hash = location.hash.replace('#', '').toLowerCase();
-  if (hash && location.pathname === '/' && (PAGES.includes(hash) || MOVED[hash])) {
+  if (hash && location.pathname === '/' && (PAGES.includes(hash) || MOVED[hash] || careerPath(hash))) {
     if (MOVED[hash]) { location.replace(MOVED[hash]); return; }
     history.replaceState({}, '', hash === 'home' ? '/' : '/' + hash);
   }

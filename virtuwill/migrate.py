@@ -12,7 +12,7 @@ committed under data/. Nothing it reads is deleted.
 import json
 import logging
 
-from . import content, finance, garden, health, journal, media, music, travel
+from . import career, content, finance, garden, health, journal, media, music, travel
 
 log = logging.getLogger(__name__)
 DATA_DIR = media.db.ROOT / "data"
@@ -39,6 +39,7 @@ def set_aside_legacy_schemas(conn):
 def run_pending(conn):
     garden.seed_species(conn)
     content.seed_projects(conn)
+    career.seed(conn)
     media.sync_bundled(conn)
     music.sync_bundled(conn)
     if conn.execute("INSERT INTO virtuwill.migrations (name) VALUES ('relational_v1') ON CONFLICT DO NOTHING").rowcount:

@@ -47,6 +47,13 @@ class Field:
                 bounds = f" between {self.low} and {self.high}" if self.low is not None and self.high is not None else ""
                 raise Invalid(f"{self.name} must be a number{bounds}")
             return int(n) if self.kind == "int" else n
+        if self.kind == "list":
+            # Lists of short text (bullets, tags): a JSON array, or one item per line.
+            items = value if isinstance(value, list) else str(value).splitlines()
+            items = [str(i).strip() for i in items if str(i).strip()]
+            if len(items) > 60 or any(len(i) > self.max_length for i in items):
+                raise Invalid(f"{self.name} has too many items or one is too long")
+            return items
         if self.kind == "bool":
             if not isinstance(value, bool):
                 raise Invalid(f"{self.name} must be true or false")

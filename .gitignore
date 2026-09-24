@@ -8,3 +8,5 @@ data/private-trackers/
 *.sqlite3
 *.sqlite3-*
 test-results/
+# Uploaded CVs live in the database; copies restored to disk are never committed.
+static/career/
