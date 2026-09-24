@@ -61,6 +61,36 @@ class WorkspaceApiTests(unittest.TestCase):
         self.assertEqual((meal["description"], meal["calories"], meal["protein_g"]), ("Test oats", 450, 15))
         self.assertEqual(self.owner.post("/api/v1/health/meals", json={"meal_date": "2026-09-24", "food_id": "nope"}).status_code, 400)
 
+    def test_one_meal_of_several_foods_with_their_own_portions(self):
+        make = lambda name, **n: self.owner.post("/api/v1/health/foods", json={"name": name, **n}).json["food_id"]
+        egg = make("Test egg", unit="1 large", calories=70, protein_g=6, fat_g=5)
+        tortilla = make("Test tortilla", unit="1 tortilla", calories=140, protein_g=4, carbs_g=24, fat_g=3.5)
+        oil = make("Test olive oil", unit="1 tbsp", calories=120, fat_g=14)
+        meal = self.owner.post("/api/v1/health/meals", json={"meal_date": "2026-09-24", "slot": "breakfast",
+            "description": "Egg burrito", "calories": 9999,
+            "items": [{"food_id": egg, "quantity": 3}, {"food_id": tortilla, "quantity": 1}, {"food_id": oil, "quantity": 0.5}]})
+        self.assertEqual(meal.status_code, 201, meal.json)
+        m = meal.json
+        self.assertEqual((m["description"], m["calories"], m["protein_g"], m["fat_g"]), ("Egg burrito", 410, 22, 25.5))
+        self.assertEqual([(i["description"], i["quantity"], i["calories"]) for i in m["items"]],
+                         [("Test egg", 3, 210), ("Test tortilla", 1, 140), ("Test olive oil", 0.5, 60)])
+        # Change a portion: the totals follow; the day's views read the new totals.
+        m = self.owner.put(f"/api/v1/health/meals/{m['meal_id']}", json={"items": [{"food_id": egg, "quantity": 2},
+                                                                                  {"food_id": tortilla, "quantity": 1}]}).json
+        self.assertEqual((m["calories"], len(m["items"])), (280, 2))
+        day = self.owner.get("/api/v1/health/days?from=2026-09-24&to=2026-09-24").json[0]
+        self.assertEqual(day["meal_calories"], 280)
+        self.assertEqual(len(self.owner.get("/api/v1/today?date=2026-09-24").json["meals"][0]["items"]), 2)
+        # A note-only edit keeps the items; an unknown food or a zero portion is refused.
+        self.assertEqual(len(self.owner.put(f"/api/v1/health/meals/{m['meal_id']}", json={"note": "spicy"}).json["items"]), 2)
+        self.assertEqual(self.owner.post("/api/v1/health/meals", json={"meal_date": "2026-09-24", "items": [{"food_id": "nope"}]}).status_code, 400)
+        self.assertEqual(self.owner.post("/api/v1/health/meals", json={"meal_date": "2026-09-24", "items": [{"food_id": egg, "quantity": 0}]}).status_code, 400)
+        # A meal with no saved foods at all (the everyday case) logs too.
+        self.assertEqual(self.owner.post("/api/v1/health/meals", json={"meal_date": "2026-09-24", "description": "Toast"}).status_code, 201)
+        # Without items the meal keeps hand-entered nutrition.
+        plain = self.owner.post("/api/v1/health/meals", json={"meal_date": "2026-09-24", "description": "Cafe lunch", "calories": 650, "items": []}).json
+        self.assertEqual((plain["calories"], plain["items"]), (650, []))
+
     def test_profile_drives_the_derived_goals(self):
         self.owner.put("/api/v1/health/profile", json={"height_in": 70, "bmi_goal": 22, "calorie_target": 2000})
         goals = {g["metric"]: g for g in self.owner.get("/api/v1/health/goals").json}

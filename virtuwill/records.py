@@ -20,15 +20,17 @@ class Invalid(ValueError):
 
 
 class Field:
-    def __init__(self, name, kind="text", required=False, choices=None, low=None, high=None, default=None, max_length=5000):
-        self.name, self.kind, self.required = name, kind, required
+    def __init__(self, name, kind="text", required=False, choices=None, low=None, high=None, default=None, max_length=5000,
+                 nullable=False):
+        self.name, self.kind, self.required, self.nullable = name, kind, required, nullable
         self.choices, self.low, self.high, self.default, self.max_length = choices, low, high, default, max_length
 
     def clean(self, value):
         if value in (None, ""):
             if self.required:
                 raise Invalid(f"{self.name} is required")
-            return self.default if self.kind != "text" else (self.default or "")
+            # References (e.g. a food id) are NULL when empty, never '' — '' would break the foreign key.
+            return self.default if self.kind != "text" or self.nullable else (self.default or "")
         if self.kind == "date":
             day = parse_date(value)
             if not in_calendar(day):
@@ -67,7 +69,7 @@ def clean(fields, data, partial=False):
             out[field.name] = field.clean(data[field.name])
         elif not partial:
             out[field.name] = field.clean(None)
-    if not out:
+    if not out and not data:
         raise Invalid("Nothing to change")
     return out
 
@@ -84,13 +86,18 @@ class Resource:
         self.defaults = defaults or {}          # columns set on create, e.g. source = 'manual'
         self.select = select or f"SELECT * FROM {table}"
         self.after_write = after_write          # fn(conn, row) after create/update/delete
-        self.prepare = prepare                  # fn(conn, values) → values, e.g. fill nutrition from a food
+        self.prepare = prepare                  # fn(conn, values, body) → values, e.g. fill nutrition from foods
+        # prepare may return (values, after) where after(conn, record_id) writes child rows.
         name = table.replace(".", "_")
 
         bp.add_url_rule(path, f"{name}_list", admin_required(self.list), methods=["GET"])
         bp.add_url_rule(path, f"{name}_create", admin_required(self.create), methods=["POST"])
         bp.add_url_rule(f"{path}/<int:record_id>", f"{name}_update", admin_required(self.update), methods=["PUT"])
         bp.add_url_rule(f"{path}/<int:record_id>", f"{name}_delete", admin_required(self.delete), methods=["DELETE"])
+
+    def _prepared(self, conn, values):
+        out = self.prepare(conn, values, request.get_json(silent=True) or {})
+        return out if isinstance(out, tuple) else (out, None)
 
     def _one(self, conn, record_id):
         row = conn.execute(f"SELECT * FROM ({self.select}) r WHERE {self.pk} = %s", (record_id,)).fetchone()
@@ -117,15 +124,18 @@ class Resource:
         except Invalid as e:
             return error(str(e))
         with db.tx() as conn:
+            after = None
             if self.prepare:
                 try:
-                    values = self.prepare(conn, values)
+                    values, after = self._prepared(conn, values)
                 except Invalid as e:
                     return error(str(e))
             cols = list(values)
             record_id = conn.execute(
                 f"INSERT INTO {self.table} ({', '.join(cols)}) VALUES ({', '.join(['%s'] * len(cols))}) RETURNING {self.pk}",
                 [values[c] for c in cols]).fetchone()[self.pk]
+            if after:
+                after(conn, record_id)
             row = self._one(conn, record_id)
             if self.after_write:
                 self.after_write(conn, row)
@@ -137,15 +147,19 @@ class Resource:
         except Invalid as e:
             return error(str(e))
         with db.tx() as conn:
+            after = None
             if self.prepare:
                 try:
-                    values = self.prepare(conn, values)
+                    values, after = self._prepared(conn, values)
                 except Invalid as e:
                     return error(str(e))
             done = conn.execute(f"UPDATE {self.table} SET {', '.join(f'{c} = %s' for c in values)} WHERE {self.pk} = %s",
-                                [*values.values(), record_id]).rowcount
+                                [*values.values(), record_id]).rowcount if values else \
+                conn.execute(f"SELECT 1 FROM {self.table} WHERE {self.pk} = %s", (record_id,)).rowcount
             if not done:
                 return error("Not found", 404)
+            if after:
+                after(conn, record_id)
             row = self._one(conn, record_id)
             if self.after_write:
                 self.after_write(conn, row)

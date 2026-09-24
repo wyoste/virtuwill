@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from flask import Blueprint, jsonify, request
 
-from . import db, journal
+from . import db, health, journal
 from .auth import admin_required
 from .util import in_calendar, parse_date, plain
 
@@ -41,8 +41,8 @@ def today():
             "workouts": _rows(conn, """SELECT w.*, NOT t.counts_toward_goal AS is_dog_walk FROM journal.workouts w
                                        JOIN journal.workout_types t USING (workout_type) WHERE workout_date = %s
                                        ORDER BY workout_id""", day),
-            "meals": _rows(conn, """SELECT * FROM journal.meals WHERE meal_date = %s
-                                    ORDER BY array_position(ARRAY['breakfast','lunch','dinner','snack','meal'], slot), meal_id""", day),
+            "meals": _rows(conn, f"""SELECT * FROM ({health.MEALS_WITH_ITEMS}) m WHERE meal_date = %s
+                                     ORDER BY array_position(ARRAY['breakfast','lunch','dinner','snack','meal'], slot), meal_id""", day),
             "weighIns": _rows(conn, """SELECT * FROM health.body_measurements WHERE measured_on = %s
                                        ORDER BY measured_at NULLS LAST, measurement_id""", day),
             "drinks": _rows(conn, "SELECT * FROM health.alcohol WHERE drink_date = %s ORDER BY drink_id", day),
