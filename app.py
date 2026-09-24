@@ -822,6 +822,34 @@ def health_add_workout():
     return jsonify({"ok": True, "id": workout_id}), 201
 
 
+@app.route("/api/health/weigh-ins", methods=["POST"])
+def health_add_weigh_in():
+    """Log a weigh-in; a date can have any number of them."""
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        day = datetime.strptime(str(data.get("date")), "%Y-%m-%d").date()
+        value = float(data.get("value"))
+        measured_at = datetime.fromisoformat(str(data["at"]).replace("Z", "+00:00")) if data.get("at") else None
+    except (TypeError, ValueError):
+        return jsonify({"error": "date (YYYY-MM-DD), a weight, and an optional ISO time are required"}), 400
+    if not 50 <= value <= 1000:
+        return jsonify({"error": "weight must be between 50 and 1000 lb"}), 400
+    measurement_id = storage.health("add_weigh_in", day, value, measured_at, bool(data.get("morning")),
+                                    str(data.get("note") or "")[:2000])
+    return jsonify({"ok": True, "id": measurement_id}), 201
+
+
+@app.route("/api/health/weigh-ins/<int:measurement_id>", methods=["DELETE"])
+def health_delete_weigh_in(measurement_id):
+    if not session.get("admin_logged_in"):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not storage.health("delete_weigh_in", measurement_id):
+        return jsonify({"error": "Only weigh-ins logged here can be deleted here"}), 404
+    return jsonify({"ok": True})
+
+
 @app.route("/api/health/workouts/<int:workout_id>", methods=["DELETE"])
 def health_delete_workout(workout_id):
     if not session.get("admin_logged_in"):

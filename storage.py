@@ -184,6 +184,8 @@ class _SqliteTrackers:
 # ── Lakebase (Databricks-managed Postgres) ────────────────────────────────────
 
 DDL = f"""
+-- One worker at a time creates or updates the schema.
+SELECT pg_advisory_xact_lock(hashtext('virtuwill_schema'));
 CREATE SCHEMA IF NOT EXISTS {SCHEMA};
 CREATE TABLE IF NOT EXISTS {SCHEMA}.collections (
     name TEXT PRIMARY KEY,

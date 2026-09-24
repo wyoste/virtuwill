@@ -58,10 +58,17 @@ window.VW.HealthDashboard = (() => {
       stat('Workout days this week',
         `${num(goals.workout_days_per_week?.current_value) ?? 0} / ${fmt(goals.workout_days_per_week?.target)}`,
         `${fmt(week.workout_minutes)} min · ${minMinutes}+ min days count · dog walks ${fmt(week.dog_walk_minutes)} min`),
-      stat('Weight', latest ? `${fmt(latest.weight, 1)} ${latest.weight_unit || ''}` : '—',
-        latest ? `7-day avg ${fmt(latest.avg_7d, 1)}${goals.weight ? ' · goal ' + fmt(goals.weight.target, 1) : ''}` : 'No weights yet'),
-      stat('Today', `${fmt(todayRow.workout_minutes)} min`,
-        `${todayRow.meals_logged || 0} meals${todayRow.calories ? ' · ' + fmt(todayRow.calories) + ' kcal' : ''}`),
+      stat('Weight', latest ? `${fmt(latest.weight, 1)} ${latest.weight_unit || 'lb'}` : '—',
+        latest
+          ? (latest.morning_avg_7d !== null ? `Morning 7-day avg ${fmt(latest.morning_avg_7d, 1)}` : 'No morning weigh-ins this week') +
+            (latest.bmi !== null ? ` · BMI ${fmt(latest.bmi, 1)}` : '') +
+            (goals.weight ? ` · goal ${fmt(goals.weight.target, 1)}` : '')
+          : 'No weigh-ins yet'),
+      stat('Calories today',
+        `${fmt(todayRow.total_calories)}${todayRow.calorie_target ? ' / ' + fmt(todayRow.calorie_target) : ''} kcal`,
+        `${fmt(todayRow.workout_minutes)} min workout · ${todayRow.meals_eaten || 0} meals` +
+        (todayRow.planned_calories ? ` · ${fmt(todayRow.planned_calories)} kcal planned` : '') +
+        (todayRow.beers ? ` · ${fmt(todayRow.beers, 1)} beers` : '')),
     );
 
     // Last 14 days: qualifying day, some activity, or none.
@@ -74,17 +81,21 @@ window.VW.HealthDashboard = (() => {
       const row = byDay[key] || {};
       const mins = num(row.workout_minutes) || 0;
       const cell = el('span', 'hd-day ' + (row.qualifying_workout_day ? 'hd-day-met' : mins > 0 ? 'hd-day-some' : ''));
-      cell.title = `${key}: ${mins} min${row.dog_walk_minutes ? ', dog walk ' + row.dog_walk_minutes + ' min' : ''}${row.weight ? ', ' + row.weight : ''}`;
+      cell.title = `${key}: ${mins} min${row.dog_walk_minutes ? ', dog walk ' + row.dog_walk_minutes + ' min' : ''}` +
+        (row.weigh_ins ? `, ${row.weigh_ins} weigh-in${row.weigh_ins > 1 ? 's' : ''} (latest ${row.weight})` : '');
       strip.append(cell);
     }
 
-    host.replaceChildren(grid, el('div', 'hd-label', 'Last 14 days'), strip, logForm(today), recent(data.workouts), syncLine(data.sync));
+    host.replaceChildren(grid, el('div', 'hd-label', 'Last 14 days'), strip,
+      el('div', 'hd-label', 'Workouts'), logForm(today), recent(data.workouts),
+      el('div', 'hd-label', 'Weigh-ins'), weighInForm(today), weighIns(data.weighIns),
+      syncLine(data.sync));
   }
 
   function logForm(today) {
     const form = el('form', 'hd-form');
     form.setAttribute('aria-label', 'Log a workout');
-    const date = el('input', 'adm-input'); date.type = 'date'; date.value = today; date.required = true; date.setAttribute('aria-label', 'Date');
+    const date = el('input', 'adm-input'); date.type = 'date'; date.value = today; date.required = true; date.id = 'hd-wo-date'; date.setAttribute('aria-label', 'Workout date');
     const activity = el('input', 'adm-input'); activity.placeholder = 'Activity (run, lift, bike…)'; activity.maxLength = 100; activity.setAttribute('aria-label', 'Activity');
     const minutes = el('input', 'adm-input hd-minutes'); minutes.type = 'number'; minutes.min = '0'; minutes.max = '1440'; minutes.placeholder = 'Min'; minutes.required = true; minutes.setAttribute('aria-label', 'Minutes');
     const dogLabel = el('label', 'hd-check');
@@ -135,12 +146,69 @@ window.VW.HealthDashboard = (() => {
     return list;
   }
 
+  function weighInForm(today) {
+    const form = el('form', 'hd-form');
+    form.setAttribute('aria-label', 'Log a weigh-in');
+    const date = el('input', 'adm-input'); date.type = 'date'; date.value = today; date.required = true; date.id = 'hd-wi-date'; date.setAttribute('aria-label', 'Weigh-in date');
+    const value = el('input', 'adm-input hd-minutes'); value.type = 'number'; value.step = '0.1'; value.min = '50'; value.max = '1000'; value.placeholder = 'lb'; value.required = true; value.id = 'hd-wi-value'; value.setAttribute('aria-label', 'Weight in pounds');
+    const morningLabel = el('label', 'hd-check');
+    const morning = el('input'); morning.type = 'checkbox'; morning.id = 'hd-wi-morning'; morning.checked = new Date().getHours() < 11;
+    morningLabel.append(morning, document.createTextNode(' Morning'));
+    const submit = el('button', 'adm-btn-secondary', 'Log weigh-in'); submit.type = 'submit';
+    form.append(date, value, morningLabel, submit);
+    form.onsubmit = async event => {
+      event.preventDefault();
+      submit.disabled = true;
+      try {
+        const r = await fetch('/api/health/weigh-ins', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          // Today's weigh-ins keep their time so several a day stay in order.
+          body: JSON.stringify({ date: date.value, value: Number(value.value), morning: morning.checked,
+                                 at: date.value === localToday() ? new Date().toISOString() : null }),
+        });
+        const result = await r.json();
+        if (!r.ok) throw new Error(result.error || 'Could not log the weigh-in.');
+        window.toast?.('Weigh-in logged', 'success');
+        load();
+      } catch (error) {
+        window.toast?.(error.message, 'warn');
+        submit.disabled = false;
+      }
+    };
+    return form;
+  }
+
+  function weighIns(rows) {
+    const list = el('ul', 'hd-list');
+    list.setAttribute('aria-label', 'Recent weigh-ins');
+    for (const w of rows.slice(0, 8)) {
+      const item = el('li');
+      const time = w.measured_at ? ' ' + new Date(w.measured_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+      const kind = w.is_morning === true ? 'morning' : w.is_morning === false ? 'reference' : '';
+      item.append(el('span', '', `${w.measured_on}${time} · ${fmt(w.value, 1)} ${w.unit}${kind ? ' · ' + kind : ''}`),
+                  el('span', 'hd-source', w.source === 'manual' ? 'logged here' : 'Health tracker'));
+      if (w.source === 'manual') {
+        const del = el('button', 'hd-del', '×');
+        del.setAttribute('aria-label', 'Delete weigh-in on ' + w.measured_on);
+        del.onclick = async () => {
+          const r = await fetch('/api/health/weigh-ins/' + w.measurement_id, { method: 'DELETE' });
+          if (r.ok) load(); else window.toast?.('Could not delete the weigh-in', 'warn');
+        };
+        item.append(del);
+      }
+      list.append(item);
+    }
+    if (!rows.length) list.append(el('li', 'hd-note', 'No weigh-ins yet.'));
+    return list;
+  }
+
   function syncLine(sync) {
     if (!sync) return el('div', 'hd-note', 'Health tracker not synced yet — it syncs each time the tracker saves.');
     if (sync.error) return el('div', 'hd-note tracker-error', 'Health tracker sync failed: ' + sync.error + '. The tracker itself still saved.');
     const skipped = Object.entries(sync.skipped || {}).map(([k, n]) => `${n} ${k}`).join(', ');
     return el('div', 'hd-note',
-      `Health tracker sync: ${sync.workouts} workouts, ${sync.meals} meals, ${sync.weights} weights` +
+      `Health tracker sync: ${sync.workouts} workouts, ${sync.meals} meals, ${sync.weights} weigh-ins, ` +
+      `${sync.drinks ?? 0} drinks, ${sync.foods ?? 0} foods` +
       (skipped ? ` · skipped (no date): ${skipped}` : '') +
       ` · ${new Date(sync.syncedAt).toLocaleString()}`);
   }

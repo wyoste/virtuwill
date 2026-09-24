@@ -63,8 +63,8 @@ class LakebaseStorageTests(unittest.TestCase):
         with self.backend.connect() as db:
             db.execute(f"TRUNCATE {storage.SCHEMA}.collections, {storage.SCHEMA}.media, {storage.SCHEMA}.trackers, "
                        "journal.entries, journal.entry_tags, journal.habit_logs, journal.meals, journal.workouts, "
-                       "health.body_measurements")
-            db.execute("DELETE FROM health.goals WHERE metric = 'weight'")
+                       "health.body_measurements, health.alcohol, health.daily_logs, health.foods, health.profile")
+            db.execute("DELETE FROM health.goals WHERE metric IN ('weight', 'bmi', 'daily_calories')")
             db.execute("UPDATE health.goals SET target = 5 WHERE metric = 'workout_days_per_week'")
         storage.use(self.backend)
         self.addCleanup(storage.use, storage.LocalBackend())
@@ -170,12 +170,32 @@ class LakebaseStorageTests(unittest.TestCase):
         self.assertEqual(self.client.delete("/api/journal/entry/t1").status_code, 404)
         self.assertEqual(self.rows("SELECT count(*) AS n FROM journal.habit_logs")[0]["n"], 0)
 
-    def health_state(self, today, workouts):
-        return {"version": 1, "settings": {"goalWeight": 180, "unit": "lb"}, "beers": [], "complete": [], "foods": [],
-                "weights": [{"date": (today - timedelta(days=d)).isoformat(), "value": 190 - d} for d in range(3)],
-                "meals": [{"id": "m1", "date": today.isoformat(), "meal": "B", "name": "Oats", "calories": 350, "protein": 12},
-                          {"date": "not a date", "name": "lost"}],
-                "workouts": workouts}
+    def health_state(self, today, workouts, weights=None):
+        """A Health tracker state in the real yoste-health-v1 shape."""
+        day = lambda n: (today - timedelta(days=n)).isoformat()
+        return {
+            "version": 1,
+            "settings": {"height": 71, "goal": 23, "target": 2200, "mode": "loss", "weekend": "5,6,0", "age": 33,
+                         "coffee": "Black", "profileRevision": 1},
+            "weights": weights if weights is not None else [
+                {"date": day(2), "value": 188.0, "morning": True, "note": ""},
+                {"date": day(1), "value": 187.0, "morning": True, "note": ""},
+                {"date": day(0), "value": 186.0, "morning": True, "note": ""},
+                {"date": day(0), "value": 188.4, "morning": False, "note": "afternoon reference"},
+            ],
+            "meals": [
+                {"date": day(0), "slot": "Breakfast", "status": "Eaten", "name": "Oats", "note": "1 × bowl",
+                 "k": 350, "p": 12, "c": 60, "fa": 6, "fi": 8},
+                {"date": day(0), "slot": "Dinner", "status": "Planned", "name": "Tacos", "note": "",
+                 "k": 700, "p": 30, "c": 70, "fa": 25, "fi": 12},
+                {"date": "not a date", "slot": "Lunch", "status": "Eaten", "name": "lost", "k": 1},
+            ],
+            "beers": [{"date": day(0), "name": "IPA", "count": 3, "oz": 12, "abv": 6.5, "k": 600, "std": 3.9}],
+            "complete": [day(1), day(1)],
+            "foods": [{"id": "oats", "name": "Oats", "unit": "cup", "k": 300, "p": 10, "c": 54, "fa": 5, "fi": 8,
+                       "status": "Label", "url": "https://example.com/oats"}],
+            "workouts": workouts,
+        }
 
     def test_health_tracker_feeds_shared_tables_and_views(self):
         from test_trackers import document
@@ -183,48 +203,82 @@ class LakebaseStorageTests(unittest.TestCase):
         monday = today - timedelta(days=today.weekday())
         store = TrackerStore(self.backend)
         store.install("health", document("health"))
-        workouts = [{"id": "w1", "date": monday.isoformat(), "minutes": 30, "type": "Run"},
-                    {"id": "w2", "date": monday.isoformat(), "minutes": 20, "type": "Lift"},
-                    {"id": "w3", "date": today.isoformat(), "minutes": 60, "type": "Dog walk", "note": "with the dogs"}]
+        workouts = [{"date": monday.isoformat(), "type": "Strength", "minutes": 30, "note": "squats"},
+                    {"date": monday.isoformat(), "type": "Cardio", "minutes": 20, "note": ""},
+                    {"date": today.isoformat(), "type": "Dog walk", "minutes": 60, "note": "with the dogs"}]
         self.assertTrue(store.save("health", self.health_state(today, workouts), 0))
-        self.assertEqual(len(self.rows("SELECT 1 FROM journal.workouts WHERE source = 'health_tracker'")), 3)
-        self.assertEqual(len(self.rows("SELECT 1 FROM journal.meals WHERE source = 'health_tracker'")), 1)
+
+        # Base tables carry the tracker's real fields.
+        meals = {r["description"]: r for r in self.rows("SELECT * FROM journal.meals WHERE source = 'health_tracker'")}
+        self.assertEqual((meals["Oats"]["slot"], meals["Oats"]["status"], float(meals["Oats"]["calories"]), float(meals["Oats"]["fiber_g"])),
+                         ("breakfast", "eaten", 350, 8))
+        self.assertEqual(meals["Tacos"]["status"], "planned")
+        self.assertEqual([r["is_dog_walk"] for r in self.rows("SELECT is_dog_walk FROM journal.workouts ORDER BY workout_id")], [False, False, True])
+        drink = self.rows("SELECT * FROM health.alcohol")[0]
+        self.assertEqual((float(drink["containers"]), float(drink["standard_drinks"])), (3, 3.9))
+        self.assertEqual([r["log_date"] for r in self.rows("SELECT log_date FROM health.daily_logs")], [today - timedelta(days=1)])
+        self.assertEqual(self.rows("SELECT food_id FROM health.foods")[0]["food_id"], "oats")
+        profile = self.rows("SELECT * FROM health.profile")[0]
+        self.assertEqual((float(profile["height_in"]), float(profile["bmi_goal"]), profile["alcohol_days"]), (71, 23, [5, 6, 7]))
+
+        # Views reproduce the tracker's own math.
         monday_row = self.rows("SELECT * FROM health.daily_activity WHERE day = %s", monday)[0]
         self.assertEqual((float(monday_row["workout_minutes"]), monday_row["qualifying_workout_day"]), (50, True))
-        dog = self.rows("SELECT * FROM health.daily_activity WHERE day = %s", today)[0]
+        day = self.rows("SELECT * FROM health.daily_activity WHERE day = %s", today)[0]
+        self.assertEqual(float(day["meal_calories"]), 350)          # planned meals are not eaten
+        self.assertEqual(float(day["planned_calories"]), 700)
+        self.assertEqual(float(day["total_calories"]), 950)         # eaten food + beer
+        self.assertEqual(float(day["calorie_target"]), 2200)
+        self.assertFalse(day["alcohol_within_rules"])               # 3 beers is at the boundary
+        self.assertEqual((day["weigh_ins"], day["morning_weigh_ins"]), (2, 1))
+        self.assertEqual((float(day["first_weight"]), float(day["weight"]), float(day["min_weight"]), float(day["max_weight"])),
+                         (186.0, 188.4, 186.0, 188.4))
         if today != monday:
-            self.assertEqual((float(dog["dog_walk_minutes"]), dog["qualifying_workout_day"]), (60, False))
+            self.assertEqual((float(day["dog_walk_minutes"]), day["qualifying_workout_day"]), (60, False))
         week = self.rows("SELECT * FROM health.weekly_workout_progress WHERE week_start = %s", monday)[0]
         self.assertEqual((week["qualifying_days"], float(week["target_days"]), week["goal_met"]), (1, 5, False))
         trend = self.rows("SELECT * FROM health.weight_trend ORDER BY day DESC")[0]
-        self.assertEqual((float(trend["weight"]), float(trend["avg_7d"])), (190, 189))
+        self.assertEqual((float(trend["weight"]), float(trend["morning_avg_7d"])), (188.4, 187.0))  # afternoon reading excluded
+        self.assertEqual(float(trend["bmi"]), round(187.0 * 0.45359237 / (71 * 0.0254) ** 2, 1))
         goals = {g["metric"]: g for g in self.rows("SELECT * FROM health.goal_progress")}
-        self.assertEqual((float(goals["weight"]["target"]), goals["weight"]["met"]), (180, False))
+        self.assertEqual(float(goals["weight"]["target"]), round(23 * (71 * 0.0254) ** 2 / 0.45359237, 1))  # BMI 23 → 164.9 lb
+        self.assertEqual((float(goals["bmi"]["target"]), float(goals["daily_calories"]["target"])), (23, 2200))
+        self.assertEqual((float(goals["daily_calories"]["current_value"]), goals["daily_calories"]["met"]), (950, True))
+        self.assertEqual((float(goals["beers_per_day"]["current_value"]), goals["beers_per_day"]["met"]), (3, False))
         self.assertEqual(float(goals["workout_days_per_week"]["current_value"]), 1)
 
-        # A workout logged directly lives in the same table and survives tracker saves.
+        # Workouts and weigh-ins logged directly share the tables and survive tracker saves.
         r = self.client.post("/api/health/workouts", json={"date": today.isoformat(), "minutes": 45, "activity": "Bike"})
         self.assertEqual(r.status_code, 201, r.data)
         manual_id = r.json["id"]
+        r = self.client.post("/api/health/weigh-ins", json={"date": today.isoformat(), "value": 185.5, "morning": True,
+                                                            "at": f"{today.isoformat()}T23:30:00+00:00"})
+        self.assertEqual(r.status_code, 201, r.data)
+        weigh_in_id = r.json["id"]
+        self.assertEqual(self.client.post("/api/health/weigh-ins", json={"date": today.isoformat(), "value": 5}).status_code, 400)
         self.assertTrue(store.save("health", self.health_state(today, workouts[:1]), 1))
-        sources = sorted(r["source"] for r in self.rows("SELECT source FROM journal.workouts"))
-        self.assertEqual(sources, ["health_tracker", "manual"])
+        self.assertEqual(sorted(r["source"] for r in self.rows("SELECT source FROM journal.workouts")), ["health_tracker", "manual"])
+        day = self.rows("SELECT * FROM health.daily_activity WHERE day = %s", today)[0]
+        self.assertEqual((day["weigh_ins"], float(day["weight"])), (3, 185.5))  # the timed reading is the latest
 
         # The journal shows that day's workouts from the shared table.
         with self.client.session_transaction() as session:
             session["journal_unlocked"] = True
         self.client.post("/api/journal/entry", json={"id": "j1", "date": today.isoformat()})
         health = self.client.get("/api/journal/entries").json[0]["health"]
-        self.assertEqual([w["activity"] for w in health["workouts"]], ["Bike"] if today != monday else ["Run", "Bike"])
+        self.assertEqual([w["activity"] for w in health["workouts"]], ["Bike"] if today != monday else ["Strength", "Bike"])
+        self.assertEqual(health["totalCalories"], 950)
 
         dash = self.client.get("/api/health/dashboard").json
         self.assertTrue(dash["available"])
-        self.assertEqual(dash["sync"]["workouts"], 1)
+        self.assertEqual((dash["sync"]["workouts"], dash["sync"]["weights"], dash["sync"]["drinks"], dash["sync"]["foods"]), (1, 4, 1, 1))
         self.assertEqual(dash["sync"]["skipped"], {"meals": 1})
-        self.assertIn("minutes", dash["sync"]["fields"]["workouts"])
+        self.assertEqual(dash["sync"]["fields"]["meals"], ["c", "date", "fa", "fi", "k", "name", "note", "p", "slot", "status"])
+        self.assertEqual(len(dash["weighIns"]), 5)
         self.assertEqual(self.client.put("/api/health/goals/workout_days_per_week", json={"target": 4}).status_code, 200)
         self.assertEqual(self.client.put("/api/health/goals/nope", json={"target": 4}).status_code, 404)
         self.assertEqual(self.client.delete(f"/api/health/workouts/{manual_id}").status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/health/weigh-ins/{weigh_in_id}").status_code, 200)
         tracker_id = self.rows("SELECT workout_id FROM journal.workouts WHERE source = 'health_tracker'")[0]["workout_id"]
         self.assertEqual(self.client.delete(f"/api/health/workouts/{tracker_id}").status_code, 404)
 

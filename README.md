@@ -65,34 +65,39 @@ OAuth token.
 
 **Journal and health** (relational, `lakebase_model.py`):
 
-| Table | Contents |
+| Table | Grain and contents |
 |---|---|
 | `journal.entries` | One entry per calendar date (primary key): quote, author, free-write text, source, account snapshots |
 | `journal.entry_tags`, `journal.habit_logs` | Tags (in order) and daily habit check-offs for an entry |
-| `journal.meals` | Meals by date and slot, from the journal (`source = 'journal'`) or the Health tracker, with calories and macros when known |
-| `journal.workouts` | Workout sessions by date: activity, minutes, note, dog-walk flag, source |
-| `health.body_measurements` | Weight by date, with unit |
-| `health.goals` | Targets: 5 qualifying workout days a week, 45 minutes to qualify, goal weight |
+| `journal.meals` | One row per meal item: date, slot, eaten or planned, description, calories, protein, carbs, fat, fiber, source |
+| `journal.workouts` | One row per session: date, activity (Strength, Cardio, Mobility / recovery, Dog walk…), minutes, note, dog-walk flag, source |
+| `health.body_measurements` | One row per weigh-in; many per date. Optional time, morning or reference flag, note |
+| `health.alcohol` | One row per drink entry: containers, ounces, ABV, calories, standard drinks |
+| `health.daily_logs` | Days marked "entire day logged" |
+| `health.foods` | Food reference: nutrition per unit, label note, link |
+| `health.profile` | One row: height, age, mode, BMI goal, calorie target, alcohol days |
+| `health.goals` | Targets: 5 qualifying workout days a week, 45 minutes to qualify, weight (from the BMI goal and height), BMI, daily calories, beers per day |
 
-Views the UI reads, all over those same tables:
+Views the UI reads, matching the Health tracker's own calculations:
 
 | View | One row per | Used for |
 |---|---|---|
-| `health.daily_activity` | date | Workout minutes, qualifying day, dog-walk minutes, meals, calories, weight, whether a journal entry exists |
-| `health.weekly_workout_progress` | week (Monday start) | Qualifying days against the weekly goal |
-| `health.weight_trend` | weigh-in date | Weight with a 7-day rolling average |
+| `health.daily_activity` | date | Workout and dog-walk minutes, qualifying day, eaten vs planned calories, macros, beers and standard drinks, total calories (eaten food + alcohol) against the target, alcohol within rules (weekend days, under 3), weigh-in count, first/latest/min/max weight, morning weight, day logged |
+| `health.weekly_workout_progress` | week (Monday start) | Qualifying days against the weekly goal, minutes, beers, days outside the alcohol rules |
+| `health.weight_trend` | weigh-in date | Latest weight, morning 7-day average (morning weigh-ins only), BMI |
 | `health.goal_progress` | goal | Current value and whether the goal is met |
 
 The Health tracker keeps its own document as its editing format. Every save copies
-its workouts, meals and weights into the shared tables, replacing the rows it produced
-before; workouts logged on the dashboard (`source = 'manual'`) are kept. The copy reads
-the tracker's fields tolerantly, keeps each original record in a `details` column, and
-writes a sync report (counts, records skipped for having no date, field names seen)
-shown on the dashboard. A copy failure is reported and never blocks the tracker save.
-Journal entries include that day's workouts and weight as a read-only `health` field.
+its workouts, meals, weigh-ins, drinks, logged days, foods and settings into the shared
+tables, replacing the rows it produced before; workouts and weigh-ins logged on the
+dashboard (`source = 'manual'`) are kept. Each copied row keeps its original record in
+`details`, and a sync report (counts, skipped records, field names seen) is shown on the
+dashboard. A copy failure is reported and never blocks the tracker save. Journal
+entries include that day's workouts, weight and calories as a read-only `health` field.
 
-Admin → Health goals shows the dashboard above the tracker (`/api/health/dashboard`).
-`APP_TIMEZONE` in `app.yaml` sets which calendar day "today" and "this week" mean.
+Admin → Health goals shows the dashboard above the tracker (`/api/health/dashboard`),
+with forms to log workouts and weigh-ins. `APP_TIMEZONE` in `app.yaml` sets which
+calendar day "today" and "this week" mean.
 
 **Everything else** is in the `virtuwill` schema:
 

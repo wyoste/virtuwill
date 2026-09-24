@@ -1,25 +1,32 @@
 """Relational journal and health model in Lakebase.
 
+journal schema (the daily record):
   journal.entries        one journal entry per calendar date
   journal.entry_tags     tags on an entry, in the order entered
   journal.habit_logs     daily habit check-offs (run, lift, read, ...)
-  journal.meals          meals by date and slot, from the journal or the Health tracker
-  journal.workouts       workout sessions by date, from the Health tracker or logged directly
-  health.body_measurements  weight (and other metrics) by date
-  health.goals           targets the dashboard measures against
+  journal.meals          eaten or planned meals by date and slot, from the
+                         journal page or the Health tracker, with nutrition
+  journal.workouts       workout sessions by date (Strength, Cardio, Mobility /
+                         recovery, Dog walk, ...), from the tracker or logged directly
 
-Views for the dashboard, recomputed on read:
+health schema (measurements, reference data and targets):
+  health.body_measurements  weigh-ins: many per calendar date, each with an
+                            optional time and a morning/reference flag
+  health.alcohol            drinks by date: containers, size, ABV, calories, standard drinks
+  health.daily_logs         days marked "entire day logged" (nutrition complete)
+  health.foods              food reference: nutrition per unit
+  health.profile            height, age, mode, BMI goal, calorie target, alcohol days
+  health.goals              targets the views measure against
 
-  health.daily_activity           one row per date: workout minutes, qualifying
-                                  day, dog walks, meals, calories, weight, journal
-  health.weekly_workout_progress  qualifying workout days per week against the goal
-  health.weight_trend             weight with a 7-day rolling average
+Views, recomputed on read, matching the Health tracker's own calculations:
+  health.daily_activity           one row per date
+  health.weekly_workout_progress  one row per Monday-start week
+  health.weight_trend             morning 7-day average and BMI per weigh-in date
   health.goal_progress            each goal's current value and whether it is met
 
-The Health tracker (the embedded standalone app) keeps its own document as the
-editing format. Every save projects its workouts, meals and weights into the
-tables above, replacing the rows it produced before, so the journal and the
-dashboard read one set of base tables.
+The Health tracker keeps its own document as the editing format. Every save
+projects it into the tables above, replacing the rows it produced before, so
+the journal and the dashboard read one set of base tables.
 """
 import logging
 from datetime import date, datetime, timezone
@@ -64,11 +71,14 @@ CREATE TABLE IF NOT EXISTS journal.meals (
     meal_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     meal_date DATE NOT NULL,
     slot TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'eaten' CHECK (status IN ('eaten', 'planned')),
     description TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
     calories NUMERIC,
     protein_g NUMERIC,
     carbs_g NUMERIC,
     fat_g NUMERIC,
+    fiber_g NUMERIC,
     source TEXT NOT NULL,
     source_ref TEXT,
     details JSONB NOT NULL DEFAULT '{}',
@@ -94,15 +104,65 @@ CREATE INDEX IF NOT EXISTS workouts_by_source ON journal.workouts (source, worko
 CREATE TABLE IF NOT EXISTS health.body_measurements (
     measurement_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     measured_on DATE NOT NULL,
+    measured_at TIMESTAMPTZ,
     metric TEXT NOT NULL DEFAULT 'weight',
     value NUMERIC NOT NULL,
     unit TEXT NOT NULL DEFAULT 'lb',
+    is_morning BOOLEAN,
+    note TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL,
     source_ref TEXT,
     details JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS measurements_by_date ON health.body_measurements (metric, measured_on);
+CREATE INDEX IF NOT EXISTS measurements_by_date ON health.body_measurements (metric, measured_on, measured_at);
+CREATE TABLE IF NOT EXISTS health.alcohol (
+    drink_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    drink_date DATE NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    containers NUMERIC NOT NULL DEFAULT 0 CHECK (containers >= 0),
+    oz_per_container NUMERIC,
+    abv_pct NUMERIC,
+    calories NUMERIC,
+    standard_drinks NUMERIC,
+    source TEXT NOT NULL,
+    source_ref TEXT,
+    details JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS alcohol_by_date ON health.alcohol (drink_date);
+CREATE TABLE IF NOT EXISTS health.daily_logs (
+    log_date DATE PRIMARY KEY,
+    nutrition_complete BOOLEAN NOT NULL,
+    source TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS health.foods (
+    food_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    unit TEXT NOT NULL DEFAULT '',
+    calories NUMERIC,
+    protein_g NUMERIC,
+    carbs_g NUMERIC,
+    fat_g NUMERIC,
+    fiber_g NUMERIC,
+    reference_note TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL,
+    details JSONB NOT NULL DEFAULT '{}',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS health.profile (
+    profile_id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (profile_id = 1),
+    height_in NUMERIC,
+    age INTEGER,
+    mode TEXT,
+    bmi_goal NUMERIC,
+    calorie_target NUMERIC,
+    alcohol_days SMALLINT[] NOT NULL DEFAULT '{5,6,7}',
+    details JSONB NOT NULL DEFAULT '{}',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS health.goals (
     metric TEXT PRIMARY KEY,
     target NUMERIC NOT NULL,
@@ -113,14 +173,20 @@ CREATE TABLE IF NOT EXISTS health.goals (
 );
 INSERT INTO health.goals (metric, target, unit, period, direction) VALUES
     ('workout_days_per_week', 5, 'days', 'week', 'at_least'),
-    ('qualifying_workout_minutes', 45, 'minutes', 'day', 'at_least')
+    ('qualifying_workout_minutes', 45, 'minutes', 'day', 'at_least'),
+    ('beers_per_day', 2, 'beers', 'day', 'at_most')
 ON CONFLICT (metric) DO NOTHING;
 
-CREATE OR REPLACE VIEW health.daily_activity AS
+-- Views are rebuilt on start so their columns always match this file.
+DROP VIEW IF EXISTS health.goal_progress, health.weight_trend, health.weekly_workout_progress, health.daily_activity;
+
+CREATE VIEW health.daily_activity AS
 WITH days AS (
     SELECT workout_date AS day FROM journal.workouts
     UNION SELECT meal_date FROM journal.meals
     UNION SELECT measured_on FROM health.body_measurements WHERE metric = 'weight'
+    UNION SELECT drink_date FROM health.alcohol
+    UNION SELECT log_date FROM health.daily_logs
     UNION SELECT entry_date FROM journal.entries
 ), workouts AS (
     SELECT workout_date AS day,
@@ -129,49 +195,101 @@ WITH days AS (
            COALESCE(SUM(minutes) FILTER (WHERE is_dog_walk), 0) AS dog_walk_minutes
     FROM journal.workouts GROUP BY workout_date
 ), meals AS (
-    SELECT meal_date AS day, COUNT(*) AS meals_logged, SUM(calories) AS calories, SUM(protein_g) AS protein_g
+    SELECT meal_date AS day,
+           COUNT(*) FILTER (WHERE status = 'eaten') AS meals_eaten,
+           COUNT(*) FILTER (WHERE status = 'planned') AS meals_planned,
+           SUM(calories) FILTER (WHERE status = 'eaten') AS meal_calories,
+           SUM(calories) FILTER (WHERE status = 'planned') AS planned_calories,
+           SUM(protein_g) FILTER (WHERE status = 'eaten') AS protein_g,
+           SUM(carbs_g) FILTER (WHERE status = 'eaten') AS carbs_g,
+           SUM(fat_g) FILTER (WHERE status = 'eaten') AS fat_g,
+           SUM(fiber_g) FILTER (WHERE status = 'eaten') AS fiber_g
     FROM journal.meals GROUP BY meal_date
-), weights AS (
-    SELECT DISTINCT ON (measured_on) measured_on AS day, value AS weight, unit AS weight_unit
+), drinks AS (
+    SELECT drink_date AS day, SUM(containers) AS beers, SUM(standard_drinks) AS standard_drinks,
+           SUM(calories) AS alcohol_calories
+    FROM health.alcohol GROUP BY drink_date
+), weigh_ins AS (
+    -- Many weigh-ins per date; order within a day by time, then entry order.
+    SELECT measured_on AS day,
+           COUNT(*) AS weigh_ins,
+           COUNT(*) FILTER (WHERE is_morning) AS morning_weigh_ins,
+           (ARRAY_AGG(value ORDER BY measured_at NULLS FIRST, measurement_id))[1] AS first_weight,
+           (ARRAY_AGG(value ORDER BY measured_at DESC NULLS LAST, measurement_id DESC))[1] AS weight,
+           (ARRAY_AGG(unit ORDER BY measured_at DESC NULLS LAST, measurement_id DESC))[1] AS weight_unit,
+           (ARRAY_AGG(is_morning ORDER BY measured_at DESC NULLS LAST, measurement_id DESC))[1] AS weight_is_morning,
+           MIN(value) AS min_weight,
+           MAX(value) AS max_weight,
+           AVG(value) FILTER (WHERE is_morning) AS morning_weight
     FROM health.body_measurements WHERE metric = 'weight'
-    ORDER BY measured_on, created_at DESC, measurement_id DESC
+    GROUP BY measured_on
 )
 SELECT d.day,
+       EXTRACT(ISODOW FROM d.day)::int AS iso_weekday,
        COALESCE(w.workout_minutes, 0) AS workout_minutes,
        COALESCE(w.workout_sessions, 0) AS workout_sessions,
        COALESCE(w.dog_walk_minutes, 0) AS dog_walk_minutes,
        COALESCE(w.workout_minutes, 0) >= COALESCE(
            (SELECT target FROM health.goals WHERE metric = 'qualifying_workout_minutes'), 45) AS qualifying_workout_day,
-       COALESCE(m.meals_logged, 0) AS meals_logged,
-       m.calories,
-       m.protein_g,
-       b.weight,
-       b.weight_unit,
+       COALESCE(m.meals_eaten, 0) AS meals_eaten,
+       COALESCE(m.meals_planned, 0) AS meals_planned,
+       m.meal_calories,
+       m.planned_calories,
+       m.protein_g, m.carbs_g, m.fat_g, m.fiber_g,
+       COALESCE(dr.beers, 0) AS beers,
+       COALESCE(dr.standard_drinks, 0) AS standard_drinks,
+       dr.alcohol_calories,
+       CASE WHEN m.meal_calories IS NULL AND dr.alcohol_calories IS NULL THEN NULL
+            ELSE COALESCE(m.meal_calories, 0) + COALESCE(dr.alcohol_calories, 0) END AS total_calories,
+       (SELECT calorie_target FROM health.profile) AS calorie_target,
+       COALESCE(l.nutrition_complete, false) AS nutrition_complete,
+       COALESCE(dr.beers, 0) = 0
+           OR (dr.beers < 3 AND EXTRACT(ISODOW FROM d.day)::int = ANY (
+               COALESCE((SELECT alcohol_days FROM health.profile), '{5,6,7}'::smallint[]))) AS alcohol_within_rules,
+       COALESCE(wi.weigh_ins, 0) AS weigh_ins,
+       COALESCE(wi.morning_weigh_ins, 0) AS morning_weigh_ins,
+       wi.first_weight,
+       wi.weight,
+       wi.weight_unit,
+       wi.weight_is_morning,
+       wi.min_weight,
+       wi.max_weight,
+       wi.morning_weight,
        e.entry_date IS NOT NULL AS has_journal_entry
 FROM days d
 LEFT JOIN workouts w USING (day)
 LEFT JOIN meals m USING (day)
-LEFT JOIN weights b USING (day)
+LEFT JOIN drinks dr USING (day)
+LEFT JOIN weigh_ins wi USING (day)
+LEFT JOIN health.daily_logs l ON l.log_date = d.day
 LEFT JOIN journal.entries e ON e.entry_date = d.day;
 
-CREATE OR REPLACE VIEW health.weekly_workout_progress AS
+CREATE VIEW health.weekly_workout_progress AS
 SELECT date_trunc('week', day)::date AS week_start,
        COUNT(*) FILTER (WHERE qualifying_workout_day) AS qualifying_days,
        SUM(workout_minutes) AS workout_minutes,
        SUM(dog_walk_minutes) AS dog_walk_minutes,
+       SUM(beers) AS beers,
+       SUM(standard_drinks) AS standard_drinks,
+       COUNT(*) FILTER (WHERE NOT alcohol_within_rules) AS days_outside_alcohol_rules,
        (SELECT target FROM health.goals WHERE metric = 'workout_days_per_week') AS target_days,
        COUNT(*) FILTER (WHERE qualifying_workout_day)
            >= COALESCE((SELECT target FROM health.goals WHERE metric = 'workout_days_per_week'), 5) AS goal_met
 FROM health.daily_activity
 GROUP BY 1;
 
-CREATE OR REPLACE VIEW health.weight_trend AS
-SELECT day, weight, weight_unit,
-       ROUND(AVG(weight) OVER (ORDER BY day RANGE BETWEEN INTERVAL '6 days' PRECEDING AND CURRENT ROW), 1) AS avg_7d
+-- The trend uses morning weigh-ins only, as the Health tracker does; other
+-- readings stay visible as references.
+CREATE VIEW health.weight_trend AS
+SELECT day, weigh_ins, weight, weight_unit, weight_is_morning, min_weight, max_weight, morning_weight,
+       ROUND(AVG(morning_weight) OVER seven_days, 1) AS morning_avg_7d,
+       ROUND(COALESCE(AVG(morning_weight) OVER seven_days, weight) * 0.45359237
+             / NULLIF(((SELECT height_in FROM health.profile) * 0.0254) ^ 2, 0), 1) AS bmi
 FROM health.daily_activity
-WHERE weight IS NOT NULL;
+WHERE weight IS NOT NULL
+WINDOW seven_days AS (ORDER BY day RANGE BETWEEN INTERVAL '6 days' PRECEDING AND CURRENT ROW);
 
-CREATE OR REPLACE VIEW health.goal_progress AS
+CREATE VIEW health.goal_progress AS
 SELECT g.metric, g.target, g.unit, g.period, g.direction, c.current_value,
        CASE WHEN c.current_value IS NULL THEN NULL
             WHEN g.direction = 'at_least' THEN c.current_value >= g.target
@@ -185,7 +303,13 @@ LEFT JOIN LATERAL (
         WHEN 'qualifying_workout_minutes' THEN (
             SELECT workout_minutes FROM health.daily_activity WHERE day = current_date)
         WHEN 'weight' THEN (
-            SELECT avg_7d FROM health.weight_trend ORDER BY day DESC LIMIT 1)
+            SELECT COALESCE(morning_avg_7d, weight) FROM health.weight_trend ORDER BY day DESC LIMIT 1)
+        WHEN 'bmi' THEN (
+            SELECT bmi FROM health.weight_trend ORDER BY day DESC LIMIT 1)
+        WHEN 'daily_calories' THEN (
+            SELECT total_calories FROM health.daily_activity WHERE day = current_date)
+        WHEN 'beers_per_day' THEN (
+            SELECT beers FROM health.daily_activity WHERE day = current_date)
     END AS current_value
 ) c ON true;
 """
@@ -221,11 +345,14 @@ def parse_date(value):
             return None
 
 
-def _first(record, keys):
-    for key in keys:
-        if key in record and record[key] not in (None, ""):
-            return record[key]
-    return None
+def _moment(value):
+    """A full timestamp when the source recorded one, else None (date only)."""
+    if not value or "T" not in str(value):
+        return None
+    try:
+        return timestamp(value)
+    except ValueError:
+        return None
 
 
 def _number(value):
@@ -301,7 +428,7 @@ SELECT e.entry_id, e.entry_date, e.quote, e.quote_author, e.free_write, e.source
        COALESCE((SELECT jsonb_agg(jsonb_build_object('activity', w.activity, 'minutes', w.minutes, 'note', w.note,
                                                     'dogWalk', w.is_dog_walk, 'source', w.source) ORDER BY w.workout_id)
                  FROM journal.workouts w WHERE w.workout_date = e.entry_date), '[]') AS workouts,
-       a.workout_minutes, a.qualifying_workout_day, a.weight
+       a.workout_minutes, a.qualifying_workout_day, a.weight, a.total_calories
 FROM journal.entries e
 LEFT JOIN health.daily_activity a ON a.day = e.entry_date
 """
@@ -327,6 +454,7 @@ def journal_entry(row):
             "workoutMinutes": _number(row["workout_minutes"]) or 0,
             "qualifyingWorkoutDay": bool(row["qualifying_workout_day"]),
             "weight": _number(row["weight"]),
+            "totalCalories": _number(row["total_calories"]),
         },
     }
 
@@ -363,20 +491,17 @@ def import_journal(db, entries):
 
 
 # ── Health tracker projection ─────────────────────────────────────────────────
-# The standalone tracker's record fields are read tolerantly; each row keeps the
-# original record in `details`, and a sync report lists what was skipped.
+# Field names follow the Yoste Health tracker (yoste-health-v1). Each row keeps
+# the original record in `details`, and a sync report lists what was skipped.
 
-DATE_KEYS = ("date", "day", "d", "when", "ts", "time", "at", "created", "createdAt")
-MINUTE_KEYS = ("minutes", "mins", "min", "duration", "dur", "length")
-ACTIVITY_KEYS = ("type", "activity", "kind", "workout", "category", "name", "title")
-NOTE_KEYS = ("note", "notes", "desc", "description", "comment")
-MEAL_SLOT_KEYS = ("meal", "slot", "type", "time", "category")
-MEAL_TEXT_KEYS = ("name", "food", "title", "item", "desc", "description", "text", "note")
-CAL_KEYS = ("calories", "kcal", "cal", "cals", "energy")
+TRACKER_TABLES = ("journal.workouts", "journal.meals", "health.body_measurements", "health.alcohol",
+                  "health.daily_logs", "health.foods")
+LB_PER_KG = 0.45359237
+M_PER_IN = 0.0254
 
 
-def _record_date(record):
-    return parse_date(_first(record, DATE_KEYS))
+def _text(value):
+    return "" if value is None else str(value)
 
 
 def _ref(record, index):
@@ -384,76 +509,130 @@ def _ref(record, index):
     return str(ref) if ref not in (None, "") else f"#{index}"
 
 
+def _iso_weekdays(js_days):
+    """Tracker weekend setting ('5,6,0', JavaScript getDay) to ISO weekdays 1-7."""
+    days = set()
+    for part in _text(js_days).split(","):
+        if part.strip().isdigit() and 0 <= int(part) <= 6:
+            days.add(int(part) or 7)
+    return sorted(days) or [5, 6, 7]
+
+
 def project_health(db, state):
     """Replace the tracker's rows in the shared tables; returns a sync report."""
-    report = {"workouts": 0, "meals": 0, "weights": 0, "skipped": {}, "fields": {}, "syncedAt": datetime.now(timezone.utc).isoformat()}
+    counts = {"workouts": 0, "meals": 0, "weights": 0, "drinks": 0, "completeDays": 0, "foods": 0}
+    report = {"skipped": {}, "fields": {}, "syncedAt": datetime.now(timezone.utc).isoformat()}
 
-    def skip(kind):
-        report["skipped"][kind] = report["skipped"].get(kind, 0) + 1
+    def records(kind):
+        for index, record in enumerate(state.get(kind) or []):
+            if not isinstance(record, dict):
+                report["skipped"][kind] = report["skipped"].get(kind, 0) + 1
+                continue
+            report["fields"].setdefault(kind, set()).update(record.keys())
+            day = parse_date(record.get("date"))
+            if kind != "foods" and not day:
+                report["skipped"][kind] = report["skipped"].get(kind, 0) + 1
+                continue
+            yield index, record, day
 
-    def note_fields(kind, record):
-        report["fields"].setdefault(kind, set()).update(record.keys())
+    for table in TRACKER_TABLES:
+        db.execute(f"DELETE FROM {table} WHERE source = %s", (TRACKER,))
 
-    settings = state.get("settings") or {}
-    unit = str(_first(settings, ("unit", "units", "weightUnit")) or "lb")[:8]
-
-    for table, source_filter in (("journal.workouts", "source"), ("journal.meals", "source"), ("health.body_measurements", "source")):
-        db.execute(f"DELETE FROM {table} WHERE {source_filter} = %s", (TRACKER,))
-
-    for index, record in enumerate(state.get("workouts") or []):
-        if not isinstance(record, dict):
-            skip("workouts"); continue
-        note_fields("workouts", record)
-        day = _record_date(record)
-        if not day:
-            skip("workouts"); continue
-        activity = str(_first(record, ACTIVITY_KEYS) or "")
-        note = str(_first(record, NOTE_KEYS) or "")
-        minutes = _number(_first(record, MINUTE_KEYS))
-        dog = bool(record.get("dog") or record.get("dogWalk")) or "dog" in f"{activity} {note}".lower()
+    for index, r, day in records("workouts"):
+        activity = _text(r.get("type"))
+        minutes = _number(r.get("minutes"))
         db.execute(
             """INSERT INTO journal.workouts (workout_date, activity, minutes, note, is_dog_walk, source, source_ref, details)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-            (day, activity, minutes if minutes is None or minutes >= 0 else None, note, dog, TRACKER, _ref(record, index), Jsonb(record)))
-        report["workouts"] += 1
+            (day, activity, minutes if minutes is None or minutes >= 0 else None, _text(r.get("note")),
+             activity.strip().lower() == "dog walk", TRACKER, _ref(r, index), Jsonb(r)))
+        counts["workouts"] += 1
 
-    for index, record in enumerate(state.get("meals") or []):
-        if not isinstance(record, dict):
-            skip("meals"); continue
-        note_fields("meals", record)
-        day = _record_date(record)
-        if not day:
-            skip("meals"); continue
-        slot = str(_first(record, MEAL_SLOT_KEYS) or "meal")
-        slot = SLOTS.get(slot, slot).lower()
+    for index, r, day in records("meals"):
         db.execute(
-            """INSERT INTO journal.meals (meal_date, slot, description, calories, protein_g, carbs_g, fat_g, source, source_ref, details)
+            """INSERT INTO journal.meals (meal_date, slot, status, description, note, calories, protein_g, carbs_g,
+                                          fat_g, fiber_g, source, source_ref, details)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (day, (_text(r.get("slot")) or "meal").lower(),
+             "planned" if _text(r.get("status")).lower() == "planned" else "eaten",
+             _text(r.get("name")), _text(r.get("note")), _number(r.get("k")), _number(r.get("p")),
+             _number(r.get("c")), _number(r.get("fa")), _number(r.get("fi")), TRACKER, _ref(r, index), Jsonb(r)))
+        counts["meals"] += 1
+
+    for index, r, day in records("weights"):
+        value = _number(r.get("value"))
+        if value is None:
+            report["skipped"]["weights"] = report["skipped"].get("weights", 0) + 1
+            continue
+        morning = r.get("morning") if isinstance(r.get("morning"), bool) else None
+        db.execute(
+            """INSERT INTO health.body_measurements (measured_on, measured_at, metric, value, unit, is_morning, note,
+                                                     source, source_ref, details)
+               VALUES (%s, %s, 'weight', %s, 'lb', %s, %s, %s, %s, %s)""",
+            (day, _moment(r.get("time") or r.get("at")), value, morning, _text(r.get("note")), TRACKER, _ref(r, index), Jsonb(r)))
+        counts["weights"] += 1
+
+    for index, r, day in records("beers"):
+        db.execute(
+            """INSERT INTO health.alcohol (drink_date, name, containers, oz_per_container, abv_pct, calories,
+                                           standard_drinks, source, source_ref, details)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (day, slot, str(_first(record, MEAL_TEXT_KEYS) or ""), _number(_first(record, CAL_KEYS)),
-             _number(_first(record, ("protein", "protein_g"))), _number(_first(record, ("carbs", "carbs_g", "carbohydrates"))),
-             _number(_first(record, ("fat", "fat_g"))), TRACKER, _ref(record, index), Jsonb(record)))
-        report["meals"] += 1
+            (day, _text(r.get("name")), max(_number(r.get("count")) or 0, 0), _number(r.get("oz")),
+             _number(r.get("abv")), _number(r.get("k")), _number(r.get("std")), TRACKER, _ref(r, index), Jsonb(r)))
+        counts["drinks"] += 1
 
-    for index, record in enumerate(state.get("weights") or []):
-        if not isinstance(record, dict):
-            skip("weights"); continue
-        note_fields("weights", record)
-        day = _record_date(record)
-        value = _number(_first(record, ("value", "weight", "lbs", "kg")))
-        if not day or value is None:
-            skip("weights"); continue
-        db.execute(
-            """INSERT INTO health.body_measurements (measured_on, metric, value, unit, source, source_ref, details)
-               VALUES (%s, 'weight', %s, %s, %s, %s, %s)""",
-            (day, value, str(record.get("unit") or unit)[:8], TRACKER, _ref(record, index), Jsonb(record)))
-        report["weights"] += 1
+    for value in dict.fromkeys(state.get("complete") or []):
+        day = parse_date(value)
+        if not day:
+            report["skipped"]["complete"] = report["skipped"].get("complete", 0) + 1
+            continue
+        db.execute("INSERT INTO health.daily_logs (log_date, nutrition_complete, source) VALUES (%s, true, %s)"
+                   " ON CONFLICT (log_date) DO NOTHING", (day, TRACKER))
+        counts["completeDays"] += 1
 
-    goal_weight = _number(_first(settings, ("goalWeight", "targetWeight", "goal_weight", "target_weight", "goal", "target")))
-    if goal_weight:
+    for index, r, _ in records("foods"):
+        food_id = _text(r.get("id")) or f"#{index}"
         db.execute(
-            """INSERT INTO health.goals (metric, target, unit, period, direction) VALUES ('weight', %s, %s, 'day', 'at_most')
-               ON CONFLICT (metric) DO UPDATE SET target = EXCLUDED.target, unit = EXCLUDED.unit, updated_at = now()""",
-            (goal_weight, unit))
+            """INSERT INTO health.foods (food_id, name, unit, calories, protein_g, carbs_g, fat_g, fiber_g,
+                                         reference_note, url, source, details)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (food_id) DO UPDATE SET name = EXCLUDED.name, unit = EXCLUDED.unit,
+                   calories = EXCLUDED.calories, protein_g = EXCLUDED.protein_g, carbs_g = EXCLUDED.carbs_g,
+                   fat_g = EXCLUDED.fat_g, fiber_g = EXCLUDED.fiber_g, reference_note = EXCLUDED.reference_note,
+                   url = EXCLUDED.url, source = EXCLUDED.source, details = EXCLUDED.details, updated_at = now()""",
+            (food_id, _text(r.get("name")), _text(r.get("unit")), _number(r.get("k")), _number(r.get("p")),
+             _number(r.get("c")), _number(r.get("fa")), _number(r.get("fi")), _text(r.get("status")),
+             _text(r.get("url")), TRACKER, Jsonb(r)))
+        counts["foods"] += 1
+
+    settings = state.get("settings") or {}
+    if isinstance(settings, dict) and settings:
+        height, bmi_goal = _number(settings.get("height")), _number(settings.get("goal"))
+        calorie_target = _number(settings.get("target"))
+        age = _number(settings.get("age"))
+        db.execute(
+            """INSERT INTO health.profile (profile_id, height_in, age, mode, bmi_goal, calorie_target, alcohol_days, details)
+               VALUES (1, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (profile_id) DO UPDATE SET height_in = EXCLUDED.height_in, age = EXCLUDED.age,
+                   mode = EXCLUDED.mode, bmi_goal = EXCLUDED.bmi_goal, calorie_target = EXCLUDED.calorie_target,
+                   alcohol_days = EXCLUDED.alcohol_days, details = EXCLUDED.details, updated_at = now()""",
+            (height, int(age) if age is not None else None, _text(settings.get("mode")) or None, bmi_goal,
+             calorie_target, _iso_weekdays(settings.get("weekend")), Jsonb(settings)))
+        goals = []
+        if bmi_goal:
+            goals.append(("bmi", round(bmi_goal, 1), "BMI", "day", "at_most"))
+            if height:
+                # The tracker's target weight: the BMI goal at this height, in pounds.
+                goals.append(("weight", round(bmi_goal * (height * M_PER_IN) ** 2 / LB_PER_KG, 1), "lb", "day", "at_most"))
+        if calorie_target:
+            goals.append(("daily_calories", calorie_target, "kcal", "day", "at_most"))
+        for goal in goals:
+            db.execute(
+                """INSERT INTO health.goals (metric, target, unit, period, direction) VALUES (%s, %s, %s, %s, %s)
+                   ON CONFLICT (metric) DO UPDATE SET target = EXCLUDED.target, unit = EXCLUDED.unit, updated_at = now()""",
+                goal)
+
+    report.update(counts)
     report["fields"] = {k: sorted(v) for k, v in report["fields"].items()}
     return report
 
@@ -466,6 +645,19 @@ def add_workout(db, day, activity, minutes, note, dog_walk):
            VALUES (%s, %s, %s, %s, %s, 'manual') RETURNING workout_id""",
         (day, activity, minutes, note, dog_walk)).fetchone()
     return row["workout_id"]
+
+
+def add_weigh_in(db, day, value, measured_at, is_morning, note):
+    row = db.execute(
+        """INSERT INTO health.body_measurements (measured_on, measured_at, metric, value, unit, is_morning, note, source)
+           VALUES (%s, %s, 'weight', %s, 'lb', %s, %s, 'manual') RETURNING measurement_id""",
+        (day, measured_at, value, is_morning, note)).fetchone()
+    return row["measurement_id"]
+
+
+def delete_weigh_in(db, measurement_id):
+    return db.execute("DELETE FROM health.body_measurements WHERE measurement_id = %s AND source = 'manual'",
+                      (measurement_id,)).rowcount == 1
 
 
 def delete_workout(db, workout_id):
@@ -496,4 +688,7 @@ def dashboard(db, days=14, weeks=8, weights=60):
         "weights": q("SELECT * FROM health.weight_trend ORDER BY day DESC LIMIT %s", weights),
         "workouts": q("""SELECT workout_id, workout_date, activity, minutes, note, is_dog_walk, source
                          FROM journal.workouts ORDER BY workout_date DESC, workout_id DESC LIMIT 20"""),
+        "weighIns": q("""SELECT measurement_id, measured_on, measured_at, value, unit, is_morning, note, source
+                         FROM health.body_measurements WHERE metric = 'weight'
+                         ORDER BY measured_on DESC, measured_at DESC NULLS LAST, measurement_id DESC LIMIT 20"""),
     }
