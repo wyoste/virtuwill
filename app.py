@@ -80,14 +80,6 @@ if storage.backend().name == "lakebase":
 
 # ── Data helpers ───────────────────────────────────────────────────────────────
 
-def load_journal():
-    return storage.load("journal_entries")
-
-
-def save_journal(entries):
-    storage.save("journal_entries", entries)
-
-
 def load_music():
     # Bundled, read-only sample library.
     try:
@@ -158,7 +150,7 @@ def journal_status():
 @app.route("/api/journal/entries")
 @journal_required
 def journal_entries():
-    return jsonify(load_journal())
+    return jsonify(storage.journal_list())
 
 
 @app.route("/api/journal/entry", methods=["POST"])
@@ -171,7 +163,6 @@ def journal_save_entry():
     We store in the same camelCase format so reads and writes are symmetric.
     """
     data    = request.get_json(force=True) or {}
-    entries = load_journal()
 
     entry = {
         "id":          data.get("id") or str(uuid.uuid4()),
@@ -191,36 +182,28 @@ def journal_save_entry():
         "createdAt": data.get("createdAt", datetime.utcnow().isoformat() + "Z"),
     }
 
-    # Upsert: update in place if ID exists, else prepend and sort
-    idx = next((i for i, e in enumerate(entries) if e.get("id") == entry["id"]), None)
-    if idx is not None:
-        entries[idx] = entry
-        was_new = False
-    else:
-        entries.insert(0, entry)
-        entries.sort(key=lambda e: e.get("date", ""), reverse=True)
-        was_new = True
+    try:
+        datetime.strptime(entry["date"], "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return jsonify({"error": "date must be YYYY-MM-DD"}), 400
 
-    save_journal(entries)
+    # Upsert: one row per entry in Lakebase (or the JSON file locally).
+    was_new = storage.journal_upsert(entry)
     return jsonify({"ok": True, "entry": entry, "wasNew": was_new}), 201 if was_new else 200
 
 
 @app.route("/api/journal/entry/<entry_id>", methods=["DELETE"])
 @journal_required
 def journal_delete_entry(entry_id):
-    entries     = load_journal()
-    new_entries = [e for e in entries if e.get("id") != entry_id]
-    if len(new_entries) == len(entries):
+    if not storage.journal_delete(entry_id):
         return jsonify({"error": "Entry not found"}), 404
-    save_journal(new_entries)
     return jsonify({"ok": True})
 
 
 @app.route("/api/journal/check/<date_str>")
 @journal_required
 def journal_check_date(date_str):
-    entries = load_journal()
-    return jsonify({"date": date_str, "exists": any(e.get("date") == date_str for e in entries)})
+    return jsonify({"date": date_str, "exists": storage.journal_date_exists(date_str)})
 
 
 @app.route("/api/journal/ocr", methods=["POST"])

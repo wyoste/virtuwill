@@ -103,6 +103,47 @@ class LakebaseStorageTests(unittest.TestCase):
         self.assertFalse(path.exists())
         self.assertIsNone(storage.get_media(photo["url"].removeprefix("/static/")))
 
+    def test_journal_entries_move_to_their_own_table_once(self):
+        with self.backend.connect() as db:
+            db.execute(f"TRUNCATE {storage.SCHEMA}.journal_entries, {storage.SCHEMA}.migrations")
+        self.backend._pool.close()
+        self.backend = storage.LakebaseBackend()
+        storage.use(self.backend)
+        original = json.loads((storage.DATA_DIR / "journal_entries.json").read_text())
+        moved = storage.journal_list()
+        self.assertEqual([e["id"] for e in moved], [e["id"] for e in original])
+        first = next(e for e in original if e.get("accounts"))
+        got = next(e for e in moved if e["id"] == first["id"])
+        for key in ("date", "quote", "quoteAuthor", "meals", "freeWrite", "habits", "tags", "accounts", "source"):
+            self.assertEqual(got[key], first[key], key)
+        self.assertEqual(storage._timestamp(got["createdAt"]), storage._timestamp(first["createdAt"]))
+        # Deleting everything must not re-import on the next start.
+        for entry in moved:
+            self.assertTrue(storage.journal_delete(entry["id"]))
+        self.backend._pool.close()
+        self.backend = storage.LakebaseBackend()
+        storage.use(self.backend)
+        self.assertEqual(storage.journal_list(), [])
+
+    def test_journal_routes_write_single_rows(self):
+        with self.client.session_transaction() as session:
+            session["journal_unlocked"] = True
+        entry = {"id": "t1", "date": "2030-01-02", "quote": "q", "meals": {"B": "oats"}, "tags": ["a"], "habits": {"run": True}}
+        r = self.client.post("/api/journal/entry", json=entry)
+        self.assertEqual((r.status_code, r.json["wasNew"]), (201, True))
+        r = self.client.post("/api/journal/entry", json={**entry, "quote": "updated"})
+        self.assertEqual((r.status_code, r.json["wasNew"]), (200, False))
+        self.assertEqual(self.client.post("/api/journal/entry", json={**entry, "id": "t2", "date": "bad"}).status_code, 400)
+        listed = self.client.get("/api/journal/entries").json
+        self.assertEqual(listed[0]["id"], "t1")
+        self.assertEqual((listed[0]["quote"], listed[0]["meals"], listed[0]["tags"]), ("updated", {"B": "oats", "L": "", "D": ""}, ["a"]))
+        self.assertTrue(self.client.get("/api/journal/check/2030-01-02").json["exists"])
+        self.assertFalse(self.client.get("/api/journal/check/not-a-date").json["exists"])
+        with self.backend.connect() as db:
+            self.assertIsNone(db.execute(f"SELECT 1 FROM {storage.SCHEMA}.collections WHERE name = 'journal_entries'").fetchone())
+        self.assertEqual(self.client.delete("/api/journal/entry/t1").status_code, 200)
+        self.assertEqual(self.client.delete("/api/journal/entry/t1").status_code, 404)
+
     def test_trackers_use_lakebase(self):
         from test_trackers import document, finance_state
         store = TrackerStore(self.backend)

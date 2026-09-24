@@ -65,7 +65,8 @@ Lakebase (Databricks-managed Postgres) database resource, Databricks sets `PGHOS
 
 | Table | Contents |
 |---|---|
-| `collections` | One JSONB document per feature: `journal_entries`, `garden`, `garden_photos`, `music_catalog`, `blog`, `messages`, `portfolio_uploads`, `accounts_template`, plus `travel_pins`, `travel_visited`, `garden_gallery_note`, `garden_gallery_hero`, `portfolio_layout` |
+| `journal_entries` | One row per journal entry: date, quote, author, breakfast/lunch/dinner, free-write text, source, created time, with habits, tags and accounts as JSONB. Indexed by date |
+| `collections` | One JSONB document per remaining feature: `garden`, `garden_photos`, `music_catalog`, `blog`, `messages`, `portfolio_uploads`, `accounts_template`, plus `travel_pins`, `travel_visited`, `garden_gallery_note`, `garden_gallery_hero`, `portfolio_layout` |
 | `media` | Uploaded audio, photos, blog thumbnails and portfolio HTML, keyed by path under `static/` |
 | `trackers` | Finance and Health tracker documents and state |
 
@@ -83,6 +84,8 @@ Set it up once:
 
 Migration happens automatically:
 
+- Journal entries are copied once from `data/journal_entries.json` into the
+  `journal_entries` table on first start; a `migrations` row records that it ran.
 - A collection with no row yet is read from the repository's `data/*.json` (or
   `mock_data/`), so the first deploy starts from the committed data. The first save
   writes it to Lakebase; from then on the database is the source of truth.
