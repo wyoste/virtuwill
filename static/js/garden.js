@@ -267,7 +267,7 @@ window.VW.Garden = (() => {
 
   function init() {
     _loadBg();
-    _loadData().then(() => { _fitAll(); _buildSpeciesDropdown(); render(); });
+    _loadData().then(() => { _fitAll(); _buildSpeciesDropdown(); _renderBedList(); render(); });
     if (!_eventsOk) { _attachEvents(); _eventsOk = true; }
   }
 

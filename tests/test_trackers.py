@@ -7,7 +7,7 @@ from unittest import mock
 
 from tests.support import admin_client, fresh_database
 from app import app
-from virtuwill import db, health, trackers
+from virtuwill import db, finance, trackers
 
 
 def document(kind="finance"):
@@ -90,48 +90,51 @@ class TrackerTests(unittest.TestCase):
         self.assertEqual(self.save(token, 'finance', {}, 1).status_code, 400)
         self.assertEqual(self.save(token, 'finance', finance_state() | {"shopping": [{"amount": float('nan')}]}, 1).status_code, 400)
 
-    def test_health_saves_keep_row_ids_and_remove_deleted_records(self):
+    def test_health_tracker_is_retired_but_kept(self):
         token = self.login()
         self.install(token, 'health')
-        self.assertTrue(self.save(token, 'health', health_state(), 0).json['synced'])
+        response = self.save(token, 'health', health_state(), 0)
+        self.assertEqual(response.status_code, 410)
+        self.assertIn('retired', response.json['error'])
+        self.assertIn('retired', self.client.get('/api/admin/trackers/health').json['retired'])
+        self.assertEqual(self.client.get('/admin/trackers/health/frame').status_code, 200)   # still readable for export
+
+    def test_projection_keeps_row_ids_and_removes_deleted_records(self):
+        """The one-time move re-projects a tracker's last state; records keep one row each."""
+        trackers.install('health', document('health'))
+        def project(state):
+            with db.tx() as conn:
+                return trackers.project(conn, 'health', state, document('health'))
+        project(health_state())
         ids = lambda: {r["note"] or r["workout_type"]: r["workout_id"] for r in
                        db.all("SELECT workout_id, workout_type, note FROM journal.workouts WHERE source = 'health_tracker'")}
         before = ids()
         self.assertEqual(set(before), {"Strength", "Dog walk"})
-        # Add one workout and drop the dog walk: the unchanged workout keeps its id.
         workouts = [health_state()["workouts"][0], {"date": "2026-09-23", "type": "Cardio", "minutes": 45, "note": "bike"}]
-        self.assertTrue(self.save(token, 'health', health_state(workouts=workouts), 1).json['synced'])
+        project(health_state(workouts=workouts))
         after = ids()
         self.assertEqual(after["Strength"], before["Strength"])
         self.assertEqual(set(after), {"Strength", "bike"})
-        # Saving the same state again changes nothing.
-        self.save(token, 'health', health_state(workouts=workouts), 2)
+        project(health_state(workouts=workouts))
         self.assertEqual(ids(), after)
         self.assertEqual(db.one("SELECT COUNT(*) AS n FROM health.body_measurements")["n"], 2)
         self.assertEqual(db.one("SELECT name FROM health.recipes")["name"], "Breakfast")
+        goals = {g['metric']: g for g in admin_client(app).get('/api/v1/health/goals').json}
+        self.assertEqual(goals['weight']['target'], 153.3)      # BMI 22 at 70 in
+        self.assertFalse(goals['weight']['editable'])
 
     def test_projection_failure_is_reported_and_the_record_still_saves(self):
         token = self.login()
-        self.install(token, 'health')
-        with mock.patch.object(health, "project", side_effect=RuntimeError("unexpected record")):
-            response = self.save(token, 'health', health_state(), 0)
+        self.install(token)
+        with mock.patch.object(finance, "project", side_effect=RuntimeError("unexpected record")):
+            response = self.save(token, 'finance', finance_state(), 0)
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json['synced'])
         self.assertIn('unexpected record', response.json['syncError'])
-        self.assertEqual(trackers.get('health')['revision'], 1)
+        self.assertEqual(trackers.get('finance')['revision'], 1)
         diagnostics = self.client.get('/api/admin/diagnostics').json
-        sync = next(s for s in diagnostics['syncs'] if s['source'] == 'health_tracker')
+        sync = next(s for s in diagnostics['syncs'] if s['source'] == 'finance_tracker')
         self.assertFalse(sync['ok'])
-
-    def test_tracker_goals_are_edited_in_the_tracker(self):
-        token = self.login()
-        self.install(token, 'health')
-        self.save(token, 'health', health_state(), 0)
-        goals = {g['metric']: g for g in self.client.get('/api/health/dashboard').json['goals']}
-        self.assertEqual(goals['weight']['target'], 153.3)      # BMI 22 at 70 in
-        self.assertFalse(goals['weight']['editable'])
-        self.assertEqual(self.client.put('/api/health/goals/weight', json={"target": 170}).status_code, 409)
-        self.assertEqual(self.client.put('/api/health/goals/workout_days_per_week', json={"target": 4}).status_code, 200)
 
     def test_frame_sandbox_escape_and_logout(self):
         token = self.login()

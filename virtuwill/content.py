@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, request
 
 from . import db, media
 from .auth import admin_required, is_admin
-from .util import in_calendar, parse_date
+from .util import in_calendar, number, parse_date
 
 bp = Blueprint("content", __name__)
 PROJECT_SEED = db.ROOT / "db" / "seed" / "portfolio_projects.json"
@@ -252,3 +252,113 @@ def import_uploads(conn, items):
         if u.get("url") and os.path.isfile(media.STATIC / media.relpath(u["url"])) or media.asset_id(conn, u.get("url")):
             add_upload(conn, u.get("id") or "up_" + os.path.basename(u["url"]).replace(".", "_"), u["url"], u.get("title") or "Project",
                        u.get("tag") or "Project", u.get("desc") or "", parse_date(u.get("uploaded")), u.get("visible", True))
+
+
+# ── Workspace and public API (v1) ────────────────────────────────────────────
+
+def _project(conn, row, detail=False):
+    p = {"id": row["project_id"], "title": row["title"], "tag": row["tag"], "tag_class": row["tag_class"],
+         "description": row["description"], "subtitle": row["subtitle"], "chips": row["chips"] or [],
+         "builtin": row["is_builtin"], "visible": row["visible"], "position": row["position"],
+         "url": media.url(row["path"]) if row["path"] else None,
+         "uploaded_on": row["uploaded_on"].isoformat() if row["uploaded_on"] else None}
+    if detail:
+        p["overview"] = row["overview"]
+        p["metrics"] = [{"value": m["value"], "label": m["label"]} for m in conn.execute(
+            "SELECT value, label FROM content.project_metrics WHERE project_id = %s ORDER BY position", (row["project_id"],))]
+        p["timeline"] = [{"period": t["period"], "phase": t["phase"], "description": t["description"]} for t in conn.execute(
+            "SELECT * FROM content.project_timeline WHERE project_id = %s ORDER BY position", (row["project_id"],))]
+    return p
+
+
+PROJECTS = """SELECT p.*, m.path FROM content.portfolio_projects p
+              LEFT JOIN core.media_assets m ON m.asset_id = p.html_asset_id WHERE NOT p.removed"""
+
+
+@bp.route("/api/v1/projects")
+def projects_v1():
+    owner = is_admin() and request.args.get("view") == "owner"
+    with db.tx() as conn:
+        rows = conn.execute(PROJECTS + ("" if owner else " AND p.visible") +
+                            " ORDER BY p.position NULLS LAST, p.uploaded_on DESC NULLS LAST, p.title").fetchall()
+        return jsonify([_project(conn, r, detail=True) for r in rows])
+
+
+@bp.route("/api/v1/projects/<project_id>")
+def project_v1(project_id):
+    owner = is_admin()
+    with db.tx() as conn:
+        row = conn.execute(PROJECTS + " AND p.project_id = %s" + ("" if owner else " AND p.visible"), (project_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "Not found"}), 404
+        return jsonify(_project(conn, row, detail=True))
+
+
+@bp.route("/api/v1/projects/<project_id>", methods=["PUT", "DELETE"])
+@admin_required
+def project_write_v1(project_id):
+    with db.tx() as conn:
+        row = conn.execute("SELECT * FROM content.portfolio_projects WHERE project_id = %s", (project_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "Not found"}), 404
+        if request.method == "DELETE":
+            # Built-in projects are hidden for good; uploaded ones are deleted with their file.
+            if row["is_builtin"]:
+                conn.execute("UPDATE content.portfolio_projects SET removed = true WHERE project_id = %s", (project_id,))
+            else:
+                path = media.path_of(conn, row["html_asset_id"])
+                conn.execute("DELETE FROM content.portfolio_projects WHERE project_id = %s", (project_id,))
+                if path:
+                    media.delete(conn, path)
+            return jsonify({"ok": True})
+        data = request.get_json(silent=True) or {}
+        fields = {}
+        for key, column in (("title", "title"), ("tag", "tag"), ("description", "description"), ("subtitle", "subtitle"),
+                            ("overview", "overview")):
+            if key in data:
+                fields[column] = str(data[key] or "").strip()[:5000]
+        if "chips" in data and isinstance(data["chips"], list):
+            fields["chips"] = [str(c).strip()[:60] for c in data["chips"] if str(c).strip()][:20]
+        if "visible" in data:
+            fields["visible"] = bool(data["visible"])
+        if "position" in data:
+            fields["position"] = int(number(data["position"])) if number(data["position"]) is not None else None
+        if fields.get("title") == "":
+            return jsonify({"error": "A project needs a title"}), 400
+        if not fields:
+            return jsonify({"error": "Nothing to change"}), 400
+        conn.execute(f"UPDATE content.portfolio_projects SET {', '.join(f'{k} = %s' for k in fields)} WHERE project_id = %s",
+                     [*fields.values(), project_id])
+        row = conn.execute(PROJECTS + " AND p.project_id = %s", (project_id,)).fetchone()
+        return jsonify(_project(conn, row, detail=True))
+
+
+@bp.route("/api/v1/posts")
+def posts_v1():
+    with db.tx() as conn:
+        return jsonify(posts(conn, is_admin() and request.args.get("view") == "owner"))
+
+
+@bp.route("/api/v1/posts/<post_id>")
+def post_v1(post_id):
+    with db.tx() as conn:
+        row = conn.execute(POSTS + " WHERE p.post_id = %s" + ("" if is_admin() else " AND p.published"), (post_id,)).fetchone()
+        return jsonify(_post(row)) if row else (jsonify({"error": "Not found"}), 404)
+
+
+@bp.route("/api/v1/site-text/<key>", methods=["GET", "PUT"])
+def site_text_v1(key):
+    if key not in SITE_TEXT_KEYS:
+        return jsonify({"error": "Unknown text"}), 404
+    with db.tx() as conn:
+        if request.method == "PUT":
+            if not is_admin():
+                return jsonify({"error": "Unauthorized"}), 401
+            value = (request.get_json(silent=True) or {}).get("value")
+            if not isinstance(value, str) or len(value) > 20000:
+                return jsonify({"error": "Expected text under 20,000 characters"}), 400
+            set_site_text(conn, key, value)
+        return jsonify({"key": key, "value": site_text(conn, key)})
+
+
+SITE_TEXT_KEYS = {"garden.gallery_note", "garden.hero", "home.intro"}

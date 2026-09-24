@@ -9,14 +9,14 @@ import logging
 import secrets
 import threading
 
-from flask import Flask, Response, abort, jsonify, render_template, request, send_from_directory, session
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, send_from_directory, session
 from werkzeug.exceptions import NotFound
 
 import config
-from . import auth, content, db, finance, garden, health, journal, media, music, site, trackers
+from . import auth, content, db, finance, garden, health, journal, media, music, site, today, trackers
 
 log = logging.getLogger(__name__)
-BLUEPRINTS = (auth, journal, health, finance, garden, music, content, site, trackers)
+BLUEPRINTS = (auth, journal, health, finance, garden, music, content, site, today, trackers)
 
 
 def create_app():
@@ -45,6 +45,21 @@ def create_app():
             return Response(stored[1], mimetype=stored[0])
 
     app.view_functions["static"] = static_or_stored
+
+    @app.route("/app")
+    @app.route("/app/<path:path>")
+    def workspace(path=""):
+        """The owner's workspace: Today, Journal, Health, Money, Site, Settings."""
+        signed_in = auth.is_admin()
+        if signed_in:
+            session.setdefault("tracker_csrf", secrets.token_urlsafe(32))
+        response = app.make_response(render_template("workspace.html", signed_in=signed_in))
+        response.headers["Cache-Control"] = "no-store, private"
+        return response
+
+    @app.route("/admin")
+    def old_admin():
+        return redirect("/app")
 
     @app.route("/", defaults={"path": ""})
     @app.route("/<path:path>")

@@ -25,6 +25,11 @@ log = logging.getLogger(__name__)
 
 bp = Blueprint("trackers", __name__)
 KINDS = {"finance": "yoste-finance-spa-v1", "health": "yoste-health-v1"}
+# Trackers whose records the workspace screens now own. Their documents stay
+# readable (and exportable), but saves are refused so nothing overwrites the
+# records being edited natively.
+RETIRED = {"health": "The Health tracker is retired: Health in the workspace now owns these records. "
+                     "Your tracker data is kept; use Export in the tracker for a copy."}
 MAX_BYTES = 5 * 1024 * 1024
 
 
@@ -186,7 +191,10 @@ def tracker_data(kind):
     if request.method == "GET":
         session.setdefault("tracker_csrf", secrets.token_urlsafe(32))
         row = get(kind)
-        return jsonify(configured=bool(row), revision=row["revision"] if row else 0, csrf=session["tracker_csrf"], storage="lakebase")
+        return jsonify(configured=bool(row), revision=row["revision"] if row else 0, csrf=session["tracker_csrf"], storage="lakebase",
+                       retired=RETIRED.get(kind))
+    if kind in RETIRED:
+        return jsonify(error=RETIRED[kind]), 410
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or type(payload.get("revision")) is not int:
         return jsonify(error="A state and integer revision are required."), 400

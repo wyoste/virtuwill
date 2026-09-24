@@ -3,49 +3,66 @@
 A personal digital life dashboard — private journal, music portfolio, garden journal, and more.
 Built with Flask + modular vanilla JS. No build step required.
 
-## Private Finance and Health trackers
+## How the site is organized
 
-Sign in to **Admin → Finances** or **Admin → Health goals**. These tabs host the
-existing Yoste tracker apps, preserving their full interfaces and import/export
-formats. The admin overview also links to both trackers. Updates save to the
-server automatically; a status bar confirms saves or explains failures.
+**The public site** is read-only and has real URLs:
 
-Before using these tabs, set `SECRET_KEY` to a random value of at least 32
-characters and `ADMIN_PASSWORD` to a unique value of at least 12 characters.
-The repository's documented development defaults cannot unlock tracker storage.
-The existing admin UI uses username `admin`. Use HTTPS for a deployed app.
+| Page | URL | What it shows |
+|---|---|---|
+| Home | `/` | Introduction, latest writing, links to work and music |
+| Music | `/music`, `/music/<song>` | Every song (search, album filter), albums, photos; each song's story, versions, lyrics and chords. A player bar keeps playing while you browse. |
+| Projects | `/projects`, `/projects/<id>` | Technology projects to explore by technology; each with overview, outcomes and timeline, or an uploaded walkthrough in a sandboxed frame |
+| Writing | `/writing`, `/writing/<id>` | Posts, each with its own page |
+| Garden, Travel | `/garden`, `/travel` | The garden map and gallery; the travel map |
+| Resume | `/resume` | The CV |
+| Say hi | `/contact` | Leave a note |
 
-On first visit, upload the original **Yoste-Finance.html** and **Yoste-Health.html**
-into their respective tabs. Their embedded records, settings, food references,
-recipes, and calculations are preserved. If you have newer entries stored in the
-standalone apps' browser storage, export a JSON backup there and restore it in
-the corresponding admin tracker after uploading the HTML.
+**The workspace** at `/app` is where the owner records and edits everything, with
+one sidebar and one screen at a time:
 
-Alternatively, import on the deployment host:
+| Section | Screens | Owns |
+|---|---|---|
+| Today | one day: stats, habits, quick logging, that day's money | — (links into the others) |
+| Journal | entries by date, editor, habits, balance check-in, photo transcription | `journal.entries`, tags, habit logs, journal balance snapshots |
+| Health | Overview · Activity · Food · Body · Goals | workouts, meals, weigh-ins, drinks, foods, profile, goals |
+| Money | Overview · Transactions · Receipts · Accounts & balances · Budgets & bills · Goals & retirement · Finance tracker | read-only views over `finance.*`; edited in the Finance tracker for now |
+| Site | Music · Projects · Writing · Garden · Travel · Messages | everything the public site shows |
+| Settings | site switches, journal check-in accounts, diagnostics | `core.settings` |
+
+Each record has one editor. The same logging forms (workout, meal, weigh-in, drink)
+open from Today, Health and the Journal, so there is one set of validation.
+Habits like run, lift and drink tick themselves from the day's records; a habit set
+by hand wins. Sign in at `/app` (the footer's "Sign in" link) with the admin password.
+
+## The Finance and Health trackers
+
+The **Health tracker is retired**: Health in the workspace owns those records. Its
+document and last state stay in the database (and exportable from Settings); saves
+to it are refused so nothing overwrites records edited natively.
+
+The **Finance tracker** is still the editor for Money until statement, CSV and
+receipt imports arrive: open it at **Money › Finance tracker**. Every save projects
+its records into the `finance` tables that the Money screens read, and the status
+bar reports separately whether the record saved and whether the screens updated.
+
+The trackers need `SECRET_KEY` of 32+ characters and `ADMIN_PASSWORD` of 12+
+characters; the documented development defaults cannot unlock them. To install the
+original HTML on the deployment host:
 
 ```bash
-python scripts/import_trackers.py --finance /private/Yoste-Finance.html --health /private/Yoste-Health.html
+python scripts/import_trackers.py --finance /private/Yoste-Finance.html
 ```
 
-Personal HTML and JSON state live in the Lakebase `virtuwill.trackers` table.
-Neither the source HTML nor private records are shipped in the public repository
-or public static assets. Do not add your original HTML files to `static/`,
-`templates/`, or the public portfolio uploader. Use the trackers' JSON exports
-for portable backups.
-
-The imported apps run in sandboxed frames with no network or parent-page access.
-Admin-only endpoints, CSRF tokens, no-store responses, and revision checks protect
-the bridge to server storage. A stale tab cannot silently overwrite newer data:
-export its unsaved edits, reload, and reconcile using the backup. Failed saves
-remain visible in the tracker until reload; closing or reloading while a save is
-pending triggers a warning. Existing browser-local data is not read automatically
-across origins or devices.
+Personal HTML and JSON state live in the Lakebase `virtuwill.trackers` table, never
+in the repository or public static files. The imported apps run in sandboxed frames
+with no network or parent-page access; admin-only endpoints, CSRF tokens, no-store
+responses and revision checks protect the bridge.
 
 ### Deploying on Databricks Apps
 
 - Merging to GitHub does not update the app. Redeploy it (Apps UI → Deploy, or
   `databricks apps deploy`) from the updated source, then hard-refresh the browser.
-- The Finance and Health tabs appear in the Admin sidebar only after signing in as admin.
+- The workspace is at `/app`; `/admin` redirects there.
 - `app.yaml` reads `SECRET_KEY` and `ADMIN_PASSWORD` from app secret resources with
   the resource keys `secret-key` and `admin-password` (app → Edit → Resources →
   Secret). Deployment fails if either resource is missing. The admin password is
@@ -63,7 +80,7 @@ Every page reads and writes the relational model in [`db/schema/`](db/schema)
 The page API shapes did not change.
 
 A database is required. Without one, pages load but every data request returns
-503 with a clear message; Admin → Settings → Diagnostics says what is missing.
+503 with a clear message; the workspace's Settings → Diagnostics says what is missing.
 
 Set it up once:
 
@@ -110,7 +127,7 @@ the database and are written back under `static/` after a redeploy. Only public
 assets are served to visitors. Uploaded portfolio pages are served with a CSP
 sandbox so their scripts never run on the site's origin.
 
-**Settings.** Admin → Settings holds site switches (the "Chat with Will" button is
+**Settings.** The workspace's Settings holds site switches (the "Chat with Will" button is
 off by default) and Diagnostics: deployed commit, database, schema version, tracker
 installs and the latest sync of each tracker.
 
@@ -143,67 +160,40 @@ The first start builds the schema and loads the committed `data/*.json`.
 
 ```
 virtuwill/
-│
-├── app.py               Entry point (gunicorn app:app)
-├── config.py            Environment variable loader
-├── virtuwill/           Flask app: one module per domain (queries + API routes),
-│                        db.py (pool, versioned schema), migrate.py (one-time moves)
-├── db/schema/           The data model, applied in name order (see db/README.md)
-├── requirements.txt
-├── .env.example         → copy to .env
-│
+├── app.py                 Entry point (gunicorn app:app)
+├── config.py              Environment variable loader
+├── virtuwill/             Flask app: one module per domain, each with its queries and routes
+│   ├── db.py, migrate.py  Connection pool, versioned schema, one-time data moves
+│   ├── records.py         Record-level API resources (validated list/create/update/delete)
+│   ├── today.py           The Today screen's day across every domain
+│   └── journal.py, health.py, finance.py, music.py, content.py, garden.py, travel.py, site.py, trackers.py
+├── db/schema/             The data model, applied in name order, once each (see db/README.md)
 ├── templates/
-│   └── index.html       SPA shell — pure HTML, no inline JS or CSS
-│
+│   ├── index.html         Public site shell; pages/ holds each page's markup
+│   └── workspace.html     The workspace shell (/app)
 ├── static/
-│   ├── css/
-│   │   ├── theme.css    Design tokens + shared components (nav, buttons, toasts, modals)
-│   │   ├── home.css     Home page styles
-│   │   ├── journal.css  Journal sidebar, timeline, entry cards, gate
-│   │   ├── music.css    Music page — dark carousel, player, tracklist
-│   │   └── garden.css   Garden page — sunflower animation layout
-│   │
-│   ├── js/
-│   │   ├── app.js       Router (go), toast, bootstrap — loads last
-│   │   ├── journal.js   Journal module  — window.VW.Journal
-│   │   ├── music.js     Music module    — window.VW.Music
-│   │   └── garden.js    Garden module   — window.VW.Garden
-│   │
-│   └── music/           Drop real album folders here (see music/README.md)
-│
-├── mock_data/
-│   ├── journal_entries.json   11 sample entries (loaded if data/ is empty)
-│   └── music_library.json     5 albums + singles (always used as music source)
-│
-└── data/                      Content loaded into a new database on first start
+│   ├── app/               The workspace: main.js (router, sidebar), lib.js, forms.js, screens/*.js
+│   ├── js/                Public pages: app.js (router), music.js (pages + player), projects.js,
+│   │                      writing.js, garden.js/viewer.js/gallery.js, travel.js, resume.js, contact.js
+│   └── css/               theme.css (tokens), site.css (public pages), page styles
+└── data/                  Content loaded into a new database on first start
 ```
-
----
 
 ## Architecture
 
-### Frontend — modular SPA
+### Front ends
 
-`index.html` is a pure HTML shell — navigation, page divs, two modals, four `<script>` tags.
-It contains zero inline JavaScript and zero inline styles.
-
-Each JS module is an IIFE that registers itself on `window.VW` before `app.js` loads:
-
-| Module | Responsibility |
-|---|---|
-| `garden.js` → `VW.Garden` | Sunflower canvas animation lifecycle |
-| `music.js`  → `VW.Music`  | Library data, carousel, player, tracklist |
-| `journal.js`→ `VW.Journal`| Auth, CRUD, timeline, search, OCR upload |
-| `app.js`    → global      | `go()` router, `toast()`, bootstrap |
-
-CSS is split by feature — `theme.css` owns design tokens and shared components; page-specific
-files own only their own selectors.
+The public site (`templates/index.html`) and the workspace (`templates/workspace.html`)
+are separate shells over the same API. Neither needs a build step: the public pages are
+plain scripts, and the workspace is ES modules loaded by the browser, one per screen.
+Links use real paths; the server returns the right shell for any page path.
 
 ### Backend — Flask API
 
-`virtuwill.create_app()` serves the page shell and the JSON API, one blueprint per
-domain. Page navigation happens client-side via `go()` in `app.js`; `#page` links
-(e.g. `/#resume`) open that page, and a private page opens after sign-in.
+`virtuwill.create_app()` serves both shells and the JSON API, one blueprint per domain.
+The workspace uses the record-level `/api/v1/...` endpoints; the public pages read
+`/api/v1/music`, `/api/v1/projects`, `/api/v1/posts` and `/api/v1/travel`, which return
+only published content.
 
 ### Data layer
 
@@ -224,6 +214,14 @@ Lakebase (PostgreSQL); see "Data: one relational model in Lakebase" above.
 | GET  | `/api/journal/check/<date>` | Session | Check if date exists |
 | POST | `/api/journal/ocr` | Session | Proxy image to Claude Vision OCR |
 | GET  | `/api/music` | — | Return music library |
+| GET  | `/api/v1/today?date=` | Owner | One day across journal, health and money |
+| GET/POST/PUT/DELETE | `/api/v1/health/{workouts,meals,weigh-ins,drinks}` | Owner | Health records (list by `?date=` or `?from=&to=`) |
+| GET/PUT | `/api/v1/health/{overview,profile,goals,foods,recipes,days}` | Owner | Health screens |
+| GET | `/api/v1/money/{overview,transactions,receipts,accounts,budgets,goals,months}` | Owner | Money screens (read-only) |
+| GET | `/api/v1/music`, `/api/v1/music/songs/<slug>` | — | Published songs, versions and albums (`?view=owner` for everything) |
+| POST/PUT/DELETE | `/api/v1/music/{songs,recordings,albums}` | Owner | Songs, versions, albums |
+| GET/PUT/DELETE | `/api/v1/projects[/<id>]` | — / Owner | Projects |
+| GET | `/api/v1/posts[/<id>]`, `/api/v1/travel`, `/api/v1/site-text/<key>` | — | Writing, travel, page text |
 
 ### Entry schema
 

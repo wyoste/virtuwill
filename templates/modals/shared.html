@@ -1,72 +1,14 @@
-
-
 <!-- ═══════════════════════════════════════════════════════════
-     UPLOAD MODAL
-════════════════════════════════════════════════════════════ -->
-<div class="vw-modal-bg" id="uploadModal">
-  <div class="vw-modal">
-    <div class="vw-modal-hd">
-      <span style="font-size:15px;font-weight:600;">&#128247; Upload Journal Photo</span>
-      <button class="vw-modal-close" onclick="VW.Journal.closeUpload()">&#215;</button>
-    </div>
-    <div class="drop-zone" id="dropZone"
-      onclick="document.getElementById('fileInput').click()"
-      ondragover="event.preventDefault();this.classList.add('over')"
-      ondragleave="this.classList.remove('over')"
-      ondrop="VW.Journal.handleDrop(event)">
-      <div style="font-size:36px;margin-bottom:10px;">&#128248;</div>
-      <div style="font-weight:600;margin-bottom:4px;">Drop photos here or click to browse</div>
-      <div style="font-size:12px;color:var(--text3);">JPEG · PNG · WEBP · HEIC · up to 50MB each</div>
-    </div>
-    <input type="file" id="fileInput" accept="image/*" multiple style="display:none"
-      onchange="VW.Journal.handleFiles(this.files)"/>
-    <div id="uploadQ" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;">
-      <button class="btn btn-ghost" onclick="VW.Journal.closeUpload()">Cancel</button>
-      <button class="btn btn-primary" id="procBtn" style="display:none;"
-        onclick="VW.Journal.processOcr()">Process with Claude</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     CONFIRM DELETE MODAL
-════════════════════════════════════════════════════════════ -->
-<div class="vw-modal-bg" id="confirmModal">
-  <div class="confirm-box">
-    <div class="confirm-icon-box">&#128465;</div>
-    <h3 style="font-size:16px;font-weight:600;margin-bottom:8px;" id="confTitle">Delete entry?</h3>
-    <p  style="color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:22px;" id="confMsg"></p>
-    <div style="display:flex;gap:8px;justify-content:flex-end;">
-      <button class="btn btn-ghost" onclick="VW.Journal.closeConf()">Cancel</button>
-      <button class="btn btn-red"   id="confOk">Delete</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     FOOTER  (discreet journal entry dot lives here)
+     FOOTER
 ════════════════════════════════════════════════════════════ -->
 <footer class="footer">
-  <span class="footer-copy">&copy; 2026 VirtuWill</span>
-  <div id="footerOctopus" onclick="toggleGate()" title="Admin access"
-  style="cursor:pointer;opacity:.35;transition:opacity .2s;font-size:14px;line-height:1;user-select:none"
-  onmouseenter="this.style.opacity='0.7'" onmouseleave="this.style.opacity=VW.Auth.isAdmin()?'1':'0.35'">
-  &#x1F419;
-</div>
+  <span class="footer-copy">&copy; 2026 Will Yoste</span>
+  {% if admin_logged_in %}
+  <a class="footer-signin" href="/app">Workspace</a>
+  {% else %}
+  <a class="footer-signin" href="/app" rel="nofollow">Sign in</a>
+  {% endif %}
 </footer>
-
-<!-- Discreet admin gate panel -->
-<div class="journal-gate" id="adminGate">
-  <button class="jg-close" onclick="closeGate()">&#215;</button>
-  <div class="jg-label">Admin access</div>
-  <input class="jg-input" id="gatePassInput" type="password"
-    placeholder="Passphrase"
-    onkeydown="if(event.key==='Enter') tryAdminLogin()"/>
-  <button class="jg-btn" onclick="tryAdminLogin()">Enter</button>
-  <div class="jg-err" id="gateErrMsg"></div>
-  <div style="font-size:10px;color:#8a9ab0;margin-top:8px">Unlocks journal + garden planner</div>
-</div>
 
 {% if chat_enabled %}
 <!-- ═══════════════════════════════════════════════════════════
@@ -121,41 +63,3 @@
      TOAST CONTAINER
 ════════════════════════════════════════════════════════════ -->
 <div id="toasts"></div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     SCRIPTS  (load order matters — modules before router)
-════════════════════════════════════════════════════════════ -->
-
-<!-- ── Unsaved changes confirm modal ─────────────────── -->
-<div class="vw-modal-bg" id="dirty-confirm-modal">
-  <div class="vw-modal" style="max-width:420px">
-    <div class="vw-modal-hd">
-      <span class="vw-modal-title">Unsaved changes</span>
-    </div>
-    <div class="vw-modal-body" style="padding:20px 24px">
-      <p id="dirty-confirm-msg" style="color:var(--text2);font-size:14px;line-height:1.55;margin:0"></p>
-    </div>
-    <div class="vw-modal-ft" style="justify-content:flex-end;gap:8px">
-      <button class="vw-btn vw-btn--ghost vw-btn--sm" id="dirty-btn-cancel">Cancel</button>
-      <button class="vw-btn vw-btn--ghost vw-btn--sm" id="dirty-btn-discard"
-        style="color:var(--red);border-color:var(--red)">Discard changes</button>
-      <button class="vw-btn vw-btn--primary vw-btn--sm" id="dirty-btn-save">💾 Save &amp; continue</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── Blog post reader modal ─────────────────────── -->
-<div class="blog-reader-bg" id="blog-reader-bg"
-  onclick="VW.Blog.closeReader()">
-  <div class="blog-reader" onclick="event.stopPropagation()">
-    <button class="blog-reader-close" onclick="VW.Blog.closeReader()">&#215;</button>
-    <div class="blog-reader-thumb-wrap" id="blog-reader-thumb-wrap" style="display:none">
-      <img class="blog-reader-thumb" id="blog-reader-thumb" src="" alt=""/>
-    </div>
-    <div class="blog-reader-inner">
-      <div class="blog-reader-meta" id="blog-reader-meta"></div>
-      <h1 class="blog-reader-title" id="blog-reader-title"></h1>
-      <div class="blog-reader-body" id="blog-reader-body"></div>
-    </div>
-  </div>
-</div>

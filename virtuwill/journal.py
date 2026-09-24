@@ -38,7 +38,7 @@ def write(conn, entry):
         "quote": entry.get("quote") or "", "quote_author": entry.get("quoteAuthor") or "",
         "free_write": entry.get("freeWrite") or "",
         "source": "photo" if entry.get("source") == "photo" else "manual",
-        "created_at": timestamp(entry.get("createdAt")),
+        "created_at": timestamp(entry["createdAt"]) if entry.get("createdAt") else None,
     }
     current = conn.execute("SELECT entry_date FROM journal.entries WHERE entry_id = %s", (entry_id,)).fetchone()
     if current:
@@ -47,15 +47,19 @@ def write(conn, entry):
                 raise DateTaken(day.isoformat())
             conn.execute("UPDATE journal.meals SET meal_date = %s WHERE source = 'journal' AND meal_date = %s",
                          (day, current["entry_date"]))
+            conn.execute("UPDATE finance.balance_snapshots SET as_of = %s WHERE source = 'journal' AND source_ref = %s",
+                         (day, entry_id))
         conn.execute(
             """UPDATE journal.entries SET entry_date = %(entry_date)s, quote = %(quote)s, quote_author = %(quote_author)s,
-               free_write = %(free_write)s, source = %(source)s, created_at = %(created_at)s, updated_at = now()
+               free_write = %(free_write)s, source = %(source)s,
+               created_at = COALESCE(%(created_at)s, created_at), updated_at = now()
                WHERE entry_id = %(entry_id)s""", fields)
         was_new = False
     else:
         inserted = conn.execute(
             """INSERT INTO journal.entries (entry_date, entry_id, quote, quote_author, free_write, source, created_at)
-               VALUES (%(entry_date)s, %(entry_id)s, %(quote)s, %(quote_author)s, %(free_write)s, %(source)s, %(created_at)s)
+               VALUES (%(entry_date)s, %(entry_id)s, %(quote)s, %(quote_author)s, %(free_write)s, %(source)s,
+                       COALESCE(%(created_at)s, now()))
                ON CONFLICT (entry_date) DO NOTHING""", fields)
         if inserted.rowcount != 1:
             raise DateTaken(day.isoformat())
@@ -67,19 +71,23 @@ def write(conn, entry):
         conn.execute("INSERT INTO journal.entry_tags (entry_date, tag, position) VALUES (%s, %s, %s)", (day, tag, position))
 
     conn.execute("DELETE FROM journal.habit_logs WHERE entry_date = %s", (day,))
+    # Only habits the owner set; the rest follow the day's records (journal.day_habits).
     for habit, done in (entry.get("habits") or {}).items():
         conn.execute("INSERT INTO journal.habits (habit, label) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                      (str(habit), str(habit).title()))
         conn.execute("INSERT INTO journal.habit_logs (entry_date, habit, done) VALUES (%s, %s, %s)", (day, str(habit), bool(done)))
 
-    conn.execute("DELETE FROM journal.meals WHERE source = 'journal' AND source_ref = %s", (entry_id,))
-    for key, slot in SLOTS.items():
+    # Meals are recorded in Health › Food now; older entries' meal notes are kept unless sent.
+    if "meals" in entry:
+        conn.execute("DELETE FROM journal.meals WHERE source = 'journal' AND source_ref = %s", (entry_id,))
+    for key, slot in SLOTS.items() if "meals" in entry else ():
         text = ((entry.get("meals") or {}).get(key) or "").strip()
         if text:
             conn.execute("INSERT INTO journal.meals (meal_date, slot, description, source, source_ref) VALUES (%s, %s, %s, 'journal', %s)",
                          (day, slot, text, entry_id))
 
-    finance.write_journal_balances(conn, entry_id, day, entry.get("accounts") or [])
+    if "accounts" in entry:
+        finance.write_journal_balances(conn, entry_id, day, entry["accounts"] or [])
     return was_new
 
 
@@ -97,6 +105,11 @@ SELECT e.entry_id, e.entry_date, e.quote, e.quote_author, e.free_write, e.source
                                                     'dogWalk', NOT wt.counts_toward_goal, 'source', w.source) ORDER BY w.workout_id)
                  FROM journal.workouts w JOIN journal.workout_types wt USING (workout_type)
                  WHERE w.workout_date = e.entry_date), '[]') AS workouts,
+       COALESCE((SELECT jsonb_object_agg(d.habit, d.done) FROM journal.derived_habits d
+                 WHERE d.day = e.entry_date AND d.done), '{}') AS derived_habits,
+       COALESCE((SELECT jsonb_agg(jsonb_build_object('slot', m.slot, 'status', m.status, 'description', m.description,
+                                                    'calories', m.calories, 'source', m.source) ORDER BY m.meal_id)
+                 FROM journal.meals m WHERE m.meal_date = e.entry_date), '[]') AS day_meals,
        a.workout_minutes, a.qualifying_workout_day, a.weight, a.total_calories
 FROM journal.entries e
 LEFT JOIN health.daily_activity a ON a.day = e.entry_date
@@ -112,6 +125,8 @@ def to_api(row):
         "quote": row["quote"], "quoteAuthor": row["quote_author"],
         "meals": {key: meals.get(slot, "") for key, slot in SLOTS.items()},
         "freeWrite": row["free_write"], "habits": row["habits"], "tags": row["tags"], "accounts": accounts,
+        # Habits the day's records tick (lift from a strength workout, run, drink); a set habit wins.
+        "derivedHabits": row["derived_habits"],
         "source": row["source"], "createdAt": iso_z(row["created_at"]),
         # Read-only: that day's health data from the shared tables.
         "health": {
@@ -120,6 +135,7 @@ def to_api(row):
             "qualifyingWorkoutDay": bool(row["qualifying_workout_day"]),
             "weight": number(row["weight"]),
             "totalCalories": number(row["total_calories"]),
+            "meals": [{**m, "calories": number(m["calories"])} for m in row["day_meals"]],
         },
     }
 
@@ -170,20 +186,24 @@ def entries_route():
 @journal_required
 def save_route():
     data = request.get_json(force=True) or {}
-    meals = data.get("meals") or {}
     entry = {
         "id": data.get("id") or str(uuid.uuid4()),
         "date": data.get("date", datetime.now().strftime("%Y-%m-%d")),
         "quote": (data.get("quote") or "").strip(),
         "quoteAuthor": (data.get("quoteAuthor") or "").strip(),
-        "meals": {k: (meals.get(k) or "").strip() for k in SLOTS},
         "freeWrite": data.get("freeWrite") or "",
         "habits": data.get("habits") or {},
         "tags": data.get("tags") or [],
-        "accounts": data.get("accounts") or [],
         "source": data.get("source", "manual"),
-        "createdAt": data.get("createdAt", datetime.utcnow().isoformat() + "Z"),
+        "createdAt": data.get("createdAt"),
     }
+    # Meal notes and balance check-ins are replaced only when sent, so a
+    # screen that edits part of an entry (e.g. habits on Today) keeps the rest.
+    if "meals" in data:
+        meals = data.get("meals") or {}
+        entry["meals"] = {k: (meals.get(k) or "").strip() for k in SLOTS}
+    if "accounts" in data:
+        entry["accounts"] = data.get("accounts") or []
     try:
         day = datetime.strptime(str(entry["date"]), "%Y-%m-%d").date()
     except (TypeError, ValueError):

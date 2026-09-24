@@ -18,9 +18,9 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
-from . import db
+from . import db, records
 from .auth import admin_required
-from .util import in_calendar, moment, number, parse_date, plain
+from .util import in_calendar, moment, number, parse_date, plain, slug
 
 bp = Blueprint("health", __name__)
 SOURCE = "health_tracker"
@@ -206,23 +206,32 @@ def project(conn, state, document=None):
         current = conn.execute("SELECT to_jsonb(p) - 'updated_at' AS profile FROM health.profile p").fetchone()
         if previous and previous["profile"] != current["profile"]:
             conn.execute("INSERT INTO health.profile_history (profile) VALUES (%s)", (db.jsonb(previous["profile"]),))
-        goals = []
-        if bmi_goal:
-            goals.append(("bmi", round(bmi_goal, 1), "BMI", "day", "at_most", "profile.bmi_goal"))
-            if height:
-                goals.append(("weight", round(bmi_goal * (height * M_PER_IN) ** 2 / LB_PER_KG, 1), "lb", "day", "at_most",
-                              "profile.bmi_goal × height"))
-        if calorie_target:
-            goals.append(("daily_calories", calorie_target, "kcal", "day", "at_most", "profile.calorie_target"))
-        for goal in goals:
-            conn.execute("""INSERT INTO health.goals (metric, target, unit, period, direction, derived_from) VALUES (%s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (metric) DO UPDATE SET target = EXCLUDED.target, unit = EXCLUDED.unit,
-                                derived_from = EXCLUDED.derived_from, updated_at = now()""", goal)
+        derive_goals(conn)
 
     report.update(counts)
     report["skipped"] = dict(report["skipped"])
     report["fields"] = {k: sorted(v) for k, v in report["fields"].items()}
     return report
+
+
+def derive_goals(conn):
+    """Weight, BMI and daily-calorie goals follow the profile (height, BMI goal, calorie target)."""
+    p = conn.execute("SELECT height_in, bmi_goal, calorie_target FROM health.profile WHERE profile_id = 1").fetchone()
+    if not p:
+        return
+    height, bmi_goal, calorie_target = number(p["height_in"]), number(p["bmi_goal"]), number(p["calorie_target"])
+    goals = []
+    if bmi_goal:
+        goals.append(("bmi", round(bmi_goal, 1), "BMI", "day", "at_most", "profile.bmi_goal"))
+        if height:
+            goals.append(("weight", round(bmi_goal * (height * M_PER_IN) ** 2 / LB_PER_KG, 1), "lb", "day", "at_most",
+                          "profile.bmi_goal × height"))
+    if calorie_target:
+        goals.append(("daily_calories", calorie_target, "kcal", "day", "at_most", "profile.calorie_target"))
+    for goal in goals:
+        conn.execute("""INSERT INTO health.goals (metric, target, unit, period, direction, derived_from) VALUES (%s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (metric) DO UPDATE SET target = EXCLUDED.target, unit = EXCLUDED.unit,
+                            derived_from = EXCLUDED.derived_from, updated_at = now()""", goal)
 
 
 # ── Dashboard and direct logging ─────────────────────────────────────────────
@@ -323,7 +332,219 @@ def set_goal_route(metric):
         if not goal:
             return jsonify({"error": "Unknown goal"}), 404
         if goal["derived_from"]:
-            # A dashboard edit would be overwritten by the next tracker save.
-            return jsonify({"error": "This goal comes from the Health tracker's settings; change it there."}), 409
+            # Derived goals follow the profile; editing the number directly would drift from it.
+            return jsonify({"error": "This goal follows your profile (height, BMI goal, calorie target); change the profile."}), 409
         conn.execute("UPDATE health.goals SET target = %s, updated_at = now() WHERE metric = %s", (target, metric))
     return jsonify({"ok": True})
+
+
+# ── Workspace API (v1): the Health screens own every record ──────────────────
+# The embedded tracker is retired, so rows it once produced are edited here
+# like any other; nothing projects over them any more.
+
+WORKOUT_TYPES = {"Strength", "Cardio", "Mobility / recovery", "Dog walk", "Other"}
+SLOTS_V1 = {"breakfast", "lunch", "dinner", "snack", "meal"}
+
+
+def _meal_nutrition(conn, values):
+    """A meal chosen from a reference food gets that food's nutrition × quantity, unless given."""
+    food_id, quantity = values.get("food_id"), values.get("quantity")
+    if food_id:
+        food = conn.execute("SELECT * FROM health.foods WHERE food_id = %s", (food_id,)).fetchone()
+        if not food:
+            raise records.Invalid("Unknown food")
+        qty = quantity or 1
+        for column in ("calories", "protein_g", "carbs_g", "fat_g", "fiber_g"):
+            if values.get(column) is None and food[column] is not None:
+                values[column] = round(float(food[column]) * qty, 1)
+        if not values.get("description"):
+            values["description"] = food["name"]
+    return values
+
+
+def _drink_math(conn, values):
+    if values.get("standard_drinks") is None and all(values.get(k) for k in ("containers", "oz_per_container", "abv_pct")):
+        values["standard_drinks"] = round(values["containers"] * values["oz_per_container"] * values["abv_pct"] / 100 / 0.6, 2)
+    return values
+
+
+F = records.Field
+records.Resource(bp, "/api/v1/health/workouts", "journal.workouts", "workout_id", [
+    F("workout_date", "date", required=True), F("workout_type", choices=WORKOUT_TYPES, default="Other"),
+    F("activity", max_length=100), F("minutes", "number", low=0, high=1440), F("note", max_length=2000)],
+    date_column="workout_date", defaults={"source": "manual"},
+    select="""SELECT w.*, NOT t.counts_toward_goal AS is_dog_walk FROM journal.workouts w
+              JOIN journal.workout_types t USING (workout_type)""")
+records.Resource(bp, "/api/v1/health/meals", "journal.meals", "meal_id", [
+    F("meal_date", "date", required=True), F("slot", choices=SLOTS_V1, default="meal"),
+    F("status", choices={"eaten", "planned"}, default="eaten"), F("description", max_length=300), F("note", max_length=2000),
+    F("food_id", max_length=200), F("quantity", "number", low=0, high=100),
+    F("calories", "number", low=0, high=10000), F("protein_g", "number", low=0, high=1000), F("carbs_g", "number", low=0, high=1000),
+    F("fat_g", "number", low=0, high=1000), F("fiber_g", "number", low=0, high=1000)],
+    date_column="meal_date", order="meal_date DESC, array_position(ARRAY['breakfast','lunch','dinner','snack','meal'], slot), meal_id",
+    defaults={"source": "manual"}, prepare=_meal_nutrition)
+records.Resource(bp, "/api/v1/health/weigh-ins", "health.body_measurements", "measurement_id", [
+    F("measured_on", "date", required=True), F("measured_at", "time"), F("value", "number", required=True, low=20, high=1000),
+    F("unit", choices={"lb", "kg"}, default="lb"), F("is_morning", "bool", default=False), F("note", max_length=2000)],
+    date_column="measured_on", order="measured_on DESC, measured_at DESC NULLS LAST, measurement_id DESC",
+    defaults={"source": "manual", "metric": "weight"})
+records.Resource(bp, "/api/v1/health/drinks", "health.alcohol", "drink_id", [
+    F("drink_date", "date", required=True), F("name", max_length=200), F("containers", "number", required=True, low=0, high=50),
+    F("oz_per_container", "number", low=0, high=200), F("abv_pct", "number", low=0, high=100),
+    F("calories", "number", low=0, high=10000), F("standard_drinks", "number", low=0, high=100)],
+    date_column="drink_date", defaults={"source": "manual"}, prepare=_drink_math)
+
+
+@bp.route("/api/v1/health/overview")
+@admin_required
+def overview_v1():
+    with db.tx() as conn:
+        out = dashboard(conn, days=28, weeks=12, weights=90)
+        out["profile"] = plain(conn.execute("SELECT * FROM health.profile WHERE profile_id = 1").fetchone() or {})
+        return jsonify(out)
+
+
+@bp.route("/api/v1/health/days")
+@admin_required
+def days_v1():
+    start, end = parse_date(request.args.get("from")), parse_date(request.args.get("to"))
+    if not (in_calendar(start) and in_calendar(end)):
+        return jsonify({"error": "from and to dates are required"}), 400
+    with db.tx() as conn:
+        return jsonify([plain(r) for r in conn.execute(
+            "SELECT * FROM health.daily_activity WHERE day BETWEEN %s AND %s ORDER BY day", (start, end))])
+
+
+@bp.route("/api/v1/health/days/<day>/complete", methods=["PUT"])
+@admin_required
+def day_complete_v1(day):
+    """Mark a day's food log complete: a day that isn't is unknown intake, not low intake."""
+    day = parse_date(day)
+    complete = (request.get_json(silent=True) or {}).get("complete")
+    if not in_calendar(day) or not isinstance(complete, bool):
+        return jsonify({"error": "A date and complete: true/false are required"}), 400
+    with db.tx() as conn:
+        if complete:
+            conn.execute("""INSERT INTO health.daily_logs (log_date, nutrition_complete, source) VALUES (%s, true, 'manual')
+                            ON CONFLICT (log_date) DO UPDATE SET nutrition_complete = true, updated_at = now()""", (day,))
+        else:
+            conn.execute("DELETE FROM health.daily_logs WHERE log_date = %s", (day,))
+    return jsonify({"ok": True, "complete": complete})
+
+
+PROFILE = [F("height_in", "number", low=36, high=100), F("age", "int", low=10, high=120),
+           F("mode", choices={"loss", "maintain", "gain"}), F("bmi_goal", "number", low=15, high=40),
+           F("calorie_target", "number", low=800, high=6000), F("drink_boundary", "number", low=0, high=20)]
+
+
+@bp.route("/api/v1/health/profile", methods=["GET", "PUT"])
+@admin_required
+def profile_v1():
+    with db.tx() as conn:
+        if request.method == "PUT":
+            data = request.get_json(silent=True) or {}
+            try:
+                values = records.clean(PROFILE, data, partial=True) if any(f.name in data for f in PROFILE) else {}
+            except records.Invalid as e:
+                return jsonify({"error": str(e)}), 400
+            days = data.get("alcohol_days")
+            if days is not None:
+                if not (isinstance(days, list) and all(isinstance(d, int) and 1 <= d <= 7 for d in days)):
+                    return jsonify({"error": "alcohol_days must be ISO weekdays 1–7"}), 400
+                values["alcohol_days"] = sorted(set(days))
+            if not values:
+                return jsonify({"error": "Nothing to change"}), 400
+            previous = conn.execute("SELECT to_jsonb(p) - 'updated_at' AS profile FROM health.profile p").fetchone()
+            conn.execute("INSERT INTO health.profile (profile_id) VALUES (1) ON CONFLICT DO NOTHING")
+            conn.execute(f"UPDATE health.profile SET {', '.join(f'{k} = %s' for k in values)}, updated_at = now() WHERE profile_id = 1",
+                         list(values.values()))
+            if previous:
+                conn.execute("INSERT INTO health.profile_history (profile) VALUES (%s)", (db.jsonb(previous["profile"]),))
+            derive_goals(conn)
+        row = conn.execute("SELECT * FROM health.profile WHERE profile_id = 1").fetchone()
+        return jsonify(plain(row) if row else {})
+
+
+@bp.route("/api/v1/health/goals")
+@admin_required
+def goals_v1():
+    with db.tx() as conn:
+        return jsonify([plain(r) for r in conn.execute(
+            """SELECT p.*, g.derived_from, g.derived_from IS NULL AS editable
+               FROM health.goal_progress p JOIN health.goals g USING (metric) ORDER BY metric""")])
+
+
+@bp.route("/api/v1/health/goals/<metric>", methods=["PUT"])
+@admin_required
+def goal_v1(metric):
+    return set_goal_route.__wrapped__(metric)
+
+
+@bp.route("/api/v1/health/foods", methods=["GET", "POST"])
+@admin_required
+def foods_v1():
+    with db.tx() as conn:
+        if request.method == "POST":
+            data = request.get_json(silent=True) or {}
+            try:
+                values = records.clean(FOOD, data)
+            except records.Invalid as e:
+                return jsonify({"error": str(e)}), 400
+            food_id = slug(values["name"])
+            if conn.execute("SELECT 1 FROM health.foods WHERE food_id = %s", (food_id,)).fetchone():
+                food_id = f"{food_id}-{conn.execute('SELECT COUNT(*) AS n FROM health.foods').fetchone()['n'] + 1}"
+            conn.execute(f"""INSERT INTO health.foods (food_id, {', '.join(values)}, source)
+                             VALUES (%s, {', '.join(['%s'] * len(values))}, 'manual')""", [food_id, *values.values()])
+            return jsonify(plain(conn.execute("SELECT * FROM health.foods WHERE food_id = %s", (food_id,)).fetchone())), 201
+        q = (request.args.get("q") or "").strip()
+        rows = conn.execute("""SELECT food_id, name, unit, calories, protein_g, carbs_g, fat_g, fiber_g, reference_note, url
+                               FROM health.foods WHERE %s = '' OR name ILIKE '%%' || %s || '%%' ORDER BY name LIMIT 200""", (q, q))
+        return jsonify([plain(r) for r in rows])
+
+
+FOOD = [F("name", required=True, max_length=200), F("unit", max_length=60), F("calories", "number", low=0, high=10000),
+        F("protein_g", "number", low=0, high=1000), F("carbs_g", "number", low=0, high=1000), F("fat_g", "number", low=0, high=1000),
+        F("fiber_g", "number", low=0, high=1000), F("reference_note", max_length=500), F("url", max_length=500)]
+
+
+@bp.route("/api/v1/health/foods/<food_id>", methods=["PUT", "DELETE"])
+@admin_required
+def food_v1(food_id):
+    with db.tx() as conn:
+        if request.method == "DELETE":
+            if conn.execute("SELECT 1 FROM health.recipe_ingredients WHERE food_id = %s", (food_id,)).fetchone():
+                return jsonify({"error": "A recipe uses this food"}), 409
+            conn.execute("UPDATE journal.meals SET food_id = NULL WHERE food_id = %s", (food_id,))
+            if not conn.execute("DELETE FROM health.foods WHERE food_id = %s", (food_id,)).rowcount:
+                return jsonify({"error": "Not found"}), 404
+            return jsonify({"ok": True})
+        try:
+            values = records.clean(FOOD, request.get_json(silent=True), partial=True)
+        except records.Invalid as e:
+            return jsonify({"error": str(e)}), 400
+        if not conn.execute(f"UPDATE health.foods SET {', '.join(f'{k} = %s' for k in values)}, updated_at = now() WHERE food_id = %s",
+                            [*values.values(), food_id]).rowcount:
+            return jsonify({"error": "Not found"}), 404
+        return jsonify(plain(conn.execute("SELECT * FROM health.foods WHERE food_id = %s", (food_id,)).fetchone()))
+
+
+@bp.route("/api/v1/health/recipes")
+@admin_required
+def recipes_v1():
+    with db.tx() as conn:
+        rows = conn.execute("""
+            SELECT r.recipe_id, r.name,
+                   jsonb_agg(jsonb_build_object('food_id', f.food_id, 'name', f.name, 'quantity', i.quantity, 'unit', f.unit)
+                             ORDER BY i.position) AS ingredients,
+                   ROUND(SUM(f.calories * i.quantity), 0) AS calories, ROUND(SUM(f.protein_g * i.quantity), 1) AS protein_g
+            FROM health.recipes r JOIN health.recipe_ingredients i USING (recipe_id) JOIN health.foods f USING (food_id)
+            GROUP BY r.recipe_id, r.name ORDER BY r.name""")
+        return jsonify([plain(r) for r in rows])
+
+
+@bp.route("/api/v1/health/shopping")
+@admin_required
+def shopping_v1():
+    """The shopping list, read-only here: the Finance tracker owns it until Money screens replace it."""
+    with db.tx() as conn:
+        return jsonify([plain(r) for r in conn.execute("SELECT * FROM finance.shopping_list ORDER BY done, name")])

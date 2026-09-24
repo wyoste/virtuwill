@@ -153,3 +153,33 @@ def diagnostics():
     except db.DatabaseUnavailable as error:
         out["database"]["error"] = str(error)
     return jsonify(out)
+
+
+# ── Travel (v1) ───────────────────────────────────────────────────────────────
+
+@bp.route("/api/v1/travel")
+def travel_v1():
+    with db.tx() as conn:
+        return jsonify({"places": travel.pins(conn), "visited": travel.visited(conn)})
+
+
+@bp.route("/api/v1/travel/places", methods=["PUT"])
+@admin_required
+def travel_places_v1():
+    items = request.get_json(silent=True)
+    if not isinstance(items, list):
+        return jsonify({"error": "Expected a list of places"}), 400
+    with db.tx() as conn:
+        travel.set_pins(conn, items)
+        return jsonify({"places": travel.pins(conn)})
+
+
+@bp.route("/api/v1/travel/visited", methods=["PUT"])
+@admin_required
+def travel_visited_v1():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Expected {countries, states}"}), 400
+    with db.tx() as conn:
+        travel.set_visited(conn, data)
+        return jsonify(travel.visited(conn))

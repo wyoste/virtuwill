@@ -48,8 +48,8 @@ window.VW.Blog = (() => {
     if (!published.length) { section.style.display = 'none'; return; }
     section.style.display = 'block';
 
-    grid.innerHTML = published.map(p => `
-      <div class="home-blog-card" onclick="VW.Blog.openReader('${p.id}')">
+    grid.innerHTML = published.slice(0, 3).map(p => `
+      <a class="home-blog-card" href="/writing/${encodeURIComponent(p.id)}" data-link>
         <div class="home-blog-card-thumb">
           ${p.thumbnail
             ? `<img src="${_esc(p.thumbnail)}" alt="${_esc(p.title)}" loading="lazy"/>`
@@ -61,7 +61,7 @@ window.VW.Blog = (() => {
           <div class="home-blog-card-excerpt">${_esc(p.excerpt || _strip(p.body).slice(0,120))}${(p.excerpt||p.body).length>120?'…':''}</div>
           <div class="home-blog-card-cta">Read post &#8594;</div>
         </div>
-      </div>`).join('');
+      </a>`).join('');
   }
 
   function openReader(id) {
