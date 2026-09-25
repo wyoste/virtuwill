@@ -1,5 +1,5 @@
 // Health: Overview · Activity · Food · Body · Goals, over the shared tables.
-import { h, api, fmt, card, stat, pageHead, tabs, isoToday, addDays, empty, toast, run, field, values } from '../lib.js';
+import { h, api, fmt, card, stat, pageHead, tabs, isoToday, addDays, empty, toast, run, field, values, editable, saveAll } from '../lib.js';
 import { quickAdd, recordRow, meal as mealEditor, cap, forgetFoods } from '../forms.js';
 
 const TABS = [['/app/health', 'Overview'], ['/app/health/activity', 'Activity'], ['/app/health/food', 'Food'],
@@ -192,7 +192,7 @@ function chart(points) {
   svg.setAttribute('aria-label', `Weight from ${points[0].day} to ${points[points.length - 1].day}`);
   svg.style.width = '100%';
   const line = points.map((p, i) => p.morning_avg_7d != null ? `${x(i)},${y(p.morning_avg_7d)}` : null).filter(Boolean).join(' ');
-  svg.innerHTML = `<polyline fill="none" stroke="#109ACC" stroke-width="2.5" points="${line}"/>` +
+  svg.innerHTML = `<polyline fill="none" stroke="#1B3F27" stroke-width="2.5" points="${line}"/>` +
     points.map((p, i) => p.weight != null ? `<circle cx="${x(i)}" cy="${y(p.weight)}" r="2.6" fill="#8a9ab0"/>` : '').join('') +
     `<text x="4" y="${y(max - 1) + 4}" font-size="11" fill="#6b7a90">${(max - 1).toFixed(0)}</text>` +
     `<text x="4" y="${y(min + 1) + 4}" font-size="11" fill="#6b7a90">${(min + 1).toFixed(0)}</text>`;
@@ -217,28 +217,35 @@ async function goals(view, redraw) {
     field('Daily calorie target', 'calorie_target', { kind: 'number', value: profile.calorie_target ?? '', step: 10 }),
     field('Drinks on a drinking day: fewer than', 'drink_boundary', { kind: 'number', value: profile.drink_boundary ?? 3, step: 1 }),
     h('div', { class: 'ws-field wide' }, h('span', {}, 'Days drinking is fine'), dayButtons),
-    h('button', { class: 'btn primary', type: 'submit' }, 'Save profile'));
-  form.onsubmit = event => {
-    event.preventDefault();
-    run(form.querySelector('button[type=submit]'), async () => {
-      await api('/api/v1/health/profile', { method: 'PUT', body: { ...values(form), alcohol_days: [...chosen].sort() } });
-      toast('Profile saved; weight, BMI and calorie goals updated');
-      redraw();
-    });
-  };
+    h('button', { class: 'btn primary', type: 'submit' }, 'Save'));
+  // Profile and goal targets are one screen: either Save saves both.
+  editable(form, () => api('/api/v1/health/profile', { method: 'PUT', body: { ...values(form), alcohol_days: [...chosen].sort() } }),
+           { then: redraw });
+  form.onsubmit = event => { event.preventDefault(); saveAll(form.querySelector('button[type=submit]')); };
+  const targets = goalList.filter(g => g.editable).map(g => [g, h('input', { class: 'ws-input', type: 'number', step: 'any', value: g.target,
+    style: { width: '96px' }, 'aria-label': goalName(g.metric) + ' target' })]);
+  const inputFor = new Map(targets.map(([g, input]) => [g.metric, input]));
   view.append(h('div', { class: 'ws-grid two' },
     card('Profile', h('p', { class: 'ws-note', style: { marginBottom: '10px' } },
       'Weight, BMI and daily-calorie goals follow from these. Changes are kept in the profile history.'), form),
-    card('Goals', h('ul', { class: 'ws-list' }, goalList.map(g => {
-      const input = h('input', { class: 'ws-input', type: 'number', step: 'any', value: g.target, style: { width: '96px' }, 'aria-label': goalName(g.metric) + ' target' });
-      return h('li', { class: 'ws-row' },
-        h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, goalName(g.metric)),
-          h('div', { class: 'ws-row-meta' }, g.editable ? `${directionText(g.direction)} ${g.unit} per ${g.period}` : `Follows your profile (${g.derived_from})`)),
-        g.editable
-          ? h('div', { class: 'ws-row-end' }, input, h('button', { class: 'btn small', onclick: ev => run(ev.target, async () => {
-              await api('/api/v1/health/goals/' + g.metric, { method: 'PUT', body: { target: input.value } }); toast('Goal saved'); redraw(); }) }, 'Save'))
-          : h('span', { class: 'ws-amount' }, `${fmt.num(g.target, 1)} ${g.unit}`));
-    })))));
+    card('Goals', goalsList(goalList, inputFor, targets, redraw))));
+}
+
+function goalsList(goalList, inputFor, targets, redraw) {
+  const list = h('ul', { class: 'ws-list' }, goalList.map(g => h('li', { class: 'ws-row' },
+    h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, goalName(g.metric)),
+      h('div', { class: 'ws-row-meta' }, g.editable ? `${directionText(g.direction)} ${g.unit} per ${g.period}` : `Follows your profile (${g.derived_from})`)),
+    g.editable ? h('div', { class: 'ws-row-end' }, inputFor.get(g.metric), h('span', { class: 'ws-note' }, g.unit))
+               : h('span', { class: 'ws-amount' }, `${fmt.num(g.target, 1)} ${g.unit}`))));
+  const box = h('div', {}, list, targets.length ? h('div', { style: { marginTop: '10px' } },
+    h('button', { class: 'btn primary', onclick: e => saveAll(e.currentTarget) }, 'Save')) : null);
+  // Only the targets that changed are sent.
+  editable(list, async () => {
+    for (const [g, input] of targets) {
+      if (String(input.value) !== String(g.target)) await api('/api/v1/health/goals/' + g.metric, { method: 'PUT', body: { target: input.value } });
+    }
+  }, { then: redraw });
+  return box;
 }
 
 export { cap };

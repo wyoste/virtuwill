@@ -1,9 +1,10 @@
 // Settings: site switches, the journal's balance accounts, retired trackers, diagnostics.
-import { h, api, fmt, card, pageHead, toast, run } from '../lib.js';
+import { h, api, fmt, card, pageHead, toast, run, editable, saveAll } from '../lib.js';
 
 export async function render(view) {
   const [settings, template] = await Promise.all([api('/api/settings'), api('/api/accounts-template')]);
-  const chat = h('input', { type: 'checkbox', checked: settings['site.chat_enabled'] === true, id: 'set-chat' });
+  // A switch: saved as soon as it's flipped.
+  const chat = h('input', { type: 'checkbox', checked: settings['site.chat_enabled'] === true, id: 'set-chat', 'data-untracked': '' });
   chat.onchange = () => run(chat, async () => {
     await api('/api/settings', { method: 'PUT', body: { 'site.chat_enabled': chat.checked } });
     toast('Saved. Visitors see the change on their next page load.');
@@ -14,12 +15,11 @@ export async function render(view) {
   const draw = () => rows.replaceChildren(...accounts.map((a, i) => h('div', { class: 'ws-form' },
     h('input', { class: 'ws-input', style: { flex: '1 1 160px' }, value: a.institution, placeholder: 'Institution', 'aria-label': 'Institution', oninput: e => { a.institution = e.target.value; } }),
     h('input', { class: 'ws-input', style: { flex: '1 1 160px' }, value: a.name, placeholder: 'Account', 'aria-label': 'Account', oninput: e => { a.name = e.target.value; } }),
-    h('button', { class: 'btn small danger', 'aria-label': 'Remove', onclick: () => { accounts.splice(i, 1); draw(); } }, '✕'))),
+    h('button', { class: 'btn small danger', 'aria-label': 'Remove', onclick: () => { accounts.splice(i, 1); draw(); list.touch(); } }, '✕'))),
     h('div', { class: 'ws-form' }, h('button', { class: 'btn small', onclick: () => { accounts.push({ institution: '', name: '' }); draw(); } }, '+ Account'),
-      h('button', { class: 'btn small primary', onclick: e => run(e.target, async () => {
-        await api('/api/accounts-template', { method: 'POST', body: accounts.filter(a => a.institution || a.name) }); toast('Saved');
-      }) }, 'Save list')));
+      h('button', { class: 'btn small primary', onclick: e => saveAll(e.currentTarget) }, 'Save')));
   draw();
+  const list = editable(rows, () => api('/api/accounts-template', { method: 'POST', body: accounts.filter(a => a.institution || a.name) }));
 
   const diag = h('div', {}, h('p', { class: 'ws-note' }, 'Loading…'));
   view.append(

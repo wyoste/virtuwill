@@ -5,8 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="robots" content="noindex"/>
   <title>VirtuWill workspace</title>
-  <link rel="icon" href="{{ url_for('static', filename='yoste_logo.png') }}"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="icon" href="{{ url_for('static', filename='brand/favicon.ico') }}" sizes="any"/>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='brand/favicon-32.png') }}"/>
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='brand/apple-touch-icon.png') }}"/>
+  <meta name="theme-color" content="#1B3F27"/>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   {% if signed_in %}
   <!-- The reused garden planner's own components; workspace.css loads last and wins. -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}"/>
@@ -19,12 +22,12 @@
 {% if signed_in %}
   <header class="ws-topbar">
     <button class="ws-menu" id="ws-menu" aria-label="Open navigation" aria-expanded="false" aria-controls="ws-sidebar">☰</button>
-    <a class="ws-brand" href="/app"><img src="{{ url_for('static', filename='yoste_logo.png') }}" alt=""/> Workspace</a>
+    <a class="ws-brand" href="/app"><img src="{{ url_for('static', filename='brand/wy-mark-cream.png') }}" alt=""/> <span>Workspace</span></a>
     <span class="ws-status" id="ws-status" role="status" aria-live="polite"></span>
   </header>
   <div class="ws-scrim" id="ws-scrim"></div>
   <aside class="ws-sidebar" id="ws-sidebar">
-    <a class="ws-brand ws-brand-side" href="/app"><img src="{{ url_for('static', filename='yoste_logo.png') }}" alt=""/> Workspace</a>
+    <a class="ws-brand ws-brand-side" href="/app"><img src="{{ url_for('static', filename='brand/wy-mark-cream.png') }}" alt=""/> <span>Workspace</span></a>
     <div id="ws-sidebar-nav"></div>
     <div class="ws-sidebar-foot">
       <a href="/" class="ws-nav-item"><span class="ws-nav-icon" aria-hidden="true">↗</span><span>View public site</span></a>

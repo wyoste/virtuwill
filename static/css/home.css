@@ -252,3 +252,7 @@
   .blog-reader-bg { padding: 12px; }
   .home-blog-grid { grid-template-columns: 1fr; }
 }
+
+/* Brand */
+.home-eyebrow { color: var(--brand-gold-dk); }
+.home-title { font-size: clamp(34px, 5vw, 48px); color: var(--brand-green); }

@@ -237,7 +237,7 @@ function spark(values) {
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('width', W); svg.setAttribute('height', H);
   svg.setAttribute('aria-hidden', 'true');
-  svg.innerHTML = `<polyline fill="none" stroke="#109ACC" stroke-width="1.8" points="${pts}"/>`;
+  svg.innerHTML = `<polyline fill="none" stroke="#1B3F27" stroke-width="1.8" points="${pts}"/>`;
   return svg;
 }
 

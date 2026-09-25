@@ -21,7 +21,7 @@
   transition: transform .2s, background .15s;
   z-index: 300;
 }
-.chat-fab:hover  { background: #2d3f55; transform: scale(1.06); }
+.chat-fab:hover  { background: var(--blue-hv); transform: scale(1.06); }
 .chat-fab.open   { background: var(--blue); }
 
 .chat-fab svg {
@@ -99,7 +99,7 @@
 .chat-header-info   { flex: 1; }
 .chat-header-name   { font-size: 13px; font-weight: 600; color: #fff; }
 .chat-header-status { display: flex; align-items: center; gap: 5px; margin-top: 2px; }
-.chat-status-dot    { width: 6px; height: 6px; border-radius: 50%; background: #27ae60; }
+.chat-status-dot    { width: 6px; height: 6px; border-radius: 50%; background: var(--brand-gold); }
 .chat-status-label  { font-size: 11px; color: rgba(255, 255, 255, .45); }
 .chat-close {
   background: none;

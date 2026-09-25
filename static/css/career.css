@@ -5,10 +5,10 @@
 .cr-hero { background: var(--dark-surface); color: #fff; }
 .cr-hero .cr-hero-in { display: flex; align-items: center; justify-content: space-between; gap: 20px 32px; flex-wrap: wrap; padding-top: 36px; padding-bottom: 32px; }
 .cr-id { display: flex; align-items: center; gap: 18px; min-width: 0; }
-.cr-avatar { width: 68px; height: 68px; flex-shrink: 0; border-radius: 50%; background: linear-gradient(135deg, var(--blue), var(--teal)); display: grid; place-items: center; font-size: 24px; font-weight: 700; letter-spacing: .02em; }
+.cr-avatar { width: 68px; height: 68px; flex-shrink: 0; border-radius: 50%; background: var(--brand-gold); color: var(--brand-green); display: grid; place-items: center; font-family: var(--font-display); font-size: 26px; font-weight: 700; }
 .cr-name { font-size: clamp(26px, 4.5vw, 36px); font-weight: 700; letter-spacing: -.02em; margin: 0; line-height: 1.15; }
-.cr-role { margin: 4px 0 0; font-size: 15.5px; color: #cfe3f1; }
-.cr-meta { margin: 4px 0 0; font-size: 13px; color: #8fa9c0; overflow-wrap: anywhere; }
+.cr-role { margin: 4px 0 0; font-size: 15.5px; color: #EDE3C8; }
+.cr-meta { margin: 4px 0 0; font-size: 13px; color: #BCC8B2; overflow-wrap: anywhere; }
 .cr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .cr-hero .site-btn-ghost { background: transparent; color: #fff; border-color: rgba(255, 255, 255, .3); }
 .cr-hero .site-btn-ghost:hover { background: rgba(255, 255, 255, .08); }
@@ -94,10 +94,20 @@
 
 @media (max-width: 640px) {
   .cr-hero .cr-hero-in { padding-top: 26px; padding-bottom: 24px; }
-  .cr-avatar { width: 54px; height: 54px; font-size: 19px; }
+  .cr-avatar { width: 54px; height: 54px; font-size: 20px; }
   .cr-actions .site-btn { flex: 1 1 auto; justify-content: center; }
   .cr-role-item { grid-template-columns: 1fr; gap: 6px; }
   .cr-role-when { padding-top: 0; text-align: left; flex-direction: row; gap: 8px; }
   .cr-section { padding-top: 30px; }
   .cr-edu, .cr-skills, .cr-pillars { grid-template-columns: 1fr; }
 }
+
+.cr-hero { background: radial-gradient(circle at 85% -40%, rgba(227, 176, 64, .22), transparent 55%), var(--brand-green); }
+.cr-hero .site-btn:not(.site-btn-ghost) { background: var(--brand-gold); border-color: var(--brand-gold); color: var(--brand-green); }
+.cr-hero .site-btn:not(.site-btn-ghost):hover { background: #EDC25E; }
+.cr-impact strong { color: var(--brand-green); font-family: var(--font-display); }
+.cr-impact > div { background: var(--blue-lt); }
+.cr-strengths > div { border-left-color: var(--brand-gold); }
+.cr-tabs a.on { color: var(--brand-green); border-bottom-color: var(--brand-gold); }
+.cr-hero .site-btn-ghost { background: transparent; color: var(--brand-gold); border-color: var(--brand-gold); }
+.cr-hero .site-btn-ghost:hover { background: rgba(227, 176, 64, .14); }

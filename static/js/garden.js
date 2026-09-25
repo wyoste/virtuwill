@@ -267,7 +267,7 @@ window.VW.Garden = (() => {
 
   function init() {
     _loadBg();
-    _loadData().then(() => { _fitAll(); _buildSpeciesDropdown(); _renderBedList(); render(); });
+    _loadData().then(() => { _savedSnapshot = _snapshot(); _fitAll(); _buildSpeciesDropdown(); _renderBedList(); render(); });
     if (!_eventsOk) { _attachEvents(); _eventsOk = true; }
   }
 
@@ -308,12 +308,18 @@ window.VW.Garden = (() => {
     } catch { /* use empty state */ }
   }
 
+  // What was last loaded or saved, to tell whether there are unsaved changes.
+  let _savedSnapshot = null;
+  const _snapshot = () => JSON.stringify(state.beds);
+  function isDirty() { return _savedSnapshot !== null && _snapshot() !== _savedSnapshot; }
+
   async function save() {
     // Strip legacy fields before saving
     const clean = { ...state, beds: state.beds.map(b => {
       const { nodes: _, ...rest } = b;
       return rest;
     })};
+    const saving = _snapshot();
     try {
       const r = await fetch('/api/garden', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -321,7 +327,7 @@ window.VW.Garden = (() => {
       });
       const d = await r.json();
       window.toast?.(d.ok ? '💾 Garden saved' : 'Save failed', d.ok?'success':'error');
-      if (d.ok) { GDN?.Viewer?.init?.(); _renderBedList(); }
+      if (d.ok) { _savedSnapshot = saving; GDN?.Viewer?.init?.(); _renderBedList(); }
     } catch {
       window.toast?.('Save failed', 'error');
     }
@@ -482,10 +488,10 @@ window.VW.Garden = (() => {
 
       if (!occupied) {
         ctx.beginPath(); ctx.arc(sp.x, sp.y, isNearest ? dotR*2 : dotR, 0, Math.PI*2);
-        ctx.fillStyle = isNearest ? 'rgba(29,158,117,0.7)' : 'rgba(255,255,255,0.22)';
+        ctx.fillStyle = isNearest ? 'rgba(47,122,75,0.7)' : 'rgba(255,255,255,0.22)';
         ctx.fill();
         if (isNearest) {
-          ctx.strokeStyle='rgba(29,158,117,0.9)'; ctx.lineWidth=1.5; ctx.stroke();
+          ctx.strokeStyle='rgba(47,122,75,0.9)'; ctx.lineWidth=1.5; ctx.stroke();
         }
       }
     });
@@ -525,7 +531,7 @@ window.VW.Garden = (() => {
         const ms = worldToScreen(_mouseW.x,_mouseW.y,_cam);
         ctx.globalAlpha=0.45;
         ctx.beginPath(); ctx.arc(ms.x,ms.y,r,0,Math.PI*2);
-        ctx.fillStyle='#1D9E75'; ctx.fill();
+        ctx.fillStyle='#2F7A4B'; ctx.fill();
         ctx.font=`${Math.max(10,r*0.9)}px sans-serif`;
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText(sp.emoji, ms.x, ms.y);
@@ -665,11 +671,11 @@ window.VW.Garden = (() => {
     if (_freePts.length < 2) return;
     const pts = _freePts.map(p=>worldToScreen(p.x,p.y,_cam));
     ctx.save();
-    ctx.strokeStyle='rgba(29,158,117,0.9)'; ctx.lineWidth=2; ctx.setLineDash([]);
+    ctx.strokeStyle='rgba(47,122,75,0.9)'; ctx.lineWidth=2; ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
     pts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y)); ctx.stroke();
     // Close preview line back to first
-    ctx.setLineDash([4,3]); ctx.strokeStyle='rgba(29,158,117,0.5)';
+    ctx.setLineDash([4,3]); ctx.strokeStyle='rgba(47,122,75,0.5)';
     ctx.beginPath(); ctx.moveTo(pts[pts.length-1].x,pts[pts.length-1].y);
     ctx.lineTo(pts[0].x,pts[0].y); ctx.stroke();
     ctx.setLineDash([]);
@@ -1427,7 +1433,7 @@ window.VW.Garden = (() => {
   }
 
   return {
-    init, onAdminLogin, save,
+    init, onAdminLogin, save, isDirty,
     goBack()  { _exitEdit(); },
     _clickBedCard, _bedDragStart, _bedDragOver, _bedDrop, _bedDragEnd,
     _renderBedList,

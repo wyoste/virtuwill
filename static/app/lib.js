@@ -157,17 +157,94 @@ export function values(form) {
 }
 
 // A modal dialog; resolves with the button value, or null when dismissed.
+// Cancelling (a null/false button, Escape) after editing its fields asks before the edits are thrown away.
 export function dialog(title, body, buttons = [['Cancel', null], ['OK', true]]) {
   return new Promise(resolve => {
-    const box = h('dialog', { class: 'ws-dialog' },
-      h('h2', {}, title), h('div', { class: 'ws-dialog-body' }, body),
-      h('div', { class: 'ws-dialog-actions' }, buttons.map(([label, value], i) =>
-        h('button', { class: i === buttons.length - 1 ? 'btn primary' : 'btn', onclick: () => { box.close(); resolve(value); } }, label))));
-    box.addEventListener('cancel', () => resolve(null));
+    const bodyEl = h('div', { class: 'ws-dialog-body' }, body);
+    const start = fieldState(bodyEl);
+    const actions = h('div', { class: 'ws-dialog-actions' });
+    const box = h('dialog', { class: 'ws-dialog' }, h('h2', {}, title), bodyEl, actions);
+    const finish = value => { box.close(); resolve(value); };
+    const leave = value => {
+      if (value || fieldState(bodyEl) === start) return finish(value);
+      // Edited, then cancelled: confirm in place.
+      actions.replaceChildren(h('span', { class: 'ws-dialog-ask', role: 'alert' }, 'Discard your changes?'),
+        h('button', { class: 'btn', onclick: showButtons }, 'Keep editing'),
+        h('button', { class: 'btn danger', onclick: () => finish(value) }, 'Discard'));
+      actions.querySelector('.btn').focus();
+    };
+    const showButtons = () => actions.replaceChildren(...buttons.map(([label, value], i) =>
+      h('button', { class: i === buttons.length - 1 ? 'btn primary' : 'btn', onclick: () => leave(value) }, label)));
+    showButtons();
+    box.addEventListener('cancel', event => { event.preventDefault(); leave(null); });
     box.addEventListener('close', () => setTimeout(() => box.remove(), 0));
     document.body.append(box);
     box.showModal();
   });
+}
+
+// ── Unsaved changes ──────────────────────────────────────────────────────────
+// editable(area, save) watches an area's fields. While any area has unsaved
+// edits a bar offers Save all / Discard; any Save on the screen saves every
+// edited area (saveAll); leaving the screen asks first (main.js).
+function fieldState(root) {
+  return JSON.stringify([...root.querySelectorAll('input, select, textarea, [aria-pressed]')]
+    .filter(el => el.type !== 'file' && !el.closest('[data-untracked]'))
+    .map(el => el.hasAttribute('aria-pressed') ? el.getAttribute('aria-pressed') : el.type === 'checkbox' ? el.checked : el.value));
+}
+
+const areas = new Set();
+let onDiscard = null;
+
+// then: runs once after a Save all that saved this area (e.g. redraw derived values).
+export function editable(root, save, { then } = {}) {
+  const area = { root, save, then, base: fieldState(root), touched: false };
+  area.dirty = () => area.touched || fieldState(root) !== area.base;
+  area.reset = () => { area.base = fieldState(root); area.touched = false; };
+  area.touch = () => { area.touched = true; saveBar(); };   // edits the fields can't show, e.g. a removed row
+  root.addEventListener('input', saveBar);
+  root.addEventListener('change', saveBar);
+  root.addEventListener('click', () => setTimeout(saveBar, 0));   // toggled chips
+  areas.add(area);
+  return area;
+}
+
+export function unsaved() {
+  for (const area of areas) if (!area.root.isConnected) areas.delete(area);
+  return [...areas].some(area => area.dirty());
+}
+
+// Save every edited area; true when all saved.
+export async function saveAll(button) {
+  const edited = [...areas].filter(area => area.root.isConnected && area.dirty());
+  if (button) button.disabled = true;
+  try {
+    for (const area of edited) { await area.save(); area.reset(); }
+    if (edited.length) toast(edited.length > 1 ? `Saved ${edited.length} sections` : 'Saved');
+    for (const then of new Set(edited.map(area => area.then).filter(Boolean))) then();
+    return true;
+  } catch (error) {
+    toast(error.message, 'error');
+    return false;
+  } finally {
+    if (button) button.disabled = false;
+    saveBar();
+  }
+}
+
+export function forgetEdits() { areas.clear(); saveBar(); }
+export function setDiscard(fn) { onDiscard = fn; }
+
+function saveBar() {
+  let bar = document.getElementById('ws-savebar');
+  if (!bar) {
+    bar = h('div', { id: 'ws-savebar', class: 'ws-savebar', role: 'status', hidden: true },
+      h('span', {}, 'Unsaved changes'),
+      h('button', { class: 'btn', onclick: () => { forgetEdits(); onDiscard?.(); } }, 'Discard'),
+      h('button', { class: 'btn primary', onclick: e => saveAll(e.currentTarget) }, 'Save all'));
+    document.body.append(bar);
+  }
+  bar.hidden = !unsaved();
 }
 
 export async function confirmDelete(what) {
@@ -211,4 +288,39 @@ export function textToHTML(text) {
   const div = document.createElement('div');
   div.textContent = text || '';
   return div.innerHTML.replace(/\n/g, '<br>');
+}
+
+// ── Photo picker ─────────────────────────────────────────────────────────────
+// Choose or drop photos; shows a thumbnail of each, any of which can be taken
+// out before uploading. picker.files() → File[]; onchange runs on every change.
+export function photoPicker({ onchange, hint = 'or drop them here' } = {}) {
+  let chosen = [];
+  const input = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, 'data-untracked': '' });
+  const previews = h('div', { class: 'ws-thumbs' });
+  const count = h('span', { class: 'ws-note' }, 'No photos chosen');
+  const tally = h('input', { type: 'hidden', value: '0' });   // so choosing photos counts as an edit
+  const draw = () => {
+    tally.value = String(chosen.length);
+    previews.querySelectorAll('img').forEach(img => URL.revokeObjectURL(img.src));
+    previews.replaceChildren(...chosen.map((file, i) => h('div', { class: 'ws-thumb' },
+      h('img', { src: URL.createObjectURL(file), alt: file.name }), h('small', {}, file.name),
+      h('button', { type: 'button', class: 'btn small danger', 'aria-label': 'Remove ' + file.name,
+        onclick: () => { chosen.splice(i, 1); draw(); onchange?.(); } }, '×'))));
+    count.textContent = chosen.length ? `${chosen.length} photo${chosen.length === 1 ? '' : 's'} chosen` : 'No photos chosen';
+  };
+  const add = list => {
+    const images = [...list].filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(f.name));
+    if (images.length < list.length) toast('Only photos can be added (JPEG, PNG, WebP or GIF).', 'error');
+    chosen = [...chosen, ...images];
+    draw();
+    onchange?.();
+  };
+  input.onchange = () => { add(input.files); input.value = ''; };
+  const el = h('div', { class: 'ws-drop' },
+    h('button', { type: 'button', class: 'btn', onclick: () => input.click() }, 'Choose photos'), ' ', count, input,
+    h('p', { class: 'ws-note', style: { marginTop: '6px' } }, hint), previews, tally);
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('over'));
+  el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('over'); add(e.dataTransfer.files); });
+  return { el, files: () => [...chosen], clear: () => { chosen = []; draw(); } };
 }

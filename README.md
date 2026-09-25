@@ -13,7 +13,8 @@ Built with Flask + modular vanilla JS. No build step required.
 | Music | `/music`, `/music/<song>` | Every song (search, album filter), albums, photos; each song's story, versions, lyrics and chords. A player bar keeps playing while you browse. |
 | Career | `/career`, `/career#<section>`, `/career/projects/<id>` | The professional portfolio on one page: header with CV download, work ethos, experience (each role linking its projects), a project explorer filtered by technology, role or search, skills and certifications, education. Each project opens with its overview, outcomes and timeline, or an uploaded walkthrough in a sandboxed frame. `/resume` and `/projects` links land here |
 | Writing | `/writing`, `/writing/<id>` | Posts, each with its own page |
-| Garden, Travel | `/garden`, `/travel` | The garden map and gallery; the travel map |
+| Garden | `/garden` | The note and gardening philosophy, photos filtered by bed or plant type (with a lightbox), the garden map, and what grows in each bed |
+| Travel | `/travel` | The travel map: stops with their photos and captions, and the countries and states visited |
 | Say hi | `/contact` | Leave a note |
 
 **The workspace** at `/app` is where the owner records and edits everything, with
@@ -25,13 +26,37 @@ one sidebar and one screen at a time:
 | Journal | entries by date, editor, habits, balance check-in, photo transcription | `journal.entries`, tags, habit logs, journal balance snapshots |
 | Health | Overview · Activity · Food · Body · Goals | workouts, meals, weigh-ins, drinks, foods, profile, goals |
 | Money | Overview (full analysis, or goals only) · Transactions · Receipts · Accounts & balances · Budgets & bills · Goals & retirement · Imports · Finance tracker | bank activity, statements, paychecks and receipts through Imports; budgets, goals and the pay plan in the Finance tracker |
-| Site | Music · Career (profile & ethos, experience, projects, skills & education, CV upload) · Writing · Garden · Travel · Messages | everything the public site shows |
+| Site | Music · Career (profile & ethos, experience, projects, skills & education, CV upload) · Writing · Garden (photos tagged to beds and plant types, the bed planner, page text) · Travel (add a stop by picking its country from a searchable list, with photos attached in the same step; stops by city; regions visited) · Messages | everything the public site shows |
 | Settings | site switches, journal check-in accounts, diagnostics | `core.settings` |
 
 Each record has one editor. The same logging forms (workout, meal, weigh-in, drink)
 open from Today, Health and the Journal, so there is one set of validation.
 Habits like run, lift and drink tick themselves from the day's records; a habit set
 by hand wins. Sign in at `/app` (the footer's "Sign in" link) with the admin password.
+
+Unsaved edits are never lost silently. While a screen has unsaved changes a bar offers
+**Save all** or **Discard**; any Save button on a screen saves every edited section on
+it; leaving (a link, the sidebar, Back) asks to stay, discard, or save and leave; and a
+dialog closed after editing asks before throwing the edits away. Screens opt in with
+`editable(area, save)` from `static/app/lib.js`.
+
+## Brand
+
+The WY mark (a W growing toward a sun) sets the look of the public site and the
+workspace alike. Files are in `static/brand/`: the mark in green (`wy-mark-green.png`,
+for light backgrounds) and cream (`wy-mark-cream.png`, for dark ones), a square tile
+(`wy-tile-512.png`), favicons and the full logo (`wy-logo.jpg`).
+
+| Token | Colour | Used for |
+|---|---|---|
+| `--brand-green` | `#1B3F27` forest green | the header (logo centred, pages split left and right), footer, workspace sidebar, headings, text on buttons |
+| `--brand-cream` | `#F4EBD5` grassy cream | the page body; text on green; cards are a lighter tint |
+| `--brand-gold` | `#E3B040` sun gold | buttons (primary filled, secondary outlined in gold), active markers, the header's rule |
+| `--brand-gold-dk` | `#6B4E0C` | gold for text on cream (eyebrows) |
+
+Headings use Fraunces; body text uses Inter. Both sets of tokens (`static/css/theme.css`
+and `static/app/workspace.css`) keep the older names (`--blue` is now the brand green),
+so every component follows the brand. Text colours meet WCAG AA contrast.
 
 ## The Finance and Health trackers
 
@@ -214,7 +239,7 @@ virtuwill/
 ├── static/
 │   ├── app/               The workspace: main.js (router, sidebar), lib.js, forms.js, moneyparts.js, screens/*.js
 │   ├── js/                Public pages: app.js (router), music.js (pages + player), career.js,
-│   │                      writing.js, garden.js/viewer.js/gallery.js, travel.js, contact.js
+│   │                      writing.js, garden-page.js (page), garden.js (planner), viewer.js (map), travel.js, contact.js
 │   └── css/               theme.css (tokens), site.css (public pages), page styles
 └── data/                  Content loaded into a new database on first start
 ```
@@ -272,6 +297,10 @@ Lakebase (PostgreSQL); see "Data: one relational model in Lakebase" above.
 | GET/POST/PUT/DELETE | `/api/v1/career/{roles,education,skill-groups,highlights}` | Owner | The page's lists |
 | POST/DELETE | `/api/v1/career/cv` | Owner | Upload a CV (PDF), or go back to the bundled one; `/career/cv` downloads it |
 | GET | `/api/v1/posts[/<id>]`, `/api/v1/travel`, `/api/v1/site-text/<key>` | — | Writing, travel, page text |
+| GET | `/api/v1/garden` | — | The Garden page: beds and what grows in them, plant types, tagged photos, page text |
+| POST / PUT | `/api/v1/garden/photos`, `/api/v1/garden/photos/<id>` | Owner | Upload photos tagged to beds and plant types (`beds[]`, `species[]`, `caption`, `taken_on`); change a photo's caption, date or tags |
+| POST / PUT / DELETE | `/api/v1/travel/places[/<id>]` | Owner | Add, edit or remove one stop |
+| POST / PUT / DELETE | `/api/v1/travel/places/<id>/photos[/<position>]` | Owner | Attach photos to a stop; caption or remove one |
 
 ### Entry schema
 

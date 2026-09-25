@@ -78,12 +78,19 @@ def path_of(conn, asset):
 
 
 def save_upload(conn, file_storage, path):
-    """Write an uploaded file under static/ and keep its bytes in the database."""
+    """Keep an uploaded file's bytes in the database, and a copy under static/ when the disk allows.
+
+    The database copy is the one that counts: a deployment whose app folder is
+    read-only, or that runs several instances, still serves the file from it."""
     path = relpath(path)
-    target = STATIC / path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    file_storage.save(str(target))
-    return register(conn, path, target.read_bytes())
+    content = file_storage.read()
+    try:
+        target = STATIC / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+    except OSError as error:
+        log.info("Kept %s in the database only: %s", path, error)
+    return register(conn, path, content)
 
 
 def delete(conn, path):

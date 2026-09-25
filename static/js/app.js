@@ -89,7 +89,7 @@ function go(target, { push = true } = {}) {
   if (page === 'music')    VW.Music.onEnter(sub);
   if (page === 'career')   VW.Career.onEnter(sub, rest);
   if (page === 'writing')  VW.Writing.onEnter(sub);
-  if (page === 'garden')   { GDN?.Gallery?.init?.(); GDN?.Viewer?.init?.(); }
+  if (page === 'garden')   VW.GardenPage.onEnter();
   if (page === 'travel')   VW.Travel?.init?.();
   if (page === 'contact')  VW.Contact?.init?.();
   document.getElementById('main')?.focus({ preventScroll: true });
