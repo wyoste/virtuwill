@@ -24,6 +24,7 @@ module per schema. `virtuwill/migrate.py` moved the earlier Lakebase layout in o
 | `content` | `blog_posts`, `portfolio_projects`, `project_metrics`, `project_timeline`, `site_text`, `messages` + `public_posts` view | posts/projects public; messages private |
 | `career` | `profile` (one row), `roles`, `education`, `skill_groups`, `highlights` (pillars, impact figures, strengths, certifications); `content.portfolio_projects.role_id` links each project to its role | public read |
 | `travel` | `places`, `place_photos`, `visited_regions` | public read |
+| `core` (99) | `api_tokens` (hashed, scoped, revocable tokens for scheduled jobs); `finance.staged_imports.submitted_by` records who sent each load | private |
 | `virtuwill` | `schema_versions`, `migrations`, `trackers` (Finance/Health tracker documents), `sync_reports` | private |
 
 ## Conventions

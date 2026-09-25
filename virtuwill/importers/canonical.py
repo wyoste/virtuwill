@@ -5,7 +5,8 @@ CSV files (what `to_csv` writes and `from_csv_text` reads back):
     accounts.csv           mask, institution, name, account_type
     statements.csv         account_mask, period_start, period_end, opening_balance, closing_balance, …
     balances.csv           account_mask, as_of, balance, kind
-    transactions.csv       account_mask, transacted_on, posted_on, description, amount, kind, category, source_row
+    transactions.csv       account_mask, transacted_on, posted_on, description, amount, kind, category, source_row,
+                           external_id, pending
     receipts.csv           receipt_id, purchased_on, merchant, store_location, …, account_mask
     receipt_items.csv      receipt_id, line, item_name, item_category, quantity, unit, unit_price, …, amount
     paychecks.csv          advice_number, pay_date, period_start, period_end, employer, gross, …, net
@@ -26,7 +27,8 @@ COLUMNS = {
     "statements": ["account_mask", "period_start", "period_end", "opening_balance", "closing_balance", "total_credits",
                    "total_debits", "fees_charged", "interest_charged", "minimum_due", "payment_due_on", "credit_limit"],
     "balances": ["account_mask", "as_of", "balance", "kind"],
-    "transactions": ["account_mask", "transacted_on", "posted_on", "description", "amount", "kind", "category", "source_row"],
+    "transactions": ["account_mask", "transacted_on", "posted_on", "description", "amount", "kind", "category", "source_row",
+                     "external_id", "pending"],
     "receipts": ["receipt_id", "purchased_on", "merchant", "store_location", "item_count", "regular_total", "savings",
                  "net", "tax", "total", "payment_text", "account_mask"],
     "receipt_items": ["receipt_id", "line", "item_name", "item_category", "store_brand", "quantity", "unit", "unit_price",
@@ -92,6 +94,11 @@ def validate(bundle):
         if t["kind"] not in KINDS:
             raise ExtractError(f"{where}: kind must be one of {', '.join(sorted(KINDS))}")
         t["description"] = str(t.get("description") or "").strip()
+        # The bank's own id for the transaction, when the source has one: loads match on it exactly.
+        external = t.get("external_id")
+        t["external_id"] = str(external).strip()[:120] if external not in (None, "") else None
+        pending = t.get("pending")
+        t["pending"] = pending is True or str(pending).lower() in ("true", "1", "yes")
     for i, s in enumerate(bundle["statements"], 1):
         where = f"statements[{i}]"
         s["account_mask"] = _mask(s.get("account_mask"), where)

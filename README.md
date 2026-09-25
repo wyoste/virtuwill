@@ -40,6 +40,15 @@ it; leaving (a link, the sidebar, Back) asks to stay, discard, or save and leave
 dialog closed after editing asks before throwing the edits away. Screens opt in with
 `editable(area, save)` from `static/app/lib.js`.
 
+## Finance ingest API (scheduled jobs)
+
+A scheduled job, such as a Claude task, can push balances and transactions with an
+API token instead of signing in: make one in **Settings → API access**, then POST to
+`/api/ingest/v1/finance` with the `X-VirtuWill-Token` header. Loads use the same
+matching as Money › Imports (exact on the bank's `external_id` when sent), so repeated
+or overlapping runs don't double anything. Full guide, payload and a ready-to-use
+prompt for a scheduled Claude task: [docs/finance-api.md](docs/finance-api.md).
+
 ## Brand
 
 The WY mark (a W growing toward a sun) sets the look of the public site and the
@@ -289,6 +298,9 @@ Lakebase (PostgreSQL); see "Data: one relational model in Lakebase" above.
 | POST | `/api/v1/money/imports/<id>/commit` | Owner | Load a staged import |
 | GET | `/api/v1/money/imports/<id>/bundle[?format=csv]` | Owner | Its structured data as JSON or zipped CSVs |
 | POST | `/api/v1/money/extract[?format=csv]` | Owner | Files → structured data, nothing staged |
+| GET/POST/DELETE | `/api/v1/api-tokens[/<id>]` | Owner | List, make (shown once) or revoke API tokens |
+| GET | `/api/ingest/v1`, `/api/ingest/v1/finance/status` | Token (finance:read) | What the API takes; what's loaded |
+| POST | `/api/ingest/v1/finance`, `/api/ingest/v1/finance/files` | Token (finance:write) | Push balances and transactions (JSON), or raw exports |
 | GET | `/api/v1/music`, `/api/v1/music/songs/<slug>` | — | Published songs, versions and albums (`?view=owner` for everything) |
 | POST/PUT/DELETE | `/api/v1/music/{songs,recordings,albums}` | Owner | Songs, versions, albums |
 | GET/PUT/DELETE | `/api/v1/projects[/<id>]` | — / Owner | Projects (each may name its `role_id`) |

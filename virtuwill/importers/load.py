@@ -60,13 +60,26 @@ def account_id_for(conn, mask, info=None, create=False):
 
 
 def _existing_transaction(conn, account_id, t, used):
-    """The stored transaction this one repeats, if any: same account and amount, dates within 3 days."""
+    """The stored transaction this one repeats, if any.
+
+    With the bank's own id (external_id) the match is exact: a scheduled feed
+    that resends overlapping days, or a pending charge that later posts with a
+    different amount or date, finds its row. Without one: same account and
+    amount, dates within 3 days — and never a row that has a different bank id,
+    so two real same-amount charges from an id-carrying feed stay two.
+    """
     if not account_id:
         return None
+    if t.get("external_id"):
+        row = conn.execute("""SELECT transaction_id, source, category, posted_on, transacted_on FROM finance.transactions
+                              WHERE account_id = %s AND external_id = %s""", (account_id, t["external_id"])).fetchone()
+        if row:
+            return dict(row) | {"exact": True}
     day = _d(t.get("posted_on"))
     rows = conn.execute("""SELECT transaction_id, source, category, posted_on, transacted_on FROM finance.transactions
-                           WHERE account_id = %s AND amount = %s AND posted_on BETWEEN %s AND %s""",
-                        (account_id, t["amount"], day - WINDOW, day + WINDOW)).fetchall()
+                           WHERE account_id = %s AND amount = %s AND posted_on BETWEEN %s AND %s
+                             AND (external_id IS NULL OR %s::text IS NULL)""",
+                        (account_id, t["amount"], day - WINDOW, day + WINDOW, t.get("external_id"))).fetchall()
     rows = [r for r in rows if r["transaction_id"] not in used]
     if not rows:
         return None
@@ -123,13 +136,13 @@ def preview(conn, bundle):
     return out
 
 
-def stage(conn, bundle, raw_asset_ids=()):
+def stage(conn, bundle, raw_asset_ids=(), submitted_by="workspace"):
     bundle = validate(bundle)
     pv = preview(conn, bundle)
-    row = conn.execute("""INSERT INTO finance.staged_imports (filename, sha256, parser, bundle, preview, raw_asset_ids)
-                          VALUES (%s, %s, %s, %s, %s, %s) RETURNING import_id""",
+    row = conn.execute("""INSERT INTO finance.staged_imports (filename, sha256, parser, bundle, preview, raw_asset_ids, submitted_by)
+                          VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING import_id""",
                        (bundle["document"]["filename"], bundle["document"]["sha256"], bundle["document"].get("parser") or "",
-                        Jsonb(bundle), Jsonb(pv), list(raw_asset_ids))).fetchone()
+                        Jsonb(bundle), Jsonb(pv), list(raw_asset_ids), submitted_by)).fetchone()
     return row["import_id"], pv
 
 
@@ -214,6 +227,14 @@ def commit(conn, import_id):
                                        THEN %s ELSE category END
                    WHERE transaction_id = %s""",
                 (t.get("transacted_on"), t["description"], t["description"], category, category, match["transaction_id"]))
+            if t.get("external_id"):
+                # The bank's id identifies it from now on; a pending charge that posted takes its final date and amount.
+                conn.execute("""UPDATE finance.transactions SET external_id = %s, is_pending = %s,
+                                       posted_on = CASE WHEN %s THEN %s ELSE posted_on END,
+                                       amount = CASE WHEN %s THEN %s ELSE amount END
+                                WHERE transaction_id = %s""",
+                             (t["external_id"], bool(t.get("pending")), bool(match.get("exact")), t["posted_on"],
+                              bool(match.get("exact")), t["amount"], match["transaction_id"]))
             transaction_id = match["transaction_id"]
         else:
             kind = "new"
@@ -226,12 +247,14 @@ def commit(conn, import_id):
                              (movement, {"card_payment": "card_payment", "transfer": "transfer", "income": "income"}[t["kind"]]))
             conn.execute(
                 """INSERT INTO finance.transactions (transaction_id, account_id, account_text, posted_on, transacted_on,
-                                                     description_raw, merchant, amount, kind, category, movement_type, fingerprint, source, details)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'import', %s)
+                                                     description_raw, merchant, amount, kind, category, movement_type, fingerprint, source, details,
+                                                     external_id, is_pending)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'import', %s, %s, %s)
                    ON CONFLICT DO NOTHING""",
                 (transaction_id, account_id, t["account_mask"], t["posted_on"], t.get("transacted_on"), t["description"],
                  _merchant(t["description"]), t["amount"], "movement" if movement else "expense", category, movement,
-                 fingerprint, Jsonb({"source_category": t.get("source_category")} if t.get("source_category") else {})))
+                 fingerprint, Jsonb({"source_category": t.get("source_category")} if t.get("source_category") else {}),
+                 t.get("external_id"), bool(t.get("pending"))))
         report["transactions"][kind] += 1
         conn.execute("""INSERT INTO finance.transaction_sources (transaction_id, document_id, source_row, raw)
                         VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING""",
@@ -259,9 +282,14 @@ def commit(conn, import_id):
                              and b["as_of"] in (start, end)), None)
         if b["kind"].startswith("statement_") and not statement_id:
             continue                                  # its statement was loaded before
-        exists = conn.execute("""SELECT 1 FROM finance.balance_snapshots WHERE account_id = %s AND as_of = %s
+        exists = conn.execute("""SELECT snapshot_id, balance FROM finance.balance_snapshots WHERE account_id = %s AND as_of = %s
                                  AND balance_kind = %s AND source = 'import'""", (account_id, b["as_of"], b["kind"])).fetchone()
         if exists:
+            # A later reading for the same day (a feed that runs twice) replaces the earlier one.
+            if not b["kind"].startswith("statement_") and float(exists["balance"]) != float(b["balance"]):
+                conn.execute("UPDATE finance.balance_snapshots SET balance = %s, document_id = %s WHERE snapshot_id = %s",
+                             (b["balance"], document_id, exists["snapshot_id"]))
+                report["balances"] += 1
             continue
         conn.execute("""INSERT INTO finance.balance_snapshots (as_of, account_id, balance, balance_kind, statement_id, document_id, source)
                         VALUES (%s, %s, %s, %s, %s, %s, 'import')""",
