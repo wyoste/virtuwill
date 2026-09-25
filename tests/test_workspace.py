@@ -139,6 +139,30 @@ class WorkspaceApiTests(unittest.TestCase):
         self.assertEqual(len(self.visitor.get("/api/v1/music/songs/test-song").json["versions"]), 1)
         self.assertIsNone(self.visitor.get("/api/v1/music?view=owner").json["unassigned"])       # visitors never get owner view
 
+    def test_music_behind_the_scenes(self):
+        song = self.owner.post("/api/v1/music/songs", json={"title": "Test Ballad"}).json
+        self.addCleanup(lambda: db.run("DELETE FROM music.songs WHERE song_id = %s", song["song_id"]))
+        url = f"/api/v1/music/songs/{song['song_id']}"
+        saved = self.owner.put(url, json={
+            "published": True, "meaning": "About a made-up place.", "themes": "home, Leaving , home",
+            "capo": "2", "tuning": "", "time_signature": "6/8", "strumming": "D DU", "influences": "Test folk",
+            "sections": [{"section_type": "verse", "chords": "G-C-D", "lyrics": "first test line\nsecond test line"}],
+            "notes": [{"line_text": "first test line", "note": "Written on a test train."}, {"line_text": "", "note": "dropped"}]})
+        self.assertEqual(saved.status_code, 200, saved.json)
+        public = self.visitor.get("/api/v1/music/songs/test-ballad").json
+        self.assertEqual((public["meaning"], public["themes"], public["capo"], public["time_signature"]),
+                         ("About a made-up place.", ["home", "Leaving"], 2, "6/8"))
+        self.assertEqual(public["notes"], [{"line_text": "first test line", "note": "Written on a test train."}])
+        listed = next(s for s in self.visitor.get("/api/v1/music").json["songs"] if s["slug"] == "test-ballad")
+        self.assertEqual((listed["has_lyrics"], listed["has_chords"], listed["note_count"]), (True, True, 1))
+        self.assertNotIn("notes", listed)
+        for bad in ({"capo": 13}, {"capo": "high"}, {"themes": 5}, {"notes": "x"}):
+            self.assertEqual(self.owner.put(url, json=bad).status_code, 400, bad)
+        self.owner.put(url, json={"capo": None, "notes": []})
+        public = self.visitor.get("/api/v1/music/songs/test-ballad").json
+        self.assertEqual((public["capo"], public["notes"]), (None, []))
+        self.assertEqual(self.visitor.put(url, json={"meaning": "x"}).status_code, 401)
+
     def test_projects_hidden_ones_stay_hidden(self):
         self.owner.put("/api/v1/projects/dmp", json={"visible": False, "chips": ["Databricks", "SQL"]})
         self.assertNotIn("dmp", [p["id"] for p in self.visitor.get("/api/v1/projects").json])

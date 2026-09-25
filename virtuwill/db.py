@@ -90,8 +90,14 @@ def _pool_ready():
         return _pool
 
 
+def schema_order(name):
+    """Files apply by their number (so 100_… follows 99_…, not 10_…), then by name."""
+    prefix = name.split("_", 1)[0]
+    return (int(prefix) if prefix.isdigit() else 10 ** 9, name)
+
+
 def schema_files():
-    return sorted(SCHEMA_DIR.glob("*.sql"))
+    return sorted(SCHEMA_DIR.glob("*.sql"), key=lambda p: schema_order(p.name))
 
 
 def checksum(path):
@@ -122,11 +128,12 @@ def bootstrap(conn):
 
 def schema_status(conn):
     """Applied versions, pending files and edited files, for diagnostics."""
-    applied = {r["version"]: r for r in conn.execute("SELECT * FROM virtuwill.schema_versions ORDER BY version")}
+    rows = conn.execute("SELECT * FROM virtuwill.schema_versions").fetchall()
+    applied = {r["version"]: r for r in sorted(rows, key=lambda r: schema_order(r["version"]))}
     files = {p.name: checksum(p) for p in schema_files()}
-    return {"version": max(applied) if applied else None,
+    return {"version": max(applied, key=schema_order) if applied else None,
             "applied": [{"version": v, "appliedAt": r["applied_at"].isoformat()} for v, r in applied.items()],
-            "pending": sorted(set(files) - set(applied)),
+            "pending": sorted(set(files) - set(applied), key=schema_order),
             "edited": sorted(v for v in applied if v in files and files[v] != applied[v]["checksum"])}
 
 
