@@ -4,6 +4,7 @@
     PUT  /api/v1/career/profile           name, headline, contact, ethos statement
     POST /api/v1/career/cv                upload a new CV (PDF); /resume/download serves it
     /api/v1/career/{roles,education,skill-groups,highlights}   owner record APIs
+    POST/DELETE /api/v1/career/education/<id>/logo            a school's logo (image)
 
 Projects stay in content.portfolio_projects; each may name the role it came from.
 """
@@ -23,6 +24,8 @@ PROFILE_FIELDS = {"full_name": 120, "headline": 160, "organization": 160, "locat
                   "linkedin_url": 300, "ethos_eyebrow": 80, "ethos_headline": 300, "ethos_summary": 2000}
 SECTIONS = ("pillar", "impact", "strength", "certification")
 MAX_CV = 10 * 1024 * 1024
+MAX_LOGO = 2 * 1024 * 1024
+LOGO_TYPES = {b"\x89PNG": ".png", b"\xff\xd8\xff": ".jpg", b"RIFF": ".webp", b"GIF8": ".gif"}
 
 
 def seed(conn):
@@ -50,10 +53,10 @@ def seed(conn):
         conn.execute("INSERT INTO career.skill_groups (label, skills, featured, position) VALUES (%s, %s, %s, %s)",
                      (g["label"], g["skills"], g.get("featured", []), i))
     for e in data["education"]:
-        conn.execute("""INSERT INTO career.education (degree, field_of_study, school, location, finished_on, grade, highlight_label, highlight)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+        conn.execute("""INSERT INTO career.education (degree, field_of_study, school, location, finished_on, grade, highlight_label, highlight, logo_path)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                      (e["degree"], e.get("field_of_study", ""), e["school"], e.get("location", ""), e.get("finished_on"),
-                      e.get("grade", ""), e.get("highlight_label", ""), e.get("highlight", "")))
+                      e.get("grade", ""), e.get("highlight_label", ""), e.get("highlight", ""), e.get("logo_path", "")))
 
 
 def _projects(conn, owner):
@@ -75,7 +78,8 @@ def page(conn, owner=False):
         "profile": profile,
         "highlights": highlights,
         "roles": [plain(r) for r in conn.execute(f"SELECT * FROM career.roles{hidden} ORDER BY ended_on DESC NULLS FIRST, started_on DESC")],
-        "education": [plain(r) for r in conn.execute(f"SELECT * FROM career.education{hidden} ORDER BY finished_on DESC NULLS FIRST")],
+        "education": [plain(r) | {"logo": media.url(r["logo_path"])}
+                      for r in conn.execute(f"SELECT * FROM career.education{hidden} ORDER BY finished_on DESC NULLS FIRST")],
         "skills": [plain(r) for r in conn.execute("SELECT * FROM career.skill_groups ORDER BY position, group_id")],
         "projects": _projects(conn, owner),
     }
@@ -127,6 +131,33 @@ def cv_upload():
         asset = media.register(conn, f"career/cv-{hashlib.sha256(content).hexdigest()[:12]}.pdf", content)
         conn.execute("UPDATE career.profile SET cv_asset_id = %s WHERE profile_id = 1", (asset,))
         return jsonify({"ok": True})
+
+
+@bp.route("/api/v1/career/education/<int:education_id>/logo", methods=["POST", "DELETE"])
+@admin_required
+def education_logo(education_id):
+    with db.tx() as conn:
+        if not conn.execute("SELECT 1 FROM career.education WHERE education_id = %s", (education_id,)).fetchone():
+            return jsonify({"error": "Not found"}), 404
+        if request.method == "DELETE":
+            conn.execute("UPDATE career.education SET logo_path = '' WHERE education_id = %s", (education_id,))
+            return jsonify({"ok": True})
+        f = request.files.get("file")
+        content = f.read(MAX_LOGO + 1) if f else b""
+        ext = next((e for magic, e in LOGO_TYPES.items() if content.startswith(magic)), None)
+        if ext == ".webp" and content[8:12] != b"WEBP":
+            ext = None
+        if not ext or len(content) > MAX_LOGO:
+            return jsonify({"error": "Choose a PNG, JPEG, WebP or GIF image under 2 MB"}), 400
+        path = f"career/logos/upload-{hashlib.sha256(content).hexdigest()[:12]}{ext}"
+        try:
+            (media.STATIC / path).parent.mkdir(parents=True, exist_ok=True)
+            (media.STATIC / path).write_bytes(content)
+        except OSError:
+            pass            # kept in the database; restored to disk on start
+        media.register(conn, path, content)
+        conn.execute("UPDATE career.education SET logo_path = %s WHERE education_id = %s", (path, education_id))
+        return jsonify({"ok": True, "logo": media.url(path)})
 
 
 def download():

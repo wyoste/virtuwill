@@ -68,6 +68,22 @@ function list(items, { url, idKey, fields, noun, label, meta, redraw, extra, cre
     h('div', { style: { marginTop: '10px' } }, add));
 }
 
+// A school's logo on its Education card: shown here, changed or removed.
+function logoControl(e, redraw) {
+  const url = `/api/v1/career/education/${e.education_id}/logo`;
+  const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', hidden: true });
+  input.onchange = () => run(null, async () => {
+    const form = new FormData();
+    form.append('file', input.files[0]);
+    await api(url, { method: 'POST', form });
+    toast('Logo updated'); redraw();
+  });
+  return h('span', { class: 'ws-edu-logo' },
+    e.logo ? h('img', { src: e.logo, alt: '', width: 32, height: 32, style: { borderRadius: '50%', objectFit: 'contain' } }) : null,
+    h('button', { class: 'btn small', onclick: () => input.click() }, e.logo ? 'Change logo' : 'Add logo'), input,
+    e.logo ? h('button', { class: 'btn small link', onclick: () => run(null, async () => { await api(url, { method: 'DELETE' }); redraw(); }) }, 'Remove') : null);
+}
+
 const monthYear = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'present';
 
 // ── Profile & ethos ──────────────────────────────────────────────────────────
@@ -195,6 +211,7 @@ function skills(view, d, redraw) {
         fields: [['degree', 'Degree'], ['field_of_study', 'Field of study'], ['school', 'School'], ['location', 'Location'],
                  ['finished_on', 'Finished', 'month'], ['grade', 'Grade (optional)'], ['highlight_label', 'Highlight label'],
                  ['highlight', 'Highlight', 'textarea'], ['visible', 'Show on the public page', 'checkbox']],
+        extra: e => logoControl(e, redraw),
         label: e => `${e.degree}${e.field_of_study ? ', ' + e.field_of_study : ''}`,
         meta: e => [e.school, e.finished_on ? monthYear(e.finished_on) : null, e.visible ? null : 'hidden'].filter(Boolean).join(' · ') }))));
 }
