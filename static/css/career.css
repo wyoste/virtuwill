@@ -5,7 +5,7 @@
 .cr-hero { background: var(--dark-surface); color: #fff; }
 .cr-hero .cr-hero-in { display: flex; align-items: center; justify-content: space-between; gap: 20px 32px; flex-wrap: wrap; padding-top: 36px; padding-bottom: 32px; }
 .cr-id { display: flex; align-items: center; gap: 18px; min-width: 0; }
-.cr-avatar { width: 72px; height: 72px; flex-shrink: 0; border-radius: 18px; box-shadow: 0 0 0 2px rgba(244, 235, 213, .35); }
+.cr-avatar { width: 68px; height: 68px; flex-shrink: 0; border-radius: 50%; background: var(--brand-gold); color: var(--brand-green); display: grid; place-items: center; font-family: var(--font-display); font-size: 26px; font-weight: 700; }
 .cr-name { font-size: clamp(26px, 4.5vw, 36px); font-weight: 700; letter-spacing: -.02em; margin: 0; line-height: 1.15; }
 .cr-role { margin: 4px 0 0; font-size: 15.5px; color: #EDE3C8; }
 .cr-meta { margin: 4px 0 0; font-size: 13px; color: #BCC8B2; overflow-wrap: anywhere; }
@@ -94,7 +94,7 @@
 
 @media (max-width: 640px) {
   .cr-hero .cr-hero-in { padding-top: 26px; padding-bottom: 24px; }
-  .cr-avatar { width: 56px; height: 56px; border-radius: 14px; }
+  .cr-avatar { width: 54px; height: 54px; font-size: 20px; }
   .cr-actions .site-btn { flex: 1 1 auto; justify-content: center; }
   .cr-role-item { grid-template-columns: 1fr; gap: 6px; }
   .cr-role-when { padding-top: 0; text-align: left; flex-direction: row; gap: 8px; }
@@ -109,3 +109,5 @@
 .cr-impact > div { background: var(--blue-lt); }
 .cr-strengths > div { border-left-color: var(--brand-gold); }
 .cr-tabs a.on { color: var(--brand-green); border-bottom-color: var(--brand-gold); }
+.cr-hero .site-btn-ghost { background: transparent; color: var(--brand-gold); border-color: var(--brand-gold); }
+.cr-hero .site-btn-ghost:hover { background: rgba(227, 176, 64, .14); }

@@ -49,10 +49,10 @@ for light backgrounds) and cream (`wy-mark-cream.png`, for dark ones), a square 
 
 | Token | Colour | Used for |
 |---|---|---|
-| `--brand-green` | `#1B3F27` forest green | primary buttons, links, headings, the workspace sidebar, footer |
-| `--brand-cream` | `#F4EBD5` cream | text on green; page backgrounds are lighter tints of it |
-| `--brand-gold` | `#E3B040` sun gold | accents: the Say hi button, active markers, highlights |
-| `--brand-gold-dk` | `#7A5A10` | gold for text on light backgrounds (eyebrows) |
+| `--brand-green` | `#1B3F27` forest green | the header (logo centred, pages split left and right), footer, workspace sidebar, headings, text on buttons |
+| `--brand-cream` | `#F4EBD5` grassy cream | the page body; text on green; cards are a lighter tint |
+| `--brand-gold` | `#E3B040` sun gold | buttons (primary filled, secondary outlined in gold), active markers, the header's rule |
+| `--brand-gold-dk` | `#6B4E0C` | gold for text on cream (eyebrows) |
 
 Headings use Fraunces; body text uses Inter. Both sets of tokens (`static/css/theme.css`
 and `static/app/workspace.css`) keep the older names (`--blue` is now the brand green),

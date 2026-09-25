@@ -15,7 +15,7 @@
   --brand-green-dk: #122C1B;
   --brand-cream:    #F4EBD5;
   --brand-gold:     #E3B040;
-  --brand-gold-dk:  #7A5A10;   /* gold for text on light backgrounds */
+  --brand-gold-dk:  #6B4E0C;   /* gold for text on light backgrounds */
   --font-display:   'Fraunces', Georgia, 'Times New Roman', serif;
 
   --blue:       #1B3F27;
@@ -28,7 +28,7 @@
   --red:        #B83A2E;
   --red-lt:     #F8E3DE;
 
-  --green:      #2F7A4B;
+  --green:      #2A6E43;
   --green-dk:   #23603A;
   --green-lt:   rgba(47,122,75,.14);
   --teal:       #E3B040;
@@ -39,16 +39,16 @@
   --dark-surface: #1B3F27;
   --dark-bg:    #122C1B;
 
-  --bg:         #FAF5EA;
-  --surface:    #FFFDF8;
-  --surface2:   #F4EDDD;
+  --bg:         #F4EBD5;   /* the grassy cream from the logo */
+  --surface:    #FBF7EC;
+  --surface2:   #EFE4C8;
 
-  --border:     #E7DDC6;
-  --border-dk:  #D2C4A4;
+  --border:     #E0D2B0;
+  --border-dk:  #CDBB91;
 
   --text:       #1B2A1F;
   --text2:      #465446;
-  --text3:      #66705F;
+  --text3:      #5C6656;
 
 
   --nav-h:      70px;

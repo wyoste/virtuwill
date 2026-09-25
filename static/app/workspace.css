@@ -2,16 +2,16 @@
 *, *::before, *::after { box-sizing: border-box; }
 :root {
   /* Brand (from the WY logo): forest green, cream, sun gold — the same tokens as the public site. */
-  --brand-green: #1B3F27; --brand-green-dk: #122C1B; --brand-cream: #F4EBD5; --brand-gold: #E3B040; --brand-gold-dk: #7A5A10;
+  --brand-green: #1B3F27; --brand-green-dk: #122C1B; --brand-cream: #F4EBD5; --brand-gold: #E3B040; --brand-gold-dk: #6B4E0C;
   --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
   --blue: #1B3F27; --blue-dk: #122C1B; --blue-lt: #E8EFE3; --blue-md: #C4D6BF; --teal: #E3B040; --green-dk: #23603A;
   --red: #B83A2E; --red-lt: #F8E3DE;
-  --green: #2F7A4B; --green-lt: #E3EFE3;
+  --green: #2A6E43; --green-lt: #E3EFE3;
   --amber: #845A05; --amber-lt: #FBF0D6;
   --dark-surface: #1B3F27; --dark-bg: #122C1B;
-  --bg: #FAF5EA; --surface: #FFFDF8; --surface2: #F4EDDD;
-  --border: #E7DDC6; --border-dk: #D2C4A4;
-  --text: #1B2A1F; --text2: #465446; --text3: #5F6A5A;
+  --bg: #F4EBD5; --surface: #FBF7EC; --surface2: #EFE4C8;
+  --border: #E0D2B0; --border-dk: #CDBB91;
+  --text: #1B2A1F; --text2: #465446; --text3: #5C6656;
   --radius: 10px; --sb-w: 236px; --top-h: 56px;
   --shadow: 0 1px 2px rgba(27, 42, 31, .06);
 }
@@ -327,3 +327,13 @@ audio { width: 100%; height: 36px; }
 .ws-tabs a.on { color: var(--brand-green); border-bottom-color: var(--brand-gold); }
 .ws-chip.info { background: var(--blue-lt); color: var(--brand-green); }
 .ws-signin-page { background: radial-gradient(circle at 50% 0%, #25502F, var(--brand-green) 60%); }
+/* Buttons: the sun-gold palette (the sidebar is the green "header") */
+.btn.primary { background: var(--brand-gold); border-color: var(--brand-gold); color: var(--brand-green); font-weight: 700; }
+.btn.primary:hover { background: #EDC25E; border-color: #EDC25E; }
+.btn { border-color: #D9C79A; }
+.btn:hover { border-color: var(--brand-gold-dk); }
+button.ws-chip[aria-pressed="true"], .ws-seg button[aria-pressed="true"], .ws-habit[aria-pressed="true"] { background: var(--brand-gold); border-color: var(--brand-gold); color: var(--brand-green); }
+.ws-habit.limit[aria-pressed="true"] { background: #C98A12; border-color: #C98A12; color: #fff; }
+.ws-bar > span { background: var(--brand-green); }
+.ws-bar.good > span { background: var(--green); }
+.ws-signin button[type=submit], .ws-signin .btn { background: var(--brand-gold); color: var(--brand-green); }

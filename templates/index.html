@@ -34,14 +34,16 @@
 <a class="skip-link" href="#main">Skip to content</a>
 
 <nav class="nav" aria-label="Site">
-  <a class="nav-brand" href="/" data-link aria-label="Home">
-    <img src="{{ url_for('static', filename='brand/wy-mark-green.png') }}" alt="" class="nav-logo-img"/>
-    <span class="nav-brand-name">Will Yoste</span>
-  </a>
-  <div class="nav-links" id="navLinks">
+  <!-- The logo in the middle, the pages split to its left and right. -->
+  <div class="nav-links nav-left">
     <a class="nav-link" id="nl-home"     href="/"         data-link>Home</a>
     <a class="nav-link" id="nl-music"    href="/music"    data-link>Music</a>
     <a class="nav-link" id="nl-career"   href="/career"   data-link>Career</a>
+  </div>
+  <a class="nav-brand" href="/" data-link aria-label="Will Yoste — home">
+    <img src="{{ url_for('static', filename='brand/wy-mark-cream.png') }}" alt="" class="nav-logo-img"/>
+  </a>
+  <div class="nav-links nav-right">
     <a class="nav-link" id="nl-writing"  href="/writing"  data-link>Writing</a>
     <a class="nav-link" id="nl-garden"   href="/garden"   data-link>Garden</a>
     <a class="nav-link" id="nl-travel"   href="/travel"   data-link>Travel</a>

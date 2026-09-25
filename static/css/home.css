@@ -253,13 +253,6 @@
   .home-blog-grid { grid-template-columns: 1fr; }
 }
 
-/* Brand: the WY mark beside the introduction */
-.home-wrap { max-width: 980px; }
-.home-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px; align-items: center; }
-.home-mark { width: clamp(180px, 26vw, 300px); height: auto; }
+/* Brand */
 .home-eyebrow { color: var(--brand-gold-dk); }
 .home-title { font-size: clamp(34px, 5vw, 48px); color: var(--brand-green); }
-@media (max-width: 720px) {
-  .home-hero { grid-template-columns: 1fr; gap: 20px; }
-  .home-mark { order: -1; width: 120px; }
-}
