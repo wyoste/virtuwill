@@ -2,8 +2,8 @@
 // experience, projects, skills, certifications and education.
 import { h, api, card, pageHead, tabs, empty, toast, run, dialog, field, values, confirmDelete, editable, saveAll } from '../lib.js';
 
-const TABS = [['/app/site/career', 'Profile & ethos'], ['/app/site/career/experience', 'Experience'],
-              ['/app/site/career/projects', 'Projects'], ['/app/site/career/skills', 'Skills & education']];
+const TABS = [['/app/site/career', 'Profile & ethos'], ['/app/site/career/skills', 'Skills & education'],
+              ['/app/site/career/experience', 'Experience'], ['/app/site/career/projects', 'Projects']];
 
 export async function render(view, ctx) {
   const tab = ctx.path.split('/')[4] || 'profile';

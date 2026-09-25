@@ -10,7 +10,7 @@ Built with Flask + modular vanilla JS. No build step required.
 | Page | URL | What it shows |
 |---|---|---|
 | Home | `/` | Introduction, latest writing, links to work and music |
-| Music | `/music`, `/music/<song>` | Every song (search, album filter), albums, photos; each song's story, versions, lyrics and chords. A player bar keeps playing while you browse. |
+| Music | `/music`, `/music/<song>` | Every song (search, album filter, badges for what's behind each one), albums, photos. Each song is there to learn as well as hear: **Meaning** (what it's about, how it came to be, influences, line-by-line notes) · **Lyrics & chords** (progressions as tappable chord chips with fingerings, `[G]` inline chords over the words, transpose, marked lines that open their note) · **Play it** (key, capo, tuning, time, tempo, strumming, a diagram for every chord, tabs) · **Versions** (what's different about each recording). A player bar keeps playing while you browse. |
 | Career | `/career`, `/career#<section>`, `/career/projects/<id>` | The professional portfolio on one page: header with CV download, work ethos, experience (each role linking its projects), a project explorer filtered by technology, role or search, skills and certifications, education. Each project opens with its overview, outcomes and timeline, or an uploaded walkthrough in a sandboxed frame. `/resume` and `/projects` links land here |
 | Writing | `/writing`, `/writing/<id>` | Posts, each with its own page |
 | Garden | `/garden` | The note and gardening philosophy, photos filtered by bed or plant type (with a lightbox), the garden map, and what grows in each bed |
@@ -26,7 +26,7 @@ one sidebar and one screen at a time:
 | Journal | entries by date, editor, habits, balance check-in, photo transcription | `journal.entries`, tags, habit logs, journal balance snapshots |
 | Health | Overview · Activity · Food · Body · Goals | workouts, meals, weigh-ins, drinks, foods, profile, goals |
 | Money | Overview (full analysis, or goals only) · Transactions · Receipts · Accounts & balances · Budgets & bills · Goals & retirement · Imports · Finance tracker | bank activity, statements, paychecks and receipts through Imports; budgets, goals and the pay plan in the Finance tracker |
-| Site | Music · Career (profile & ethos, experience, projects, skills & education, CV upload) · Writing · Garden (photos tagged to beds and plant types, the bed planner, page text) · Travel (add a stop by picking its country from a searchable list, with photos attached in the same step; stops by city; regions visited) · Messages | everything the public site shows |
+| Site | Music (songs, their meaning, setup, lyrics and chords by section, line notes, version notes) · Career (profile & ethos, skills & education, experience, projects, CV upload) · Writing · Garden (photos tagged to beds and plant types, the bed planner, page text) · Travel (add a stop by picking its country from a searchable list, with photos attached in the same step; stops by city; regions visited) · Messages | everything the public site shows |
 | Settings | site switches, journal check-in accounts, diagnostics | `core.settings` |
 
 Each record has one editor. The same logging forms (workout, meal, weigh-in, drink)
@@ -247,7 +247,7 @@ virtuwill/
 │   └── workspace.html     The workspace shell (/app)
 ├── static/
 │   ├── app/               The workspace: main.js (router, sidebar), lib.js, forms.js, moneyparts.js, screens/*.js
-│   ├── js/                Public pages: app.js (router), music.js (pages + player), career.js,
+│   ├── js/                Public pages: app.js (router), music.js (pages + player), chords.js (chord parsing, transposing, diagrams), career.js,
 │   │                      writing.js, garden-page.js (page), garden.js (planner), viewer.js (map), travel.js, contact.js
 │   └── css/               theme.css (tokens), site.css (public pages), page styles
 └── data/                  Content loaded into a new database on first start

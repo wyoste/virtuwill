@@ -243,7 +243,12 @@ def legacy_sample():
 # albums (or singles). The owner sees everything, including audio files not
 # yet attached to a song.
 
-SONG_FIELDS = ("title", "year_written", "written_at", "story", "genre", "musical_key", "bpm", "published")
+SONG_FIELDS = ("title", "year_written", "written_at", "story", "genre", "musical_key", "bpm", "published",
+               "meaning", "themes", "capo", "tuning", "time_signature", "strumming", "influences")
+# What a song page shows about the song beyond the audio ("behind the scenes").
+ABOUT_FIELDS = ("meaning", "themes", "capo", "tuning", "time_signature", "strumming", "influences")
+TEXT_FIELDS = ("title", "written_at", "story", "genre", "musical_key", "meaning", "tuning", "time_signature",
+               "strumming", "influences")
 
 
 def unique_slug(conn, title, song_id=None):
@@ -260,7 +265,7 @@ def _recordings(conn, owner):
     return [plain(r) | {"url": media.url(r["path"]), "art": media.url(r["art_path"] or r["album_art_path"])}
             for r in conn.execute(f"""
                 SELECT r.recording_id, r.song_id, s.slug AS song_slug, s.title AS song_title, r.album_id, a.title AS album, a.published AS album_published,
-                       a.release_year, r.track_number, r.title, r.version_label, r.duration_seconds, r.published,
+                       a.release_year, r.track_number, r.title, r.version_label, r.notes, r.duration_seconds, r.published,
                        m.path, art.path AS art_path, aart.path AS album_art_path
                 FROM music.recordings r
                 JOIN core.media_assets m ON m.asset_id = r.audio_asset_id
@@ -272,14 +277,23 @@ def _recordings(conn, owner):
                 ORDER BY a.title NULLS LAST, r.track_number NULLS LAST, m.path""")]
 
 
-def _song(row, versions, sections=None):
+def _song(row, versions, sections=None, notes=None):
     song = {k: row[k] for k in ("song_id", "slug", "title", "year_written", "written_at", "genre", "musical_key", "published")}
+    song.update({k: row[k] for k in ABOUT_FIELDS})
     song.update(bpm=number(row["bpm"]), story=row["story"], versions=versions,
                 art=next((v["art"] for v in versions if v["art"]), None),
-                has_lyrics=row["has_lyrics"])
+                has_lyrics=row["has_lyrics"], has_chords=row["has_chords"], note_count=row["note_count"])
     if sections is not None:
         song["sections"] = sections
+    if notes is not None:
+        song["notes"] = notes
     return song
+
+
+# How much there is to explore on each song, for the list's badges.
+SONG_EXTRAS = """EXISTS (SELECT 1 FROM music.song_sections x WHERE x.song_id = s.song_id AND x.lyrics <> '') AS has_lyrics,
+                 EXISTS (SELECT 1 FROM music.song_sections x WHERE x.song_id = s.song_id AND x.chords <> '') AS has_chords,
+                 (SELECT COUNT(*) FROM music.song_notes n WHERE n.song_id = s.song_id) AS note_count"""
 
 
 def music_page(conn, owner):
@@ -289,8 +303,7 @@ def music_page(conn, owner):
         if r["song_id"]:
             by_song.setdefault(r["song_id"], []).append(r)
     songs = [_song(s, by_song.get(s["song_id"], [])) for s in conn.execute(
-        f"""SELECT s.*, EXISTS (SELECT 1 FROM music.song_sections x WHERE x.song_id = s.song_id
-                                 AND (x.lyrics <> '' OR x.chords <> '')) AS has_lyrics
+        f"""SELECT s.*, {SONG_EXTRAS}
             FROM music.songs s {'' if owner else 'WHERE s.published'}
             ORDER BY s.position NULLS LAST, s.title""")]
     albums = {}
@@ -316,8 +329,8 @@ def music_v1():
 def song_v1(slug_or_id):
     owner = is_admin() and request.args.get("view") == "owner"
     with db.tx() as conn:
-        row = conn.execute("""SELECT s.*, EXISTS (SELECT 1 FROM music.song_sections x WHERE x.song_id = s.song_id) AS has_lyrics
-                              FROM music.songs s WHERE (slug = %s OR song_id = %s)""" + ("" if owner else " AND published"),
+        row = conn.execute(f"""SELECT s.*, {SONG_EXTRAS}
+                               FROM music.songs s WHERE (slug = %s OR song_id = %s)""" + ("" if owner else " AND published"),
                            (slug_or_id, slug_or_id)).fetchone()
         if not row:
             return jsonify({"error": "Not found"}), 404
@@ -325,7 +338,9 @@ def song_v1(slug_or_id):
         sections = [plain(x) for x in conn.execute(
             "SELECT position, section_type, label, chords, lyrics, tabs FROM music.song_sections WHERE song_id = %s ORDER BY position",
             (row["song_id"],))]
-        return jsonify(_song(row, versions, sections))
+        notes = [plain(n) for n in conn.execute(
+            "SELECT line_text, note FROM music.song_notes WHERE song_id = %s ORDER BY position, note_id", (row["song_id"],))]
+        return jsonify(_song(row, versions, sections, notes))
 
 
 def _write_song(conn, song_id, data):
@@ -340,7 +355,23 @@ def _write_song(conn, song_id, data):
         fields["bpm"] = bpm if bpm and 0 < bpm < 400 else None
     if "published" in fields:
         fields["published"] = bool(fields["published"])
-    for key in ("title", "written_at", "story", "genre", "musical_key"):
+    if "capo" in fields:
+        capo = number(fields["capo"])
+        if fields["capo"] not in (None, "") and (capo is None or capo != int(capo) or not 0 <= capo <= 12):
+            raise ValueError("Capo is a fret from 0 to 12")
+        fields["capo"] = int(capo) if capo is not None else None
+    if "themes" in fields:
+        themes = fields["themes"] if fields["themes"] is not None else []
+        if isinstance(themes, str):
+            themes = themes.split(",")
+        if not isinstance(themes, list):
+            raise ValueError("Themes are a list of words, e.g. ['home', 'leaving']")
+        seen = []
+        for t in (str(t or "").strip()[:40] for t in themes):
+            if t and t.lower() not in (x.lower() for x in seen):
+                seen.append(t)
+        fields["themes"] = seen[:12]
+    for key in TEXT_FIELDS:
         if key in fields:
             fields[key] = str(fields[key] or "").strip()
     if "title" in fields:
@@ -355,6 +386,14 @@ def _write_song(conn, song_id, data):
             conn.execute("INSERT INTO music.song_sections VALUES (%s, %s, %s, %s, %s, %s, %s)",
                          (song_id, position, kind, str(x.get("label") or ""), str(x.get("chords") or ""),
                           str(x.get("lyrics") or ""), str(x.get("tabs") or "")))
+    if "notes" in data:
+        notes = data["notes"]
+        if not isinstance(notes, list) or not all(isinstance(n, dict) for n in notes):
+            raise ValueError("Notes are a list of {line_text, note}")
+        conn.execute("DELETE FROM music.song_notes WHERE song_id = %s", (song_id,))
+        for position, n in enumerate(n for n in notes if str(n.get("line_text") or "").strip() and str(n.get("note") or "").strip()):
+            conn.execute("INSERT INTO music.song_notes (song_id, line_text, note, position) VALUES (%s, %s, %s, %s)",
+                         (song_id, str(n["line_text"]).strip()[:500], str(n["note"]).strip(), position))
 
 
 @bp.route("/api/v1/music/songs", methods=["POST"])
@@ -367,7 +406,11 @@ def song_create_v1():
     with db.tx() as conn:
         conn.execute("INSERT INTO music.songs (song_id, title, slug, published) VALUES (%s, %s, %s, false)",
                      (song_id, data["title"].strip(), unique_slug(conn, data["title"])))
-        _write_song(conn, song_id, data)
+        try:
+            _write_song(conn, song_id, data)
+        except ValueError as e:
+            conn.rollback()
+            return jsonify({"error": str(e)}), 400
         if data.get("recording_id"):
             conn.execute("UPDATE music.recordings SET song_id = %s WHERE recording_id = %s", (song_id, data["recording_id"]))
         return jsonify({"song_id": song_id, "slug": conn.execute("SELECT slug FROM music.songs WHERE song_id = %s",
@@ -387,6 +430,7 @@ def song_write_v1(song_id):
         try:
             _write_song(conn, song_id, request.get_json(silent=True) or {})
         except ValueError as e:
+            conn.rollback()         # nothing half-saved
             return jsonify({"error": str(e)}), 400
         return jsonify({"ok": True, "slug": conn.execute("SELECT slug FROM music.songs WHERE song_id = %s", (song_id,)).fetchone()["slug"]})
 
@@ -401,6 +445,8 @@ def recording_write_v1(recording_id):
     for key in ("title", "version_label"):
         if key in data:
             fields[key] = str(data[key] or "").strip()[:200]
+    if "notes" in data:
+        fields["notes"] = str(data["notes"] or "").strip()
     if "published" in data:
         fields["published"] = bool(data["published"])
     if not fields:

@@ -144,8 +144,38 @@ async function songEditor(view, songId, navigate) {
     field('Where', 'written_at', { value: song.written_at, placeholder: 'e.g. Oxford, MS' }),
     field('Genre', 'genre', { value: song.genre }), field('Key', 'musical_key', { value: song.musical_key }),
     field('BPM', 'bpm', { kind: 'number', value: song.bpm ?? '' }),
-    field('The story behind it', 'story', { kind: 'textarea', value: song.story, wide: true }),
+    field('Capo (fret)', 'capo', { kind: 'number', value: song.capo ?? '', min: 0, max: 12 }),
+    field('Tuning', 'tuning', { value: song.tuning, placeholder: 'Standard' }),
+    field('Time signature', 'time_signature', { value: song.time_signature, placeholder: 'e.g. 4/4, 6/8' }),
+    field('Strumming', 'strumming', { value: song.strumming, placeholder: 'e.g. D DU UDU' }),
     field('Published (visible on the public site)', 'published', { kind: 'checkbox', value: song.published }));
+
+  // Behind the scenes: what visitors read on the song's Meaning tab.
+  const about = h('form', { class: 'ws-form', oninput: () => { dirty = true; }, onsubmit: e => e.preventDefault() },
+    field('What it’s about', 'meaning', { kind: 'textarea', value: song.meaning, wide: true, placeholder: 'The meaning, in your words. The first line shows under the title.' }),
+    field('How it came to be', 'story', { kind: 'textarea', value: song.story, wide: true, placeholder: 'Where and when you wrote it, what started it' }),
+    field('Themes (comma-separated)', 'themes', { value: (song.themes || []).join(', '), wide: true, placeholder: 'e.g. home, leaving, faith' }),
+    field('Influences', 'influences', { kind: 'textarea', value: song.influences, wide: true, placeholder: 'Artists, songs or sounds it drew on' }));
+
+  // Notes on particular lyric lines: visitors tap the line to read them.
+  const notes = (song.notes || []).map(n => ({ ...n }));
+  const lines = () => [...new Set(sections.flatMap(x => (x.lyrics || '').split('\n'))
+    .map(l => l.replace(/\[[^\]\s]{1,12}\]/g, '').trim()).filter(Boolean))];
+  const lineList = h('datalist', { id: 'ws-song-lines' });
+  const noteHost = h('div', { class: 'ws-form stack' });
+  const drawNotes = () => {
+    lineList.replaceChildren(...lines().map(l => h('option', { value: l })));
+    noteHost.replaceChildren(lineList, ...notes.map((n, i) => h('div', { class: 'ws-card', style: { padding: '12px' } },
+      h('div', { class: 'ws-form' },
+        h('label', { class: 'ws-field wide' }, h('span', {}, 'Lyric line (pick one, or type part of a line)'),
+          h('input', { value: n.line_text, list: 'ws-song-lines', placeholder: 'Start typing a line from the lyrics', oninput: e => { n.line_text = e.target.value; dirty = true; } })),
+        h('label', { class: 'ws-field wide' }, h('span', {}, 'The note'),
+          h('textarea', { rows: 3, placeholder: 'What this line is about, or the story behind it', oninput: e => { n.note = e.target.value; dirty = true; } }, n.note)),
+        h('div', { class: 'ws-row-end' },
+          h('button', { class: 'btn small', type: 'button', disabled: i === 0, 'aria-label': 'Move note up', onclick: () => { notes.splice(i - 1, 0, notes.splice(i, 1)[0]); dirty = true; drawNotes(); } }, '↑'),
+          h('button', { class: 'btn small danger', type: 'button', 'aria-label': 'Remove note', onclick: () => { notes.splice(i, 1); dirty = true; drawNotes(); } }, '✕'))))),
+      h('div', {}, h('button', { class: 'btn small', type: 'button', onclick: () => { notes.push({ line_text: '', note: '' }); dirty = true; drawNotes(); } }, '+ Line note')));
+  };
 
   const sections = (song.sections || []).map(s => ({ ...s }));
   const sectionHost = h('div', { class: 'ws-form stack' });
@@ -158,15 +188,17 @@ async function songEditor(view, songId, navigate) {
         h('button', { class: 'btn small', type: 'button', disabled: i === 0, 'aria-label': 'Move up', onclick: () => { sections.splice(i - 1, 0, sections.splice(i, 1)[0]); dirty = true; drawSections(); } }, '↑'),
         h('button', { class: 'btn small danger', type: 'button', 'aria-label': 'Remove section', onclick: () => { sections.splice(i, 1); dirty = true; drawSections(); } }, '✕'))),
     h('div', { class: 'ws-form' },
-      h('label', { class: 'ws-field' }, h('span', {}, 'Chords'), h('textarea', { rows: 3, oninput: e => { s.chords = e.target.value; dirty = true; } }, s.chords)),
-      h('label', { class: 'ws-field' }, h('span', {}, 'Lyrics'), h('textarea', { rows: 5, oninput: e => { s.lyrics = e.target.value; dirty = true; } }, s.lyrics)),
+      h('label', { class: 'ws-field' }, h('span', {}, 'Chord progression (e.g. G-C-D x2)'), h('textarea', { rows: 3, oninput: e => { s.chords = e.target.value; dirty = true; } }, s.chords)),
+      h('label', { class: 'ws-field' }, h('span', {}, 'Lyrics — [G] before a word puts the chord over it'), h('textarea', { rows: 5, oninput: e => { s.lyrics = e.target.value; dirty = true; }, onchange: () => drawNotes() }, s.lyrics)),
       h('label', { class: 'ws-field wide' }, h('span', {}, 'Tabs'), h('textarea', { rows: 3, style: { fontFamily: 'monospace' }, oninput: e => { s.tabs = e.target.value; dirty = true; } }, s.tabs))))),
     h('div', {}, h('button', { class: 'btn small', type: 'button', onclick: () => { sections.push({ section_type: 'verse', label: '', chords: '', lyrics: '', tabs: '' }); dirty = true; drawSections(); } }, '+ Section')));
   drawSections();
+  drawNotes();
 
   const save = h('button', { class: 'btn primary' }, 'Save song');
   save.onclick = () => run(save, async () => {
-    const body = { ...values(form), sections };
+    const body = { ...values(form), ...values(about), sections,
+                   notes: notes.filter(n => n.line_text.trim() && n.note.trim()) };
     await api('/api/v1/music/songs/' + songId, { method: 'PUT', body });
     dirty = false;
     toast('Song saved');
@@ -192,19 +224,23 @@ async function songEditor(view, songId, navigate) {
         song.versions.length ? h('ul', { class: 'ws-list' }, song.versions.map(v => versionRow(v, () => { view.replaceChildren(); songEditor(view, songId, navigate); })))
                              : empty('No audio yet. Attach a file below.'),
         h('div', { style: { marginTop: '10px' } }, attach))),
-    card('Lyrics, chords and tabs by section', sectionHost));
+    card(h('span', {}, 'Behind the scenes', h('span', { class: 'ws-note' }, 'The song page’s Meaning tab')), about),
+    card('Lyrics, chords and tabs by section', sectionHost),
+    card(h('span', {}, 'Line notes', h('span', { class: 'ws-note' }, 'Marked in the lyrics; visitors tap a line to read its note')), noteHost));
 }
 
 function versionRow(v, redraw) {
   const label = h('input', { class: 'ws-input', value: v.version_label, placeholder: 'e.g. 2025 version, demo', 'aria-label': 'Version label', style: { width: '180px' } });
   const pub = h('input', { type: 'checkbox', checked: v.published, 'aria-label': 'Published' });
+  const notes = h('textarea', { class: 'ws-input', rows: 2, placeholder: 'What’s different about this version (optional)', 'aria-label': 'Version notes',
+                                style: { width: '100%', marginTop: '6px' } }, v.notes || '');
   const saveV = () => run(null, async () => {
-    await api('/api/v1/music/recordings/' + v.recording_id, { method: 'PUT', body: { version_label: label.value, published: pub.checked } });
+    await api('/api/v1/music/recordings/' + v.recording_id, { method: 'PUT', body: { version_label: label.value, published: pub.checked, notes: notes.value } });
   });
-  label.onchange = saveV; pub.onchange = saveV;
+  label.onchange = saveV; pub.onchange = saveV; notes.onchange = saveV;
   return h('li', { class: 'ws-row', style: { flexWrap: 'wrap' } },
     h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, v.title), h('div', { class: 'ws-row-meta' }, v.album || 'single'),
-      h('audio', { controls: true, preload: 'none', src: v.url })),
+      h('audio', { controls: true, preload: 'none', src: v.url }), notes),
     h('div', { class: 'ws-row-end' }, label, h('label', { class: 'ws-check' }, pub, h('span', {}, 'Public')),
       h('button', { class: 'btn small', onclick: () => run(null, async () => {
         await api('/api/v1/music/recordings/' + v.recording_id, { method: 'PUT', body: { song_id: null } }); redraw();

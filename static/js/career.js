@@ -12,7 +12,7 @@ window.VW = window.VW || {};
 
 window.VW.Career = (() => {
   const h = (...a) => window.VW.h(...a);
-  const SECTIONS = [['ethos', 'Ethos'], ['experience', 'Experience'], ['projects', 'Projects'], ['skills', 'Skills'], ['education', 'Education']];
+  const SECTIONS = [['ethos', 'Ethos'], ['skills', 'Skills'], ['education', 'Education'], ['experience', 'Experience'], ['projects', 'Projects']];
   let data = null;
   let filter = { tech: '', role: '', query: '' };
   let observer = null;
@@ -96,8 +96,6 @@ window.VW.Career = (() => {
             h('div', { class: 'cr-card-icon', 'aria-hidden': 'true' }, i.icon), h('h3', {}, i.title), h('p', {}, i.body)))) : null,
           hl.strength.length ? h('div', {}, h('h3', { class: 'cr-sub' }, 'What I bring'),
             h('dl', { class: 'cr-strengths' }, hl.strength.map(i => h('div', {}, h('dt', {}, i.title), h('dd', {}, i.body))))) : null),
-        section('experience', 'Experience', 'Where I’ve worked', h('ol', { class: 'cr-roles' }, data.roles.map(role))),
-        section('projects', 'Projects', 'Explore what I’ve built', explorer()),
         section('skills', 'Skills', 'Tools and certifications',
           h('div', { class: 'cr-skills' }, data.skills.map(g => h('div', { class: 'cr-skill-group' }, h('h3', {}, g.label),
             h('div', { class: 'pj-chips' }, g.skills.map(s => h('span', { class: 'pj-chip' + (g.featured.includes(s) ? ' cr-featured' : '') }, s)))))),
@@ -107,7 +105,9 @@ window.VW.Career = (() => {
           h('div', { class: 'cr-edu-head' }, h('div', {}, h('h3', {}, e.degree), e.field_of_study ? h('p', { class: 'cr-strong' }, e.field_of_study) : null,
             h('p', { class: 'site-muted' }, [e.school, e.location].filter(Boolean).join(' · '))),
             h('div', { class: 'cr-period' }, e.finished_on ? month(e.finished_on) : '', e.grade ? h('div', {}, e.grade) : null)),
-          e.highlight ? h('div', { class: 'cr-note' }, h('strong', {}, e.highlight_label || 'Highlight'), h('p', {}, e.highlight)) : null))))));
+          e.highlight ? h('div', { class: 'cr-note' }, h('strong', {}, e.highlight_label || 'Highlight'), h('p', {}, e.highlight)) : null)))),
+        section('experience', 'Experience', 'Where I’ve worked', h('ol', { class: 'cr-roles' }, data.roles.map(role))),
+        section('projects', 'Projects', 'Explore what I’ve built', explorer())));
   }
 
   function section(id, eyebrow, title, ...body) {
