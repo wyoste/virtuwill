@@ -5,26 +5,60 @@ account balances and transactions into VirtuWill without signing in. Loads go
 through the same matching as **Money › Imports** and show up there, labelled with
 the token that sent them.
 
-## 1. Make a token
+## 1. Make a VirtuWill token
 
-Workspace → **Settings → API access → + New token**. Name it after the job
-(e.g. *Claude daily finance*). The token (`vw_…`) is shown **once**; store it
-where the job keeps secrets. Revoke it there at any time. Only a hash of it is
-kept in the database.
+This happens inside VirtuWill itself, not in the Databricks portal. Open the
+app, sign in, and go to **Settings → API access → + New token** in VirtuWill's
+own sidebar. Name it after the job (e.g. *Claude daily finance*). The token
+(`vw_…`) is shown **once**; store it where the job keeps secrets. Revoke it
+there at any time. Only a hash of it is kept in the database.
 
 Scopes: `finance:write` (push data) and `finance:read` (see what's loaded). A job
 that only pushes can go without `finance:read`, but reading the status first lets
 it send only what's new.
 
-## 2. Reach the app
+## 2. Let the job through Databricks sign-in
 
-Send the token in the `X-VirtuWill-Token` header. (`Authorization: Bearer vw_…`
-also works when nothing in front of the app uses that header itself.)
+The app sits behind Databricks sign-in, so a job needs its own Databricks
+identity as well. The app's own service principal (on the app's Authorization
+page) is not it: that one is what the app runs as, and its secret is never shown.
 
-If the app sits behind Databricks sign-in, the request also needs a Databricks
-OAuth token for the app in `Authorization: Bearer …`. That's why the VirtuWill
-token has its own header. A Claude cloud task also needs the app's host allowed
-in its environment's network settings.
+1. **Make a service principal for the job.** Workspace **Settings → Identity and
+   access → Service principals → Add** (e.g. `virtuwill-financials-feed`). It
+   needs no admin access. It doesn't need SQL access either, and may not need
+   workspace access (test before removing that one).
+2. **Give it an OAuth secret.** On its **Secrets** tab, **Generate secret** with
+   the **apps** scope rather than all-APIs. Note the Application (client) ID and
+   the secret (shown once), and when the secret expires.
+3. **Let it use the app.** On the app page, **Share** → add the service principal
+   with **Can use**. This is what grants access; the secret alone does not.
+
+Each call then carries two headers:
+
+- `Authorization: Bearer <Databricks token>`: a short-lived token the job gets by
+  posting `grant_type=client_credentials&scope=apps` to
+  `https://<workspace>/oidc/v1/token`, signed in with the client ID and secret.
+- `X-VirtuWill-Token: vw_…`: the VirtuWill token.
+
+`scripts/finance_feed.py` does both (standard library only):
+
+```sh
+export VIRTUWILL_URL=https://virtuwill-….databricksapps.com VIRTUWILL_TOKEN=vw_…
+export DATABRICKS_HOST=https://….cloud.databricks.com DATABRICKS_CLIENT_ID=… DATABRICKS_CLIENT_SECRET=…
+python scripts/finance_feed.py status                   # a safe first check
+python scripts/finance_feed.py push today.json --dry-run
+python scripts/finance_feed.py push today.json
+```
+
+A Claude cloud task keeps these as environment variables in its environment's
+settings, and needs the app's host and the workspace host allowed in the
+environment's network access.
+
+| What you see | What it means |
+|---|---|
+| `Databricks sign-in failed` | Wrong client ID or secret, or a scope the secret wasn't made with. Set `DATABRICKS_SCOPE` to match. |
+| `… not JSON. The service principal needs 'Can use'…` | Databricks turned the call away before it reached the app: share the app with the service principal. |
+| `That token isn't valid or has been revoked` | The `vw_…` token is wrong or was revoked in VirtuWill's Settings. |
 
 ## 3. Endpoints
 
@@ -85,15 +119,13 @@ change without loading anything.
 
 ## 4. A scheduled Claude task
 
-A prompt for a daily routine (with the token in its environment as
-`VIRTUWILL_TOKEN` and the app's address as `VIRTUWILL_URL`):
+A prompt for a daily routine (with the five variables above in its environment):
 
-> Each morning: read `$VIRTUWILL_URL/api/ingest/v1/finance/status` with header
-> `X-VirtuWill-Token: $VIRTUWILL_TOKEN`. For each account, gather today's balance
+> Each morning: run `python scripts/finance_feed.py status`. For each account, gather today's balance
 > and every transaction since three days before its `last_transaction_on` from
 > *[your source: bank export, aggregator, email statements]*. Include each
 > transaction's id from the source as `external_id`, and mark unsettled ones
-> `"pending": true`. POST them as one JSON body to
-> `$VIRTUWILL_URL/api/ingest/v1/finance` with `"source": "claude-daily"`. If the
+> `"pending": true`. Write them as one JSON body with `"source": "claude-daily"`
+> and load it with `python scripts/finance_feed.py push today.json`. If the
 > response is 400, fix what `error` names and retry once. Report the counts from
 > `report`.
