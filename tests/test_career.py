@@ -33,6 +33,28 @@ class CareerTests(unittest.TestCase):
             career.seed(conn)
         self.assertNotIn(role_id, [r["role_id"] for r in self.visitor.get("/api/v1/career").json["roles"]])
 
+    def test_school_logos(self):
+        edu = {e["school"]: e for e in self.visitor.get("/api/v1/career").json["education"]}
+        self.assertEqual(edu["University of Mississippi"]["logo"], "/static/schools/university-of-mississippi.png")
+        self.assertEqual(self.visitor.get(edu["University of Mississippi"]["logo"]).status_code, 200)
+        target = edu["The University of Texas at Dallas"]["education_id"]
+        url = f"/api/v1/career/education/{target}/logo"
+        self.assertEqual(self.visitor.post(url).status_code, 401)
+        bad = self.owner.post(url, data={"file": (io.BytesIO(b"<svg onload=alert(1)>"), "x.svg")}, content_type="multipart/form-data")
+        self.assertEqual(bad.status_code, 400)
+        png = b"\x89PNG\r\n\x1a\n" + b"test-logo" * 4
+        made = self.owner.post(url, data={"file": (io.BytesIO(png), "seal.png")}, content_type="multipart/form-data").json
+        from virtuwill import media
+        self.addCleanup(lambda: (media.STATIC / made["logo"].removeprefix("/static/")).unlink(missing_ok=True))
+        self.assertTrue(made["logo"].startswith("/static/career/logos/upload-"))
+        # Editing the degree keeps its logo.
+        self.owner.put(f"/api/v1/career/education/{target}", json={"grade": "GPA 4.0"})
+        edu = {e["education_id"]: e for e in self.visitor.get("/api/v1/career").json["education"]}
+        self.assertEqual(edu[target]["logo"], made["logo"])
+        self.owner.delete(url)
+        self.assertIsNone({e["education_id"]: e for e in self.visitor.get("/api/v1/career").json["education"]}[target]["logo"])
+        self.assertEqual(self.owner.post("/api/v1/career/education/999999/logo").status_code, 404)
+
     def test_owner_edits_and_visitors_see_only_what_is_visible(self):
         for method, path in (("put", "/api/v1/career/profile"), ("post", "/api/v1/career/roles"), ("post", "/api/v1/career/cv"),
                              ("get", "/api/v1/career/roles")):

@@ -79,7 +79,9 @@
 .cr-cert div { display: flex; flex-direction: column; }
 .cr-cert span:last-child { font-size: 12.5px; color: var(--text3); }
 .cr-edu { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
-.cr-edu-head { display: flex; justify-content: space-between; gap: 12px; }
+.cr-edu-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+.cr-edu-logo { width: 64px; height: 64px; flex-shrink: 0; object-fit: contain; border-radius: 50%; filter: drop-shadow(0 2px 6px rgba(16, 24, 40, .14)); }
+.cr-edu-main { flex: 1; min-width: 0; }
 .cr-edu-head .site-muted { margin-top: 4px; }
 .cr-period { text-align: right; font-size: 13px; color: var(--text3); font-weight: 600; white-space: nowrap; }
 .cr-note { margin-top: 14px; background: var(--surface2); border-radius: 10px; padding: 12px 14px; }
@@ -100,6 +102,7 @@
   .cr-role-when { padding-top: 0; text-align: left; flex-direction: row; gap: 8px; }
   .cr-section { padding-top: 30px; }
   .cr-edu, .cr-skills, .cr-pillars { grid-template-columns: 1fr; }
+  .cr-edu-logo { width: 48px; height: 48px; }
 }
 
 .cr-hero { background: radial-gradient(circle at 85% -40%, rgba(227, 176, 64, .22), transparent 55%), var(--brand-green); }

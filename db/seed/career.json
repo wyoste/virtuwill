@@ -69,9 +69,11 @@
   ],
   "education": [
     {"degree": "Master of Science", "field_of_study": "Information Technology and Management", "school": "The University of Texas at Dallas",
+     "logo_path": "schools/ut-dallas.png",
      "location": "Richardson, TX", "finished_on": "2025-12-01", "grade": "GPA 3.67", "highlight_label": "Academic project",
      "highlight": "Built a multi-modal (chat/voice) Conversational AI Agent on Google Cloud Platform Vertex AI — grounded against a document repository, supporting English, Spanish, and Indonesian."},
-    {"degree": "Bachelor of Arts", "field_of_study": "Marketing & History", "school": "University of Mississippi", "location": "Oxford, MS",
+    {"degree": "Bachelor of Arts", "field_of_study": "Marketing & History", "school": "University of Mississippi",
+     "logo_path": "schools/university-of-mississippi.png", "location": "Oxford, MS",
      "finished_on": "2015-08-01"}
   ]
 }
