@@ -77,7 +77,7 @@ window.VW.Career = (() => {
     return h('div', { class: 'cr' },
       h('header', { class: 'cr-hero' }, h('div', { class: 'site-wrap cr-hero-in' },
         h('div', { class: 'cr-id' },
-          h('div', { class: 'cr-avatar', 'aria-hidden': 'true' }, (p.full_name || '').split(/\s+/).map(w => w[0]).join('').slice(0, 2)),
+          h('img', { class: 'cr-avatar', src: '/static/brand/wy-tile-512.png', alt: '' }),
           h('div', {},
             h('h1', { class: 'cr-name' }, p.full_name),
             h('p', { class: 'cr-role' }, [p.headline, p.organization].filter(Boolean).join(' · ')),

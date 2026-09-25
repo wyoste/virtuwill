@@ -40,6 +40,24 @@ it; leaving (a link, the sidebar, Back) asks to stay, discard, or save and leave
 dialog closed after editing asks before throwing the edits away. Screens opt in with
 `editable(area, save)` from `static/app/lib.js`.
 
+## Brand
+
+The WY mark (a W growing toward a sun) sets the look of the public site and the
+workspace alike. Files are in `static/brand/`: the mark in green (`wy-mark-green.png`,
+for light backgrounds) and cream (`wy-mark-cream.png`, for dark ones), a square tile
+(`wy-tile-512.png`), favicons and the full logo (`wy-logo.jpg`).
+
+| Token | Colour | Used for |
+|---|---|---|
+| `--brand-green` | `#1B3F27` forest green | primary buttons, links, headings, the workspace sidebar, footer |
+| `--brand-cream` | `#F4EBD5` cream | text on green; page backgrounds are lighter tints of it |
+| `--brand-gold` | `#E3B040` sun gold | accents: the Say hi button, active markers, highlights |
+| `--brand-gold-dk` | `#7A5A10` | gold for text on light backgrounds (eyebrows) |
+
+Headings use Fraunces; body text uses Inter. Both sets of tokens (`static/css/theme.css`
+and `static/app/workspace.css`) keep the older names (`--blue` is now the brand green),
+so every component follows the brand. Text colours meet WCAG AA contrast.
+
 ## The Finance and Health trackers
 
 The **Health tracker is retired**: Health in the workspace owns those records. Its

@@ -127,7 +127,7 @@ function signIn() {
   const error = h('p', { class: 'ws-signin-error', role: 'alert' });
   const password = h('input', { type: 'password', name: 'password', autocomplete: 'current-password', required: true, 'aria-label': 'Password' });
   const form = h('form', { class: 'ws-signin' },
-    h('img', { src: '/static/yoste_logo.png', alt: '', class: 'ws-signin-logo' }),
+    h('img', { src: '/static/brand/wy-tile-512.png', alt: '', class: 'ws-signin-logo' }),
     h('h1', {}, 'Sign in'), h('p', { class: 'ws-sub' }, 'Your workspace: today, journal, health, money and the site.'),
     password, h('button', { class: 'btn primary', type: 'submit' }, 'Sign in'), error,
     h('a', { href: '/', class: 'ws-signin-back' }, '← Back to the site'));

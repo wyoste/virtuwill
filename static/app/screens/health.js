@@ -192,7 +192,7 @@ function chart(points) {
   svg.setAttribute('aria-label', `Weight from ${points[0].day} to ${points[points.length - 1].day}`);
   svg.style.width = '100%';
   const line = points.map((p, i) => p.morning_avg_7d != null ? `${x(i)},${y(p.morning_avg_7d)}` : null).filter(Boolean).join(' ');
-  svg.innerHTML = `<polyline fill="none" stroke="#109ACC" stroke-width="2.5" points="${line}"/>` +
+  svg.innerHTML = `<polyline fill="none" stroke="#1B3F27" stroke-width="2.5" points="${line}"/>` +
     points.map((p, i) => p.weight != null ? `<circle cx="${x(i)}" cy="${y(p.weight)}" r="2.6" fill="#8a9ab0"/>` : '').join('') +
     `<text x="4" y="${y(max - 1) + 4}" font-size="11" fill="#6b7a90">${(max - 1).toFixed(0)}</text>` +
     `<text x="4" y="${y(min + 1) + 4}" font-size="11" fill="#6b7a90">${(min + 1).toFixed(0)}</text>`;

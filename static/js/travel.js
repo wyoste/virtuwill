@@ -26,16 +26,16 @@ window.VW.Travel = (() => {
   const VISITED_KEY = 'vw_travel_visited';
 
   const PIN_TYPES = {
-    visited:   { label:'Visited',   icon:'📍', color:'#109ACC' },
-    recommend: { label:'Recommend', icon:'⭐', color:'#1D9E75' },
+    visited:   { label:'Visited',   icon:'📍', color:'#1B3F27' },
+    recommend: { label:'Recommend', icon:'⭐', color:'#2F7A4B' },
     wishlist:  { label:'Wish list', icon:'🌟', color:'#EF9F27' },
   };
 
   // Shading colors
-  const COUNTRY_FILL   = 'rgba(16,154,204,0.28)';
-  const COUNTRY_BORDER = 'rgba(16,154,204,0.7)';
-  const STATE_FILL     = 'rgba(29,158,117,0.32)';
-  const STATE_BORDER   = 'rgba(29,158,117,0.8)';
+  const COUNTRY_FILL   = 'rgba(227,176,64,0.34)';
+  const COUNTRY_BORDER = 'rgba(154,111,18,0.75)';
+  const STATE_FILL     = 'rgba(47,122,75,0.30)';
+  const STATE_BORDER   = 'rgba(47,122,75,0.8)';
 
   // GeoJSON CDN URLs
   const COUNTRY_GEOJSON_URL = 'https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson';
@@ -133,7 +133,7 @@ window.VW.Travel = (() => {
           });
           layer.on('mouseover', () => {
             if (!_visited.countries.includes(code)) {
-              layer.setStyle({ fillColor: 'rgba(16,154,204,0.10)', fillOpacity:1, color:'rgba(16,154,204,0.3)', weight:1, opacity:1 });
+              layer.setStyle({ fillColor: 'rgba(227,176,64,0.14)', fillOpacity:1, color:'rgba(154,111,18,0.35)', weight:1, opacity:1 });
             }
           });
           layer.on('mouseout', () => {
@@ -181,7 +181,7 @@ window.VW.Travel = (() => {
           });
           layer.on('mouseover', () => {
             if (!_visited.states.includes(abbr)) {
-              layer.setStyle({ fillColor:'rgba(29,158,117,0.12)', fillOpacity:1, color:'rgba(29,158,117,0.3)', weight:1, opacity:1 });
+              layer.setStyle({ fillColor:'rgba(47,122,75,0.12)', fillOpacity:1, color:'rgba(47,122,75,0.3)', weight:1, opacity:1 });
             }
           });
           layer.on('mouseout', () => _stateLayer.resetStyle(layer));

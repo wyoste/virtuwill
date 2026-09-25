@@ -8,37 +8,47 @@
 
 /* ── Design tokens ─────────────────────────────────── */
 :root {
-  --blue:       #109ACC;
-  --blue-dk:    #0b7aaa;
-  --blue-hv:    #0d8dbf;
-  --blue-lt:    #e8f5fc;
-  --blue-md:    #b8ddf2;
-  --blue-light: #5bc8f5;
+  /* Brand (from the WY logo): forest green, cream, sun gold.
+     The older token names are kept so every existing rule picks up the brand:
+     --blue is the primary (green), --blue-light the accent on dark (gold). */
+  --brand-green:    #1B3F27;
+  --brand-green-dk: #122C1B;
+  --brand-cream:    #F4EBD5;
+  --brand-gold:     #E3B040;
+  --brand-gold-dk:  #7A5A10;   /* gold for text on light backgrounds */
+  --font-display:   'Fraunces', Georgia, 'Times New Roman', serif;
 
-  --red:        #e84235;
-  --red-lt:     #fdecea;
+  --blue:       #1B3F27;
+  --blue-dk:    #122C1B;
+  --blue-hv:    #245234;
+  --blue-lt:    #E8EFE3;
+  --blue-md:    #C4D6BF;
+  --blue-light: #E3B040;
 
-  --green:      #1D9E75;
-  --green-dk:   #178f68;
-  --green-lt:   rgba(29,158,117,.15);
-  --teal:       #5DCAA5;
+  --red:        #B83A2E;
+  --red-lt:     #F8E3DE;
 
-  --amber:      #EF9F27;
-  --amber-lt:   rgba(239,159,39,.15);
+  --green:      #2F7A4B;
+  --green-dk:   #23603A;
+  --green-lt:   rgba(47,122,75,.14);
+  --teal:       #E3B040;
 
-  --dark-surface: #1a2332;
-  --dark-bg:    #0b1724;
+  --amber:      #845A05;
+  --amber-lt:   rgba(227,176,64,.18);
 
-  --bg:         #f0f2f5;
-  --surface:    #ffffff;
-  --surface2:   #f7f9fb;
+  --dark-surface: #1B3F27;
+  --dark-bg:    #122C1B;
 
-  --border:     #e2e6ea;
-  --border-dk:  #cdd3da;
+  --bg:         #FAF5EA;
+  --surface:    #FFFDF8;
+  --surface2:   #F4EDDD;
 
-  --text:       #1a2332;
-  --text2:      #4a5568;
-  --text3:      #8a9ab0;
+  --border:     #E7DDC6;
+  --border-dk:  #D2C4A4;
+
+  --text:       #1B2A1F;
+  --text2:      #465446;
+  --text3:      #66705F;
 
 
   --nav-h:      70px;
@@ -247,7 +257,7 @@ body {
 }
 .input:focus {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(16, 154, 204, .1);
+  box-shadow: 0 0 0 3px rgba(27, 63, 39, .12);
 }
 textarea.input {
   resize: vertical;
@@ -522,7 +532,7 @@ textarea.input {
 }
 .contact-input:focus {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(16,154,204,.08);
+  box-shadow: 0 0 0 3px rgba(27,63,39,.1);
 }
 .contact-textarea { resize: vertical; min-height: 120px; }
 .contact-contact-row { display: flex; gap: 8px; }
@@ -576,7 +586,7 @@ textarea.input {
 .contact-success-icon {
   width: 52px; height: 52px;
   border-radius: 50%;
-  background: rgba(29,158,117,.12);
+  background: rgba(47,122,75,.12);
   color: var(--green);
   font-size: 24px;
   font-weight: 700;
@@ -584,7 +594,7 @@ textarea.input {
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
-  border: 1.5px solid rgba(29,158,117,.3);
+  border: 1.5px solid rgba(47,122,75,.3);
 }
 .contact-success-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
 .contact-success-sub   { font-size: 14px; color: var(--text2); }

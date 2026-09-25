@@ -29,7 +29,7 @@
 .gb { height:30px;padding:0 10px;border:0.5px solid var(--border-dk);border-radius:6px;background:var(--surface);color:var(--text2);font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;white-space:nowrap; }
 .gb:hover { background:var(--bg);color:var(--text); }
 .gb.on    { background:var(--green);border-color:var(--green);color:#fff; }
-.gb.active-mode { background:rgba(29,158,117,.2);border-color:var(--green);color:var(--teal); }
+.gb.active-mode { background:rgba(47,122,75,.2);border-color:var(--green);color:var(--teal); }
 .gb.warn  { border-color:rgba(239,159,39,.5);color:var(--amber); }
 .gb.warn:hover { background:rgba(239,159,39,.12); }
 
@@ -48,8 +48,8 @@ canvas#gdn-cv { display:block;position:absolute;inset:0;width:100%;height:100%; 
 .gdn-panel {
   width: 280px;
   min-width: 280px;
-  background: #0f1c2e;
-  border-left: 0.5px solid #1e3050;
+  background: #10251A;
+  border-left: 0.5px solid #2A4A33;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -65,19 +65,19 @@ canvas#gdn-cv { display:block;position:absolute;inset:0;width:100%;height:100%; 
   overflow-x: hidden;
 }
 .gdn-panel-view::-webkit-scrollbar { width: 3px; }
-.gdn-panel-view::-webkit-scrollbar-thumb { background: #1e3050; border-radius: 2px; }
+.gdn-panel-view::-webkit-scrollbar-thumb { background: #2A4A33; border-radius: 2px; }
 
 /* Sections within a view */
 .gdn-panel-section {
   padding: 14px 14px 10px;
-  border-bottom: 0.5px solid #1a2d48;
+  border-bottom: 0.5px solid #21402B;
 }
 .gdn-panel-section-lbl {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: .1em;
   text-transform: uppercase;
-  color: #3d5068;
+  color: #9DB09A;
   margin-bottom: 8px;
 }
 .gdn-panel-beds-section { flex: 1; }
@@ -95,7 +95,7 @@ canvas#gdn-cv { display:block;position:absolute;inset:0;width:100%;height:100%; 
   gap: 5px;
   padding: 7px 8px;
   border-radius: 6px;
-  border: 0.5px solid #1e3050;
+  border: 0.5px solid #2A4A33;
   background: rgba(255,255,255,.04);
   color: rgba(255,255,255,.65);
   font-size: 11px;
@@ -105,23 +105,23 @@ canvas#gdn-cv { display:block;position:absolute;inset:0;width:100%;height:100%; 
   transition: all .12s;
   white-space: nowrap;
 }
-.gdn-draw-btn:hover { background: rgba(255,255,255,.1); color: #fff; border-color: #2a4060; }
+.gdn-draw-btn:hover { background: rgba(255,255,255,.1); color: #fff; border-color: #3A5E44; }
 .gdn-draw-btn.on, .gdn-mode-btn.on {
-  background: rgba(16,154,204,.25);
+  background: rgba(227,176,64,.25);
   border-color: var(--blue);
-  color: #5bc8f5;
+  color: #E3B040;
 }
 .gdn-draw-icon { font-size: 13px; }
 
 /* Inputs inside panel */
 .gdn-panel-input {
   background: rgba(255,255,255,.06) !important;
-  border-color: #1e3050 !important;
+  border-color: #2A4A33 !important;
   color: #fff !important;
   font-size: 12px;
 }
 .gdn-panel-input:focus { border-color: var(--blue) !important; }
-.gdn-panel-input option { background: #0f1c2e; color: #fff; }
+.gdn-panel-input option { background: #10251A; color: #fff; }
 
 /* Edit view header */
 .gdn-panel-edit-hd {
@@ -129,7 +129,7 @@ canvas#gdn-cv { display:block;position:absolute;inset:0;width:100%;height:100%; 
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 0.5px solid #1a2d48;
+  border-bottom: 0.5px solid #21402B;
   flex-shrink: 0;
   background: #0a1624;
 }
@@ -146,7 +146,7 @@ canvas#gdn-cv { display:block;position:absolute;inset:0;width:100%;height:100%; 
   font-family: inherit;
   white-space: nowrap;
 }
-.gdn-back-btn:hover { color: #5bc8f5; background: rgba(91,200,245,.1); }
+.gdn-back-btn:hover { color: #E3B040; background: rgba(227,176,64,.1); }
 .gdn-panel-edit-title {
   font-size: 13px;
   font-weight: 700;
@@ -163,7 +163,7 @@ canvas#gdn-cv { display:block;position:absolute;inset:0;width:100%;height:100%; 
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-top: 0.5px solid #1a2d48;
+  border-top: 0.5px solid #21402B;
   flex-shrink: 0;
   background: #0a1624;
 }
@@ -176,13 +176,13 @@ canvas#gdn-cv { display:block;position:absolute;inset:0;width:100%;height:100%; 
 }
 .gdn-no-beds {
   font-size: 12px;
-  color: #3d5068;
+  color: #9DB09A;
   padding: 12px 4px;
   text-align: center;
 }
 .gdn-bed-count {
   font-size: 10px;
-  color: #3d5068;
+  color: #9DB09A;
   font-weight: 400;
 }
 .gdn-bed-card {
@@ -191,21 +191,21 @@ canvas#gdn-cv { display:block;position:absolute;inset:0;width:100%;height:100%; 
   gap: 6px;
   padding: 9px 8px;
   border-radius: 7px;
-  border: 0.5px solid #1e3050;
+  border: 0.5px solid #2A4A33;
   background: rgba(255,255,255,.03);
   cursor: pointer;
   transition: all .12s;
 }
-.gdn-bed-card:hover { background: rgba(255,255,255,.07); border-color: #2a4060; }
+.gdn-bed-card:hover { background: rgba(255,255,255,.07); border-color: #3A5E44; }
 .gdn-bed-card-grip {
   font-size: 13px;
-  color: #2a4060;
+  color: #3A5E44;
   cursor: grab;
   padding: 0 2px;
   flex-shrink: 0;
   user-select: none;
 }
-.gdn-bed-card:hover .gdn-bed-card-grip { color: #3d5068; }
+.gdn-bed-card:hover .gdn-bed-card-grip { color: #9DB09A; }
 .gdn-bed-card-body { flex: 1; min-width: 0; }
 .gdn-bed-card-name {
   font-size: 12px;
@@ -217,13 +217,13 @@ canvas#gdn-cv { display:block;position:absolute;inset:0;width:100%;height:100%; 
 }
 .gdn-bed-card-meta {
   font-size: 10px;
-  color: #3d5068;
+  color: #9DB09A;
   margin-top: 2px;
 }
 .gdn-bed-card-edit {
   background: none;
   border: none;
-  color: #3d5068;
+  color: #9DB09A;
   font-size: 13px;
   cursor: pointer;
   padding: 3px 5px;
@@ -231,8 +231,8 @@ canvas#gdn-cv { display:block;position:absolute;inset:0;width:100%;height:100%; 
   transition: all .12s;
   flex-shrink: 0;
 }
-.gdn-bed-card:hover .gdn-bed-card-edit { color: #5bc8f5; }
-.gdn-bed-card-edit:hover { background: rgba(91,200,245,.1); }
+.gdn-bed-card:hover .gdn-bed-card-edit { color: #E3B040; }
+.gdn-bed-card-edit:hover { background: rgba(227,176,64,.1); }
 
 /* Drag states */
 .gdn-bed-card.dragging { opacity: .4; }
@@ -281,7 +281,7 @@ select.gdn-input option:checked,
 /* ── Plants tab ───────────────────────────────────── */
 .gdn-plant-card { display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--surface2);cursor:pointer;margin-bottom:6px;transition:all .15s; }
 .gdn-plant-card:hover { background:var(--bg);border-color:var(--border-dk); }
-.gdn-plant-card.sel   { background:rgba(29,158,117,.12);border-color:rgba(29,158,117,.3); }
+.gdn-plant-card.sel   { background:rgba(47,122,75,.12);border-color:rgba(47,122,75,.3); }
 .gdn-plant-health { width:34px;height:34px;border-radius:8px;border:0.5px solid;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
 .gdn-plant-name  { font-size:12px;font-weight:600;color:var(--text); }
 .gdn-plant-meta  { font-size:10px;color:var(--text3);margin-top:1px; }
@@ -320,7 +320,7 @@ select.gdn-input option:checked,
 .gdn-season-hist { display:flex;flex-direction:column;gap:6px; }
 .gdn-season-item { padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--surface2);cursor:pointer;transition:all .15s; }
 .gdn-season-item:hover { background:var(--bg); }
-.gdn-season-item.active { border-color:rgba(29,158,117,.35);background:rgba(29,158,117,.08); }
+.gdn-season-item.active { border-color:rgba(47,122,75,.35);background:rgba(47,122,75,.08); }
 .gdn-season-lbl  { font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px; }
 .gdn-season-date { font-size:10px;color:var(--text3); }
 .gdn-season-note { font-size:11px;color:var(--text3);margin-top:4px;font-style:italic; }
@@ -434,7 +434,7 @@ select.gdn-input option:checked,
   transition: background .15s;
 }
 .gdn-viewer-resizer:hover {
-  background: linear-gradient(to top, rgba(16,154,204,.25), transparent);
+  background: linear-gradient(to top, rgba(227,176,64,.25), transparent);
 }
 .gdn-viewer-resizer-grip {
   width: 36px;
@@ -444,7 +444,7 @@ select.gdn-input option:checked,
   transition: background .15s, width .15s;
 }
 .gdn-viewer-resizer:hover .gdn-viewer-resizer-grip {
-  background: rgba(16,154,204,.9);
+  background: rgba(227,176,64,.9);
   width: 48px;
 }
 

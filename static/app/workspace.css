@@ -1,16 +1,19 @@
 /* VirtuWill workspace — one sidebar, one screen. Tokens match the public site. */
 *, *::before, *::after { box-sizing: border-box; }
 :root {
-  --blue: #109ACC; --blue-dk: #0b7aaa; --blue-lt: #e8f5fc; --blue-md: #b8ddf2; --teal: #5DCAA5; --green-dk: #136f4f;
-  --red: #c7362a; --red-lt: #fdecea;
-  --green: #17865f; --green-lt: #e3f5ee;
-  --amber: #b86e00; --amber-lt: #fdf1dc;
-  --dark-surface: #1a2332; --dark-bg: #0f1a27;
-  --bg: #f0f2f5; --surface: #ffffff; --surface2: #f7f9fb;
-  --border: #e2e6ea; --border-dk: #cdd3da;
-  --text: #1a2332; --text2: #4a5568; --text3: #6b7a90;
+  /* Brand (from the WY logo): forest green, cream, sun gold — the same tokens as the public site. */
+  --brand-green: #1B3F27; --brand-green-dk: #122C1B; --brand-cream: #F4EBD5; --brand-gold: #E3B040; --brand-gold-dk: #7A5A10;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --blue: #1B3F27; --blue-dk: #122C1B; --blue-lt: #E8EFE3; --blue-md: #C4D6BF; --teal: #E3B040; --green-dk: #23603A;
+  --red: #B83A2E; --red-lt: #F8E3DE;
+  --green: #2F7A4B; --green-lt: #E3EFE3;
+  --amber: #845A05; --amber-lt: #FBF0D6;
+  --dark-surface: #1B3F27; --dark-bg: #122C1B;
+  --bg: #FAF5EA; --surface: #FFFDF8; --surface2: #F4EDDD;
+  --border: #E7DDC6; --border-dk: #D2C4A4;
+  --text: #1B2A1F; --text2: #465446; --text3: #5F6A5A;
   --radius: 10px; --sb-w: 236px; --top-h: 56px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .06);
+  --shadow: 0 1px 2px rgba(27, 42, 31, .06);
 }
 html, body { margin: 0; min-height: 100%; }
 body {
@@ -24,14 +27,15 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 .ws-sidebar {
-  position: fixed; inset: 0 auto 0 0; width: var(--sb-w); background: var(--dark-surface); color: #c9d6e3;
+  position: fixed; inset: 0 auto 0 0; width: var(--sb-w); background: var(--dark-surface); color: #E4DCC5;
   display: flex; flex-direction: column; padding: 16px 10px; overflow-y: auto; z-index: 30;
 }
 .ws-main { margin-left: var(--sb-w); min-height: 100vh; padding: 28px 32px 64px; outline: none; }
 .ws-view { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
 .ws-topbar { display: none; }
 .ws-brand { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-weight: 700; font-size: 15px; }
-.ws-brand img { width: 30px; height: 30px; border-radius: 50%; }
+.ws-brand img { height: 30px; width: auto; display: block; }
+.ws-brand span { font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: .01em; color: var(--brand-cream); }
 .ws-brand-side { padding: 4px 10px 18px; }
 .ws-status { font-size: 12px; color: var(--text3); }
 .ws-status[data-kind="error"] { color: var(--red); font-weight: 600; }
@@ -41,13 +45,13 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .ws-nav { display: flex; flex-direction: column; gap: 2px; }
 .ws-nav-item {
   display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; border: 0;
-  background: none; color: #c9d6e3; text-decoration: none; font-size: 14px; font-weight: 500; cursor: pointer; text-align: left;
+  background: none; color: #E4DCC5; text-decoration: none; font-size: 14px; font-weight: 500; cursor: pointer; text-align: left;
 }
 .ws-nav-item:hover { background: rgba(255, 255, 255, .06); color: #fff; }
-.ws-nav-item.on { background: rgba(16, 154, 204, .18); color: #fff; }
+.ws-nav-item.on { background: rgba(227, 176, 64, .16); color: #fff; box-shadow: inset 3px 0 0 var(--brand-gold); }
 .ws-nav-icon { width: 20px; text-align: center; font-size: 15px; opacity: .9; }
 .ws-subnav { display: flex; flex-direction: column; margin: 2px 0 6px 30px; border-left: 1px solid rgba(255, 255, 255, .12); }
-.ws-subnav a { padding: 5px 12px; color: #9fb3c8; text-decoration: none; font-size: 13px; border-radius: 0 6px 6px 0; }
+.ws-subnav a { padding: 5px 12px; color: #B9C6B0; text-decoration: none; font-size: 13px; border-radius: 0 6px 6px 0; }
 .ws-subnav a:hover { color: #fff; }
 .ws-subnav a.on { color: #fff; font-weight: 600; background: rgba(255, 255, 255, .06); }
 .ws-sidebar-foot { margin-top: auto; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, .1); display: flex; flex-direction: column; gap: 2px; }
@@ -59,7 +63,7 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
     display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 20; height: var(--top-h);
     padding: 0 16px; background: var(--dark-surface); color: #fff;
   }
-  .ws-topbar .ws-status { margin-left: auto; color: #c9d6e3; }
+  .ws-topbar .ws-status { margin-left: auto; color: #E4DCC5; }
   .ws-menu { background: none; border: 1px solid rgba(255, 255, 255, .25); color: #fff; border-radius: 8px; width: 38px; height: 38px; font-size: 18px; cursor: pointer; }
   .ws-sidebar { transform: translateX(-100%); transition: transform .2s ease; width: min(84vw, 300px); }
   .ws-brand-side { display: none; }
@@ -70,7 +74,7 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 
 /* ── Page structure ─────────────────────────────────────────────────────── */
 .ws-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.ws-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.ws-head h1 { font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -.005em; color: var(--brand-green); }
 .ws-sub { margin: 4px 0 0; color: var(--text3); font-size: 13.5px; }
 .ws-head-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .ws-loading, .ws-empty { color: var(--text3); padding: 28px; text-align: center; }
@@ -178,7 +182,8 @@ button.ws-chip[aria-pressed="true"] { background: var(--blue); color: #fff; bord
 /* ── Sign-in ────────────────────────────────────────────────────────────── */
 .ws-signin-page { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
 .ws-signin { background: var(--surface); padding: 32px; border-radius: 16px; width: min(380px, 100%); display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 40px rgba(16, 24, 40, .1); }
-.ws-signin-logo { width: 52px; height: 52px; border-radius: 50%; }
+.ws-signin-logo { width: 76px; height: 76px; border-radius: 18px; }
+.ws-signin h1 { font-family: var(--font-display); color: var(--brand-green); }
 .ws-signin input { padding: 10px 12px; border: 1px solid var(--border-dk); border-radius: 8px; font-size: 15px; }
 .ws-signin-error { color: var(--red); margin: 0; min-height: 1em; font-size: 13px; }
 .ws-signin-back { font-size: 13px; text-align: center; }
@@ -310,3 +315,15 @@ audio { width: 100%; height: 36px; }
 .ws-country-list li button { width: 100%; text-align: left; border: 0; background: none; padding: 6px 8px; border-radius: 6px; font: inherit; font-weight: 500; font-size: 13.5px; color: var(--text); cursor: pointer; }
 .ws-country-list li button:hover, .ws-country-list li[aria-selected="true"] button { background: var(--blue-lt); color: var(--blue-dk); }
 .ws-country-list li.ws-note { padding: 6px 8px; }
+
+/* ── Brand touches ───────────────────────────────────────────────────────── */
+.ws-subnav { border-left-color: rgba(244, 235, 213, .18); }
+.ws-subnav a.on { color: var(--brand-gold); background: rgba(244, 235, 213, .06); }
+.ws-sidebar-foot { border-top-color: rgba(244, 235, 213, .14); }
+.ws-savebar .btn.primary { background: var(--brand-gold); border-color: var(--brand-gold); color: var(--brand-green); }
+.ws-savebar .btn.primary:hover { background: #EDC25E; }
+.ws-card-title { color: var(--brand-green); }
+.ws-stat-value { color: var(--brand-green); }
+.ws-tabs a.on { color: var(--brand-green); border-bottom-color: var(--brand-gold); }
+.ws-chip.info { background: var(--blue-lt); color: var(--brand-green); }
+.ws-signin-page { background: radial-gradient(circle at 50% 0%, #25502F, var(--brand-green) 60%); }
