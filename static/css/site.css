@@ -158,10 +158,11 @@ a.home-blog-card { color: inherit; text-decoration: none; display: block; }
 .gd-filters .site-chips { margin: 0; }
 .gd-select { flex: 0 1 240px; }
 .gd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
-.gd-photo { position: relative; padding: 0; border: 0; border-radius: 12px; overflow: hidden; cursor: zoom-in; background: var(--surface2); aspect-ratio: 1; }
-.gd-photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .25s; }
+.gd-photo { position: relative; padding: 0; border: 0; border-radius: 12px; overflow: hidden; cursor: zoom-in; background: var(--surface2); text-align:left; }
+.gd-photo img { width: 100%; height: auto; aspect-ratio:1; object-fit: cover; display: block; transition: transform .25s; }
 .gd-photo:hover img { transform: scale(1.03); }
-.gd-photo span { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 10px 8px; background: linear-gradient(transparent, rgba(0, 0, 0, .6)); color: #fff; font-size: 12.5px; text-align: left; }
+.gd-photo > span { display:block; padding:8px 10px; color:var(--text2); font-size:12.5px; text-align:left; }
+.gd-photo > .garden-tags { display:flex; padding:8px 10px; }
 .gd-empty { padding: 30px 0; text-align: center; }
 .site-wrap.gd-map { padding-top: 24px; padding-bottom: 0; }
 .gd-map .gdn-viewer-section { border-radius: 14px; overflow: hidden; border: 1px solid var(--border); }

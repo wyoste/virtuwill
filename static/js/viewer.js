@@ -280,6 +280,7 @@ window.GDN.Viewer = (() => {
     if (plant) {
       _hovBedId = bed.id; _hovPlantId = plant.id;
       _showTooltip(`${plant.displayName || _species(plant.speciesId).name} · ${bed.name}`, sx, sy);
+      window.dispatchEvent(new CustomEvent('garden:plant-selected', { detail: { plantingId: plant.id } }));
       render();
     } else if (bed) focusBed(bed.id);
     else { _hovPlantId = null; _hideTooltip(); render(); }

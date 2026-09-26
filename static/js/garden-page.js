@@ -11,7 +11,7 @@ window.VW.GardenPage = (() => {
   const h = (...a) => window.VW.h(...a);
   const HERO_IMAGE = '/static/91070B97-0D46-40F6-8858-1C32F1E88A41.jpeg';
   let data = null;
-  let filter = { bed: '', plant: '' };
+  let filter = { bed: '', plant: '', tag: '' };
 
   async function onEnter() {
     const root = document.getElementById('garden-root');
@@ -23,7 +23,7 @@ window.VW.GardenPage = (() => {
     }
     document.title = 'Garden · Will Yoste';
     const map = document.getElementById('gdn-viewer-section');
-    root.replaceChildren(header(), gallery(), h('div', { class: 'site-wrap gd-map', id: 'gd-map' }), beds());
+    root.replaceChildren(header(), h('div', { class: 'site-wrap gd-map', id: 'gd-map' }), beds(), gallery());
     document.getElementById('gd-map').append(map);
     GDN?.Viewer?.init?.();
   }
@@ -49,11 +49,12 @@ window.VW.GardenPage = (() => {
   function gallery() {
     const section = h('section', { class: 'site-wrap gd-section', id: 'gd-photos', 'aria-labelledby': 'gd-photos-h' });
     const draw = () => {
-      const shown = data.photos.filter(p => (!filter.bed || p.beds.includes(filter.bed)) && (!filter.plant || p.species.includes(filter.plant)));
+      const shown = data.photos.filter(p => (!filter.bed || p.beds.includes(filter.bed)) && (!filter.plant || p.species.includes(filter.plant)) && (!filter.tag || (p.tags || []).includes(filter.tag)));
       const tagged = data.species.filter(s => s.photos);
       section.replaceChildren(...[   // replaceChildren would print a null as text
         h('div', { class: 'gd-section-hd' }, h('h2', { id: 'gd-photos-h' }, 'Photos'),
           h('span', { class: 'site-muted', 'aria-live': 'polite' }, `${shown.length} of ${data.photos.length}`)),
+        filter.tag ? h('button', { class: 'site-chip', onclick: () => { filter.tag = ''; draw(); } }, `Clear #${filter.tag} filter ×`) : null,
         data.photos.length ? h('div', { class: 'gd-filters' },
           h('div', { class: 'site-chips', role: 'group', 'aria-label': 'Show photos of a bed' },
             [['', 'Every bed'], ...data.beds.filter(b => b.photos).map(b => [b.id, b.name])].map(([id, label]) =>
@@ -64,7 +65,8 @@ window.VW.GardenPage = (() => {
             tagged.map(s => h('option', { value: s.id, selected: filter.plant === s.id }, `${s.emoji ? s.emoji + ' ' : ''}${s.name} (${s.photos})`))) : null) : null,
         shown.length ? h('div', { class: 'gd-grid' }, shown.map((p, i) => h('button', { class: 'gd-photo', onclick: () => open(shown, i) },
           h('img', { src: p.url, alt: p.caption || 'Garden photo', loading: 'lazy' }),
-          p.caption ? h('span', {}, p.caption) : null)))
+          p.caption ? h('span', {}, p.caption) : null,
+          h('span', { class: 'garden-tags' }, photoTags(p).map(t => VW.GardenTags.pill(t.label))))))
           : h('p', { class: 'site-muted gd-empty' }, data.photos.length ? 'No photos of that yet.' : 'No photos yet — check back soon.')].filter(Boolean));
     };
     draw();
@@ -81,10 +83,12 @@ window.VW.GardenPage = (() => {
         h('figure', {}, h('img', { src: p.url, alt: p.caption || 'Garden photo' }),
           h('figcaption', {},
             p.caption ? h('strong', {}, p.caption) : null,
-            p.date ? h('span', { class: 'site-muted' }, new Date(p.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })) : null,
-            h('div', { class: 'gd-lb-tags' }, [...p.beds.map(id => ['bed', id, bedName(id)]), ...p.species.map(id => ['plant', id, plantLabel(id)])]
-              .map(([kind, id, label]) => h('button', { class: 'site-chip', onclick: () => { box.close(); filter = { bed: kind === 'bed' ? id : '', plant: kind === 'plant' ? id : '' };
-                const g = document.getElementById('gd-photos'); g.redraw(); g.scrollIntoView({ behavior: 'smooth' }); } }, label))))),
+            p.date ? h('span', { class: 'site-muted' }, new Date(p.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })) : h('span', { class: 'site-muted' }, 'Capture date unknown'),
+            h('div', { class: 'gd-lb-tags garden-tags' }, photoTags(p).map(({ kind, id, label }) =>
+              VW.GardenTags.pill(label, () => {
+                box.close(); filter = { bed: kind === 'bed' ? id : '', plant: kind === 'plant' ? id : '', tag: kind === 'tag' ? id : '' };
+                const g = document.getElementById('gd-photos'); g.redraw(); g.scrollIntoView({ behavior: 'smooth' });
+              }))))),
         list.length > 1 ? h('div', { class: 'gd-lb-nav' },
           h('button', { class: 'site-btn site-btn-ghost', 'aria-label': 'Previous photo', onclick: () => show((i - 1 + list.length) % list.length) }, '‹'),
           h('span', { class: 'site-muted' }, `${i + 1} / ${list.length}`),
@@ -96,13 +100,41 @@ window.VW.GardenPage = (() => {
     box.showModal();
   }
 
+  function photoTags(p) {
+    return [...p.beds.map(id => ({ kind: 'bed', id, label: bedName(id) })),
+      ...p.species.map(id => ({ kind: 'plant', id, label: plant(id)?.name || id })),
+      ...(p.tags || []).map(id => ({ kind: 'tag', id, label: id }))];
+  }
+  function plantDialog(title, speciesId, photos, plants, origin) {
+    document.getElementById('gd-plant-detail')?.remove();
+    const box = h('dialog', { id: 'gd-plant-detail', class: 'gd-plant-detail', 'aria-label': title });
+    const owner = typeof FLASK_SESSION !== 'undefined' && FLASK_SESSION.adminLoggedIn;
+    box.append(h('button', { class: 'site-btn', onclick: () => box.close(), 'aria-label': 'Close plant details' }, 'Close'),
+      VW.PlantArt.thumbnail(speciesId), h('h2', {}, title),
+      h('div', { class: 'garden-tags' }, plants.map(p => VW.GardenTags.pill(p.name, () => { box.close(); showPlant(p.id); }))),
+      owner && origin ? h('a', { class: 'site-btn', href: '/app/site/garden?planting=' + encodeURIComponent(origin) }, 'Add photos in workspace') : h('span'),
+      photos.length ? h('div', { class: 'gd-grid' }, photos.map((p, i) => h('button', { class: 'gd-photo', onclick: () => { box.close(); open(photos, i); } },
+        h('img', { src: p.url, alt: p.caption || title, loading: 'lazy' }), h('span', {}, p.date || 'Capture date unknown'))))
+        : h('p', {}, 'No photos tagged to this plant yet.'));
+    box.addEventListener('close', () => box.remove()); document.body.append(box); box.showModal();
+  }
+  function showPlant(id) {
+    const p = (data?.plantings || []).find(p => p.id === id);
+    if (p) plantDialog(`${p.name} · ${bedName(p.bed)}`, p.species, data.photos.filter(ph => (ph.plantings || []).includes(id)), [], id);
+  }
+  function showSpecies(id, bed) {
+    plantDialog(plant(id)?.name || id, id, data.photos.filter(p => p.species.includes(id) && p.beds.includes(bed)),
+      (data.plantings || []).filter(p => p.species === id && p.bed === bed));
+  }
+  window.addEventListener('garden:plant-selected', e => showPlant(e.detail.plantingId));
+
   // ── Beds ───────────────────────────────────────────────────────────────────
   function beds() {
     return h('section', { class: 'site-wrap gd-section', 'aria-labelledby': 'gd-beds-h' },
       h('div', { class: 'gd-section-hd' }, h('h2', { id: 'gd-beds-h' }, 'What’s growing')),
       h('div', { class: 'gd-beds' }, data.beds.map(b => h('article', { class: 'gd-bed', style: { borderTopColor: b.color } },
         h('div', { class: 'gd-bed-hd' }, h('h3', {}, b.name), h('span', { class: 'site-muted' }, b.plants ? `${b.plants} plants` : 'Resting')),
-        b.species.length ? h('ul', { class: 'gd-bed-plants' }, b.species.map(s => h('li', {}, VW.PlantArt.thumbnail(s.id), h('span', {}, s.name)))) : null,
+        b.species.length ? h('ul', { class: 'gd-bed-plants' }, b.species.map(s => h('li', {}, h('button', { class: 'gd-plant-link', onclick: () => showSpecies(s.id, b.id) }, VW.PlantArt.thumbnail(s.id), h('span', {}, s.name))))) : null,
         h('button', { class: 'gd-bed-photos', onclick: () => {
           GDN.Viewer.focusBed(b.id);
           document.getElementById('gd-map').scrollIntoView({ behavior: 'smooth' });

@@ -72,6 +72,33 @@ class GardenPhotoTests(unittest.TestCase):
         self.assertEqual(self.visitor.get("/api/v1/garden").json["photos"][0]["beds"], [])
 
 
+    def test_capture_dates_multiple_beds_labels_and_individual_plant_survive_edits(self):
+        from tests.test_garden_metadata import photo
+        source = photo('2024:04:03 23:59:00').stream.getvalue()
+        made = upload(self.owner, "/api/v1/garden/photos", name="plant.jpg", content=source,
+                      beds=["bed-a", "bed-b"], plantings=["p1"], tags=["#Spring blooms", "spring-blooms"])
+        self.assertEqual(made.status_code, 201, made.json)
+        item = made.json["photos"][0]
+        self.assertEqual(item["date"], "2024-04-03")
+        self.assertEqual(item["beds"], ["bed-a", "bed-b"])
+        self.assertEqual(item["plantings"], ["p1"])
+        self.assertEqual(item["tags"], ["spring-blooms"])
+        self.assertIn(self.species[0], item["species"])
+        updated = self.owner.put(f"/api/v1/garden/photos/{item['id']}", json={"caption": "Later caption"})
+        self.assertEqual(updated.json["plantings"], ["p1"])
+        self.assertEqual(updated.json["tags"], ["spring-blooms"])
+        self.assertEqual(updated.json["date"], "2024-04-03")
+        invalid = self.owner.put(f"/api/v1/garden/photos/{item['id']}", json={"caption": "Must not save", "taken_on": "badTdate"})
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(self.visitor.get("/api/v1/garden").json["photos"][0]["caption"], "Later caption")
+
+    def test_metadata_free_upload_is_undated_and_invalid_dates_are_rejected(self):
+        made = upload(self.owner, "/api/v1/garden/photos")
+        self.assertEqual(made.status_code, 201)
+        self.assertIsNone(made.json["photos"][0]["date"])
+        self.assertEqual(upload(self.owner, "/api/v1/garden/photos", taken_on="not-a-date").status_code, 400)
+        self.assertEqual(upload(self.owner, "/api/v1/garden/photos", plantings=["unsaved-plant"]).status_code, 400)
+
     def test_a_photo_uploads_and_shows_when_the_app_folder_is_read_only(self):
         from unittest import mock
         with mock.patch("pathlib.Path.write_bytes", side_effect=OSError("read-only file system")):

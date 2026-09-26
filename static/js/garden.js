@@ -1267,6 +1267,7 @@ window.VW.Garden = (() => {
             <div style="flex:1;min-width:0">
               <div class="gdn-plant-name">${p.displayName}</div>
               <div class="gdn-plant-meta">${h.icon} ${h.label}</div>
+              ${isSel ? `<button type="button" class="gdn-draw-btn" onclick="event.stopPropagation();gdn.uploadPlantPhoto('${p.id}')">Add photos</button>` : ''}
             </div>
               <button class="gdn-plant-del-btn" title="Delete plant"
               onclick="event.stopPropagation();gdn.deletePlant('${p.id}')">✕</button>
@@ -1475,6 +1476,7 @@ window.VW.Garden = (() => {
     confirmDeleteBed: _confirmDeleteBed,
     cancelDeleteBed:  _cancelDeleteBed,
     selectPlant(id){_selectedPlantId=id;_updateSidebar();render();},
+    uploadPlantPhoto(id) { window.dispatchEvent(new CustomEvent('garden:upload-photo', { detail: { plantingId: id } })); },
     _openModalById,
     savePlantDetail, closePlantModal,
     updateHealthLabel(v){_updateHealthLabel(v);},

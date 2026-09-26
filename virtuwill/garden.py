@@ -7,12 +7,12 @@ plant observation whenever a plant is added or its health changes.
 import json
 import os
 import uuid
-from datetime import datetime
 
 from flask import Blueprint, jsonify, request
 
 from . import db, media
 from .auth import admin_required
+from .photo_metadata import capture_date, date_override, normalize_tags
 from .util import in_calendar, number, parse_date
 
 bp = Blueprint("garden", __name__)
@@ -190,9 +190,10 @@ def photo_upload():
                 continue
             ext = os.path.splitext(f.filename)[1].lower() or ".jpg"
             name = str(uuid.uuid4())[:12] + ext
+            taken_on = capture_date(f)
             asset = media.save_upload(conn, f, f"{PHOTOS_DIR}/{name}")
             photo_id = str(uuid.uuid4())
-            add_photo(conn, photo_id, asset, datetime.now().date(), request.form.get("caption", "").strip(),
+            add_photo(conn, photo_id, asset, taken_on, request.form.get("caption", "").strip(),
                       request.form.get("category", "").strip(), request.form.getlist("beds"), request.form.getlist("plants"))
             added.append(photo_id)
         by_id = {p["id"]: p for p in photos(conn)}
@@ -236,7 +237,9 @@ def overview(conn):
         SELECT ph.photo_id, ph.caption, ph.taken_on, m.path,
                COALESCE(array_agg(DISTINCT b.bed_id) FILTER (WHERE b.bed_id IS NOT NULL), '{}') AS beds,
                COALESCE(array_agg(DISTINCT COALESCE(sp.species_id, pl.species_id))
-                        FILTER (WHERE COALESCE(sp.species_id, pl.species_id) IS NOT NULL), '{}') AS species
+                        FILTER (WHERE COALESCE(sp.species_id, pl.species_id) IS NOT NULL), '{}') AS species,
+               COALESCE(array_agg(DISTINCT pl.planting_id) FILTER (WHERE pl.planting_id IS NOT NULL), '{}') AS plantings,
+               COALESCE(array_agg(DISTINCT t.subject_ref) FILTER (WHERE t.subject_type = 'label'), '{}') AS tags
         FROM garden.photos ph
         JOIN core.media_assets m USING (asset_id)
         LEFT JOIN garden.photo_subjects t USING (photo_id)
@@ -247,7 +250,8 @@ def overview(conn):
         ORDER BY ph.taken_on DESC NULLS LAST, ph.photo_id""").fetchall()
     photos_out = [{"id": r["photo_id"], "url": media.url(r["path"]), "caption": r["caption"],
                    "date": r["taken_on"].isoformat() if r["taken_on"] else None,
-                   "beds": sorted(r["beds"]), "species": sorted(r["species"])} for r in photo_rows]
+                   "beds": sorted(r["beds"]), "species": sorted(r["species"]),
+                   "plantings": sorted(r["plantings"]), "tags": normalize_tags(r["tags"])} for r in photo_rows]
     counts = {"beds": {}, "species": {}}
     for ph in photos_out:
         for key in ("beds", "species"):
@@ -259,27 +263,37 @@ def overview(conn):
         sp["photos"] = counts["species"].get(sp["id"], 0)
     text = {r["text_key"].split(".", 1)[1]: r["value"] for r in conn.execute(
         "SELECT text_key, value FROM content.site_text WHERE text_key IN ('garden.hero', 'garden.gallery_note')")}
-    return {"beds": beds, "species": species, "photos": photos_out,
+    plantings = [dict(r) for r in conn.execute("""SELECT planting_id AS id, bed_id AS bed, species_id AS species,
+                    display_name AS name FROM garden.plantings WHERE removed_on IS NULL ORDER BY display_name, planting_id""")]
+    return {"beds": beds, "species": species, "plantings": plantings, "photos": photos_out,
             "text": {"philosophy": text.get("hero", DEFAULT_TEXT["hero"]), "note": text.get("gallery_note", DEFAULT_TEXT["gallery_note"])},
             "totals": {"beds": len(beds), "plants": sum(b["plants"] for b in beds),
                        "species": sum(1 for sp in species if sp["plants"]), "photos": len(photos_out)}}
 
 
 def _tags(conn, data):
-    """Checked bed and plant-type ids from a request (JSON lists or repeated form fields)."""
-    get = (lambda k: data.getlist(k)) if hasattr(data, "getlist") else (lambda k: data.get(k) or [])
-    beds = {r["bed_id"] for r in conn.execute("SELECT bed_id FROM garden.beds WHERE bed_id = ANY(%s)", ([str(x) for x in get("beds")],))}
-    species = {r["species_id"] for r in conn.execute("SELECT species_id FROM garden.species WHERE species_id = ANY(%s)",
-                                                     ([str(x) for x in get("species")],))}
-    return sorted(beds), sorted(species)
+    """Validate multiple bed, species, individual-plant and label subjects."""
+    def get(key):
+        value = data.getlist(key) if hasattr(data, "getlist") else data.get(key, [])
+        if not isinstance(value, (list, tuple)):
+            raise ValueError(f"{key} must be a list")
+        return [str(x) for x in value]
+    beds = {r["bed_id"] for r in conn.execute("SELECT bed_id FROM garden.beds WHERE bed_id = ANY(%s)", (get("beds"),))}
+    species = {r["species_id"] for r in conn.execute("SELECT species_id FROM garden.species WHERE species_id = ANY(%s)", (get("species"),))}
+    selected = list(conn.execute("""SELECT planting_id, bed_id, species_id FROM garden.plantings
+                                WHERE planting_id = ANY(%s) AND removed_on IS NULL""", (get("plantings"),)))
+    if set(get("plantings")) != {r["planting_id"] for r in selected}:
+        raise ValueError("Save the selected plant in the planner before uploading photos")
+    beds.update(r["bed_id"] for r in selected)
+    species.update(r["species_id"] for r in selected)
+    return sorted(beds), sorted(species), sorted(r["planting_id"] for r in selected), normalize_tags(get("tags"))
 
 
-def _retag(conn, photo_id, beds, species):
+def _retag(conn, photo_id, beds, species, plantings, tags):
     conn.execute("DELETE FROM garden.photo_subjects WHERE photo_id = %s", (photo_id,))
-    for bed in beds:
-        conn.execute("INSERT INTO garden.photo_subjects VALUES (%s, 'bed', %s)", (photo_id, bed))
-    for sp in species:
-        conn.execute("INSERT INTO garden.photo_subjects VALUES (%s, 'species', %s)", (photo_id, sp))
+    for kind, refs in (("bed", beds), ("species", species), ("planting", plantings), ("label", tags)):
+        for ref in refs:
+            conn.execute("INSERT INTO garden.photo_subjects VALUES (%s, %s, %s)", (photo_id, kind, ref))
 
 
 @bp.route("/api/v1/garden")
@@ -295,21 +309,32 @@ def photos_add_v1():
     files = [f for f in request.files.getlist("files") if f and f.filename]
     if not files:
         return jsonify({"error": "Choose one or more photos"}), 400
-    taken_on = parse_date(request.form.get("taken_on")) or datetime.now().date()
-    if not in_calendar(taken_on):
-        return jsonify({"error": "taken_on must be a date (YYYY-MM-DD)"}), 400
+    try:
+        override = date_override(request.form.get("taken_on"))
+        if override and not in_calendar(override):
+            raise ValueError("Taken on must be between 1900 and 2100")
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    for f in files:
+        if os.path.splitext(f.filename)[1].lower() not in media.IMAGES:
+            return jsonify({"error": f"{f.filename}: only JPEG, PNG, WebP or GIF images"}), 400
     caption = request.form.get("caption", "").strip()[:500]
     with db.tx() as conn:
-        beds, species = _tags(conn, request.form)
+        try:
+            tags = _tags(conn, request.form)
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
         for f in files:
             ext = os.path.splitext(f.filename)[1].lower()
             if ext not in media.IMAGES:
                 return jsonify({"error": f"{f.filename}: only JPEG, PNG, WebP or GIF images"}), 400
+            taken_on = override or capture_date(f)
+            taken_on = taken_on if in_calendar(taken_on) else None
             asset = media.save_upload(conn, f, f"{PHOTOS_DIR}/{uuid.uuid4().hex[:12]}{ext}")
             photo_id = str(uuid.uuid4())
             conn.execute("INSERT INTO garden.photos (photo_id, asset_id, taken_on, caption) VALUES (%s, %s, %s, %s)",
                          (photo_id, asset, taken_on, caption))
-            _retag(conn, photo_id, beds, species)
+            _retag(conn, photo_id, *tags)
         return jsonify(overview(conn)), 201
 
 
@@ -323,17 +348,24 @@ def photo_update_v1(photo_id):
     with db.tx() as conn:
         if not conn.execute("SELECT 1 FROM garden.photos WHERE photo_id = %s", (photo_id,)).fetchone():
             return jsonify({"error": "Not found"}), 404
+        # Validate before any writes: rejected edits cannot partially change a photo.
+        try:
+            day = date_override(data.get("taken_on"))
+            if day and not in_calendar(day):
+                raise ValueError("Taken on must be between 1900 and 2100")
+            keys = ("beds", "species", "plantings", "tags")
+            changed_tags = any(key in data for key in keys)
+            if changed_tags:
+                current = next(p for p in overview(conn)["photos"] if p["id"] == photo_id)
+                tags = _tags(conn, {key: data.get(key, current[key]) for key in keys})
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
         if "caption" in data:
             conn.execute("UPDATE garden.photos SET caption = %s WHERE photo_id = %s", (str(data["caption"] or "").strip()[:500], photo_id))
         if "taken_on" in data:
-            day = parse_date(data["taken_on"]) if data["taken_on"] else None
-            if data["taken_on"] and not in_calendar(day):
-                return jsonify({"error": "taken_on must be a date (YYYY-MM-DD)"}), 400
             conn.execute("UPDATE garden.photos SET taken_on = %s WHERE photo_id = %s", (day, photo_id))
-        if "beds" in data or "species" in data:
-            current = next(p for p in overview(conn)["photos"] if p["id"] == photo_id)
-            beds, species = _tags(conn, {"beds": data.get("beds", current["beds"]), "species": data.get("species", current["species"])})
-            _retag(conn, photo_id, beds, species)
+        if changed_tags:
+            _retag(conn, photo_id, *tags)
         return jsonify(next(p for p in overview(conn)["photos"] if p["id"] == photo_id))
 
 
