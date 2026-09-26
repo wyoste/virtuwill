@@ -147,6 +147,51 @@ class CityListTests(unittest.TestCase):
 
 
 @needs_database
+class PlantSpotTests(unittest.TestCase):
+    """Every plant has a spot: its row (A, B, … from the top) and seat (1, 2, … from the left), kept for life."""
+
+    def setUp(self):
+        fresh_database()
+        self.owner = admin_client(app)
+
+    def doc(self, beds):
+        return {"calibration": {}, "beds": [{"id": bed_id, "name": bed_id, "shape": {"type": "rectangle", "width": 6, "height": 4},
+                                             "transform": {"x": 0, "y": 0, "rotation": 0},
+                                             "plants": [{"id": pid, "speciesId": "canna", "displayName": "Canna", "gi": gi, "gj": gj}
+                                                        for pid, gi, gj in plants]} for bed_id, plants in beds.items()]}
+
+    def save(self, beds):
+        from virtuwill import garden
+        with db.tx() as conn:
+            garden.save(conn, self.doc(beds))
+
+    def spots(self):
+        return {p["id"]: p["spot"] for p in self.owner.get("/api/v1/garden").json["plantings"]}
+
+    def test_rows_and_seats_are_given_once_and_kept(self):
+        # Two rows: three plants along the top (one a little lower but still in that row), one lower down.
+        self.save({"bed-s": [("t-a", 8, 2), ("t-b", 2, 2), ("t-c", 14, 3), ("t-d", 4, 10)]})
+        self.assertEqual(self.spots(), {"t-b": "A1", "t-a": "A2", "t-c": "A3", "t-d": "B1"})
+        # A new plant at the far left of row A takes the next seat; nobody is renumbered. One between the rows starts row C.
+        self.save({"bed-s": [("t-a", 8, 2), ("t-b", 2, 2), ("t-c", 14, 3), ("t-d", 4, 10), ("t-e", 0, 2), ("t-f", 6, 6)]})
+        self.assertEqual(self.spots(), {"t-b": "A1", "t-a": "A2", "t-c": "A3", "t-d": "B1", "t-e": "A4", "t-f": "C1"})
+        # Moving a plant within its bed keeps its spot.
+        self.save({"bed-s": [("t-a", 20, 12), ("t-b", 2, 2), ("t-c", 14, 3), ("t-d", 4, 10), ("t-e", 0, 2), ("t-f", 6, 6)]})
+        self.assertEqual(self.spots()["t-a"], "A2")
+        # Moving it to another bed gives it a spot there.
+        self.save({"bed-s": [("t-b", 2, 2), ("t-c", 14, 3), ("t-d", 4, 10), ("t-e", 0, 2), ("t-f", 6, 6)], "bed-u": [("t-a", 3, 3)]})
+        self.assertEqual(self.spots()["t-a"], "A1")
+        with db.tx() as conn:
+            rows = conn.execute("SELECT bed_id, label FROM garden.bed_rows ORDER BY bed_id, label").fetchall()
+        self.assertEqual([(r["bed_id"], r["label"]) for r in rows], [("bed-s", "A"), ("bed-s", "B"), ("bed-s", "C"), ("bed-u", "A")])
+        # The planner sees each plant's spot and the rows to draw.
+        planner = self.owner.get("/api/garden").json
+        bed = next(b for b in planner["beds"] if b["id"] == "bed-s")
+        self.assertEqual(next(p for p in bed["plants"] if p["id"] == "t-e")["spot"], "A4")
+        self.assertEqual([r["label"] for r in bed["rows"]], ["A", "C", "B"])       # top to bottom by where they run
+
+
+@needs_database
 class TravelStopTests(unittest.TestCase):
     def setUp(self):
         fresh_database()

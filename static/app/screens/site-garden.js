@@ -15,10 +15,11 @@ export async function render(view, ctx) {
 }
 
 // Toggle chips for choosing beds or plant types; the Set holds the chosen ids.
-function chips(options, chosen, label) {
+function chips(options, chosen, label, { hashtags = true } = {}) {
   const search = options.length > 12 ? h('input', { class: 'ws-input ws-chip-search', type: 'search', placeholder: 'Find a plant type', 'aria-label': 'Find a plant type', 'data-untracked': '' }) : null;
   const row = h('div', { class: 'ws-chips', role: 'group', 'aria-label': label }, options.map(o => {
-    const b = h('button', { type: 'button', class: 'ws-chip', 'aria-pressed': String(chosen.has(o.id)), 'data-label': o.label.toLowerCase() }, '#' + VW.GardenTags.normalize(o.label));
+    const b = h('button', { type: 'button', class: 'ws-chip', 'aria-pressed': String(chosen.has(o.id)), 'data-label': o.label.toLowerCase() },
+      hashtags ? '#' + VW.GardenTags.normalize(o.label) : o.label);
     b.onclick = () => { chosen.has(o.id) ? chosen.delete(o.id) : chosen.add(o.id); b.setAttribute('aria-pressed', String(chosen.has(o.id))); };
     return b;
   }));
@@ -30,16 +31,19 @@ function chips(options, chosen, label) {
 
 const bedOptions = d => d.beds.map(b => ({ id: b.id, label: b.name }));
 const plantOptions = d => d.species.map(s => ({ id: s.id, label: s.name }));
+// Each plant by its bed and spot (row and seat): "Canna · Bed 1 B2".
+const plantingOptions = d => (d.plantings || []).map(p => ({ id: p.id,
+  label: `${p.name} · ${d.beds.find(b => b.id === p.bed)?.name || ''} ${p.spot || ''}`.trim() }));
 
 function photoFields(d, origin, onchange) {
   const beds = new Set(origin ? [origin.bed] : []), plants = new Set(origin ? [origin.species] : []);
   const plantings = new Set(origin ? [origin.id] : []), tags = VW.GardenTags.editor();
   const picker = photoPicker({ onchange, hint: 'or drop them here. Each photo keeps its original capture date when available.' });
   const form = h('form', { class: 'ws-form', onsubmit: e => e.preventDefault() },
-    origin ? h('p', { class: 'ws-note wide' }, `Photos of ${origin.name}`) : null,
+    origin ? h('p', { class: 'ws-note wide' }, `Photos of ${origin.name}${origin.spot ? ' at ' + origin.spot : ''}`) : null,
     h('div', { class: 'ws-field wide' }, picker.el),
     chips(bedOptions(d), beds, 'Beds — choose any that apply'), chips(plantOptions(d), plants, 'Plant types'),
-    chips((d.plantings || []).map(p => ({ id: p.id, label: p.name })), plantings, 'Individual plants'),
+    chips(plantingOptions(d), plantings, 'Individual plants (by bed and spot)', { hashtags: false }),
     tags.el, field('Caption', 'caption'), field('Capture date override (optional)', 'taken_on', { kind: 'date', value: '' }),
     h('p', { class: 'ws-note wide' }, 'Leave the date blank to use each photo’s original metadata. Photos without capture metadata stay undated. An override applies to every selected photo.'));
   function payload() {
@@ -60,7 +64,7 @@ async function uploadForPlant(id) {
   const origin = (d.plantings || []).find(p => p.id === id);
   if (!origin) { toast('Save this plant in the planner first.', 'error'); return; }
   const fields = photoFields(d, origin), error = h('p', { role: 'alert' });
-  const box = h('dialog', { class: 'ws-dialog' }, h('h2', {}, `Photos of ${origin.name}`), fields.form, error);
+  const box = h('dialog', { class: 'ws-dialog' }, h('h2', {}, `Photos of ${origin.name}${origin.spot ? ' · ' + origin.spot : ''}`), fields.form, error);
   const upload = h('button', { type: 'button', class: 'btn primary', onclick: async () => {
     upload.disabled = true; error.textContent = '';
     try {
@@ -98,9 +102,14 @@ function photos(view, d, ctx, redraw) {
     card('Add photos', form),
     card('Beds', h('div', { class: 'ws-garden-beds' }, d.beds.map(b => h('section', { class: 'ws-garden-bed' },
       h('h3', {}, b.name), h('p', { class: 'ws-note' }, `${b.plants} plants · ${b.photos} photos`),
-      h('div', { class: 'garden-tags' }, (d.plantings || []).filter(p => p.bed === b.id).map(p =>
-        h('button', { type: 'button', class: 'garden-tag', title: `Add photos of ${p.name}`, onclick: () => run(null, () => uploadForPlant(p.id)) },
-          VW.PlantArt.thumbnail(p.species), p.name, ' · Add photos'))))))),
+      // One line per plant type; each of its plants by spot, to add photos of that plant.
+      h('div', { class: 'ws-bed-types' }, [...new Set((d.plantings || []).filter(p => p.bed === b.id).map(p => p.species))].map(sp => {
+        const plants = d.plantings.filter(p => p.bed === b.id && p.species === sp);
+        return h('div', { class: 'ws-bed-type' }, VW.PlantArt.thumbnail(sp),
+          h('span', { class: 'garden-tag' }, '#' + VW.GardenTags.normalize(plants[0].name)),
+          h('span', { class: 'ws-spots' }, plants.map(p => h('button', { type: 'button', class: 'ws-spot', title: `Add photos of ${p.name} at ${p.spot}`,
+            'aria-label': `Add photos of ${p.name} at ${p.spot}`, onclick: () => run(null, () => uploadForPlant(p.id)) }, p.spot || '?'))));
+      })))))),
     card(h('span', {}, `Photos (${shown.length}${shown.length !== d.photos.length ? ' of ' + d.photos.length : ''})`),
       h('div', { class: 'ws-filters', style: { marginBottom: '12px' } }, filter('bed', 'Bed', bedOptions(d), byBed), filter('plant', 'Plant type', plantOptions(d), byPlant)),
       shown.length ? h('div', { class: 'ws-photo-grid' }, shown.map(p => h('button', { type: 'button', class: 'ws-photo', onclick: () => editPhoto(p, d, redraw) },
@@ -118,7 +127,7 @@ async function editPhoto(p, d, redraw) {
     h('img', { src: p.url, alt: '', class: 'ws-photo-preview' }),
     field('Caption', 'caption', { value: p.caption, wide: true }), field('Taken on', 'taken_on', { kind: 'date', value: p.date || '' }),
     chips(bedOptions(d), beds, 'Beds — choose any that apply'), chips(plantOptions(d), plants, 'Plant types'),
-    chips((d.plantings || []).map(p => ({ id: p.id, label: p.name })), plantings, 'Individual plants'), tags.el);
+    chips(plantingOptions(d), plantings, 'Individual plants (by bed and spot)', { hashtags: false }), tags.el);
   const choice = await dialog('Photo', form, [['Delete', 'delete'], ['Cancel', null], ['Save', true]]);
   if (choice === 'delete') {
     if (!(await confirmDelete('this photo'))) return;

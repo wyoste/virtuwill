@@ -105,26 +105,58 @@ window.VW.GardenPage = (() => {
       ...p.species.map(id => ({ kind: 'plant', id, label: plant(id)?.name || id })),
       ...(p.tags || []).map(id => ({ kind: 'tag', id, label: id }))];
   }
-  function plantDialog(title, speciesId, photos, plants, origin) {
+  // A bed's plants as a seating chart: rows A, B, C… from the top, plants numbered along each row, so every
+  // plant has its own spot (B4 = row B, 4th plant). The ones being looked at are lit and can be opened.
+  function bedChart(bedId, lit) {
+    const rows = new Map();
+    for (const p of (data.plantings || []).filter(p => p.bed === bedId && p.spot)) {
+      const letter = p.spot.replace(/\d+$/, '');
+      rows.set(letter, [...(rows.get(letter) || []), p]);
+    }
+    if (!rows.size) return null;
+    return h('div', { class: 'gd-chart', role: 'group', 'aria-label': `${bedName(bedId)}: where each plant grows` },
+      [...rows].map(([letter, plants]) => h('div', { class: 'gd-chart-row' },
+        h('span', { class: 'gd-chart-label', 'aria-hidden': 'true' }, letter),
+        plants.map(p => lit.has(p.id)
+          ? h('button', { class: 'gd-chart-spot on', title: `${p.spot} · ${p.name}`, 'aria-label': `${p.name} at ${p.spot}`,
+              onclick: () => showPlant(p.id) }, p.spot)
+          : h('span', { class: 'gd-chart-spot', title: `${p.spot} · ${p.name}` }, p.spot)))));
+  }
+
+  function plantDialog({ title, subtitle, species, bed, lit, photos, origin }) {
     document.getElementById('gd-plant-detail')?.remove();
     const box = h('dialog', { id: 'gd-plant-detail', class: 'gd-plant-detail', 'aria-label': title });
     const owner = typeof FLASK_SESSION !== 'undefined' && FLASK_SESSION.adminLoggedIn;
-    box.append(h('button', { class: 'site-btn', onclick: () => box.close(), 'aria-label': 'Close plant details' }, 'Close'),
-      VW.PlantArt.thumbnail(speciesId), h('h2', {}, title),
-      h('div', { class: 'garden-tags' }, plants.map(p => VW.GardenTags.pill(p.name, () => { box.close(); showPlant(p.id); }))),
-      owner && origin ? h('a', { class: 'site-btn', href: '/app/site/garden?planting=' + encodeURIComponent(origin) }, 'Add photos in workspace') : h('span'),
+    const toGallery = id => { box.close(); filter = { bed: '', plant: id, tag: '' };
+      const g = document.getElementById('gd-photos'); g.redraw(); g.scrollIntoView({ behavior: 'smooth' }); };
+    box.append(
+      h('div', { class: 'gd-plant-hd' }, VW.PlantArt.thumbnail(species[0]),
+        h('div', {}, h('h2', {}, title), subtitle ? h('p', { class: 'site-muted' }, subtitle) : null),
+        h('button', { class: 'site-btn site-btn-ghost gd-plant-close', onclick: () => box.close(), 'aria-label': 'Close plant details' }, '×')),
+      // One pill per plant type, however many of it grow here.
+      h('div', { class: 'garden-tags' }, [...new Set(species)].map(id =>
+        VW.GardenTags.pill(plant(id)?.name || id, plant(id)?.photos ? () => toGallery(id) : null))),
+      (bed && bedChart(bed, lit)) || '',
+      owner && origin ? h('a', { class: 'site-btn', href: '/app/site/garden?planting=' + encodeURIComponent(origin) }, 'Add photos in workspace') : '',
       photos.length ? h('div', { class: 'gd-grid' }, photos.map((p, i) => h('button', { class: 'gd-photo', onclick: () => { box.close(); open(photos, i); } },
-        h('img', { src: p.url, alt: p.caption || title, loading: 'lazy' }), h('span', {}, p.date || 'Capture date unknown'))))
-        : h('p', {}, 'No photos tagged to this plant yet.'));
+        h('img', { src: p.url, alt: p.caption || title, loading: 'lazy' }), h('span', {}, p.caption || p.date || 'Capture date unknown'))))
+        : h('p', { class: 'site-muted' }, 'No photos tagged to this plant yet.'));
     box.addEventListener('close', () => box.remove()); document.body.append(box); box.showModal();
   }
   function showPlant(id) {
     const p = (data?.plantings || []).find(p => p.id === id);
-    if (p) plantDialog(`${p.name} · ${bedName(p.bed)}`, p.species, data.photos.filter(ph => (ph.plantings || []).includes(id)), [], id);
+    if (!p) return;
+    const [, row, seat] = /^([A-Z]+)(\d+)$/.exec(p.spot || '') || [];
+    plantDialog({ title: p.spot ? `${p.name} · ${p.spot}` : p.name, subtitle: row ? `${bedName(p.bed)}, row ${row}, plant ${seat}` : bedName(p.bed),
+                  species: [p.species], bed: p.bed, lit: new Set([id]),
+                  photos: data.photos.filter(ph => (ph.plantings || []).includes(id)), origin: id });
   }
   function showSpecies(id, bed) {
-    plantDialog(plant(id)?.name || id, id, data.photos.filter(p => p.species.includes(id) && p.beds.includes(bed)),
-      (data.plantings || []).filter(p => p.species === id && p.bed === bed));
+    const plants = (data.plantings || []).filter(p => p.species === id && p.bed === bed);
+    plantDialog({ title: plant(id)?.name || id,
+                  subtitle: `${bedName(bed)} · ${plants.length} plant${plants.length === 1 ? '' : 's'}${plants.some(p => p.spot) ? ' at ' + plants.map(p => p.spot).filter(Boolean).join(', ') : ''}`,
+                  species: [id], bed, lit: new Set(plants.map(p => p.id)),
+                  photos: data.photos.filter(p => p.species.includes(id) && p.beds.includes(bed)) });
   }
   window.addEventListener('garden:plant-selected', e => showPlant(e.detail.plantingId));
 

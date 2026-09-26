@@ -34,7 +34,8 @@ def _ensure_species(conn, species_id, display_name):
 
 def _plant(p):
     plant = {"id": p["planting_id"], "speciesId": p["species_id"], "displayName": p["display_name"],
-             "gi": p["grid_i"], "gj": p["grid_j"], "health": p["health"], "notes": p["notes"]}
+             "gi": p["grid_i"], "gj": p["grid_j"], "health": p["health"], "notes": p["notes"],
+             "spot": p["spot"] or ""}          # its row and seat, e.g. B4 (read-only: given when saved)
     if p["radius_ft"] is not None:
         plant["radiusFt"] = number(p["radius_ft"])
     if p["age_years"] is not None:
@@ -54,13 +55,17 @@ def load(conn):
             shape["radius"] = number(b["radius_ft"])
         else:
             shape["vertices"] = b["vertices"]
-        plants = [_plant(p) for p in conn.execute("""SELECT p.* FROM garden.plantings p
+        plants = [_plant(p) for p in conn.execute("""SELECT p.*, r.label || p.seat AS spot FROM garden.plantings p
+                                           LEFT JOIN garden.bed_rows r USING (row_id)
                                            LEFT JOIN garden.seasons s ON s.season_id = p.season_id
                                            WHERE p.bed_id = %s AND p.removed_on IS NULL AND (s.is_active OR p.season_id IS NULL)
                                            ORDER BY p.planting_id""", (b["bed_id"],))]
         beds.append({"id": b["bed_id"], "name": b["name"], "color": b["color"], "shape": shape,
                      "transform": {"x": number(b["x_ft"]), "y": number(b["y_ft"]), "rotation": number(b["rotation_deg"])},
-                     "plants": plants})
+                     "plants": plants,
+                     # The rows laid over the bed's grid, for the planner's guides.
+                     "rows": [{"label": r["label"], "gj": r["grid_j"]} for r in conn.execute(
+                         "SELECT label, grid_j FROM garden.bed_rows WHERE bed_id = %s ORDER BY grid_j", (b["bed_id"],))]})
     return {"calibration": {"feetPerPixel": number(settings["feet_per_pixel"]) if settings else None},
             "backgroundImageUrl": media.url(settings["path"]) if settings and settings["path"] else "/static/garden_illustrated.png",
             "beds": beds}
@@ -118,6 +123,7 @@ def save(conn, doc):
             if not previous or previous["health"] != health:
                 conn.execute("""INSERT INTO garden.plant_observations (planting_id, observed_on, health)
                                 VALUES (%s, current_date, %s)""", (str(p["id"]), health))
+    assign_spots(conn)
 
 
 def photos(conn):
@@ -211,6 +217,57 @@ DEFAULT_TEXT = {
 }
 
 
+ROW_GAP = 2                # grid steps (half a foot): plants closer than this, top to bottom, share a row
+
+
+def row_letters(index):
+    """0 → A, 25 → Z, 26 → AA."""
+    name = ""
+    index += 1
+    while index:
+        index, rest = divmod(index - 1, 26)
+        name = chr(65 + rest) + name
+    return name
+
+
+def assign_spots(conn):
+    """Give every plant without one a spot: its row and seat (see db/schema/103). A bed with no rows yet is laid
+    out whole: rows lettered from the top, seats numbered from the left. After that, a new plant joins the nearest
+    row by height (or starts a row with the next letter) and takes the row's next seat. Spots never change."""
+    conn.execute("""UPDATE garden.plantings p SET row_id = NULL, seat = NULL FROM garden.bed_rows r
+                    WHERE p.row_id = r.row_id AND r.bed_id <> p.bed_id""")        # moved to another bed: a new spot there
+    pending = conn.execute("""SELECT planting_id AS id, bed_id AS bed, grid_i AS gi, grid_j AS gj FROM garden.plantings
+                              WHERE row_id IS NULL AND removed_on IS NULL ORDER BY bed_id, grid_j, grid_i, planting_id""").fetchall()
+    by_bed = {}
+    for p in pending:
+        by_bed.setdefault(p["bed"], []).append(p)
+    for bed, plants in by_bed.items():
+        rows = [dict(r) for r in conn.execute("""SELECT r.row_id, r.label, r.grid_j, COALESCE(MAX(p.seat), 0) AS seats
+                                                 FROM garden.bed_rows r LEFT JOIN garden.plantings p USING (row_id)
+                                                 WHERE r.bed_id = %s GROUP BY r.row_id ORDER BY r.grid_j""", (bed,))]
+        fresh = not rows
+        placed = {}
+        for p in plants:
+            near = min(rows, key=lambda r: abs(r["grid_j"] - p["gj"]), default=None)
+            if fresh:     # laying out a whole bed: rows run top to bottom, each started by its highest plant
+                near = rows[-1] if rows and p["gj"] - rows[-1]["grid_j"] <= ROW_GAP else None
+            elif near and abs(near["grid_j"] - p["gj"]) > ROW_GAP:
+                near = None
+            if near is None:
+                taken = {r["label"] for r in rows}
+                label = next(row_letters(i) for i in range(len(rows) + 1) if row_letters(i) not in taken)
+                near = dict(conn.execute("""INSERT INTO garden.bed_rows (bed_id, label, grid_j) VALUES (%s, %s, %s)
+                                            RETURNING row_id, label, grid_j""", (bed, label, p["gj"])).fetchone(), seats=0)
+                rows.append(near)
+            placed.setdefault(near["row_id"], []).append(p)
+        for row in rows:
+            # Seats along the row from the left; new plants follow the row's existing seats.
+            for p in sorted(placed.get(row["row_id"], []), key=lambda p: (p["gi"], p["gj"], p["id"])):
+                row["seats"] += 1
+                conn.execute("UPDATE garden.plantings SET row_id = %s, seat = %s WHERE planting_id = %s",
+                             (row["row_id"], row["seats"], p["id"]))
+
+
 def overview(conn):
     """Everything the public Garden page shows: beds with what grows in them, plant types, tagged photos, page text."""
     beds = [dict(r) for r in conn.execute("""
@@ -263,8 +320,11 @@ def overview(conn):
         sp["photos"] = counts["species"].get(sp["id"], 0)
     text = {r["text_key"].split(".", 1)[1]: r["value"] for r in conn.execute(
         "SELECT text_key, value FROM content.site_text WHERE text_key IN ('garden.hero', 'garden.gallery_note')")}
-    plantings = [dict(r) for r in conn.execute("""SELECT planting_id AS id, bed_id AS bed, species_id AS species,
-                    display_name AS name FROM garden.plantings WHERE removed_on IS NULL ORDER BY display_name, planting_id""")]
+    plantings = [dict(r) for r in conn.execute("""
+        SELECT p.planting_id AS id, p.bed_id AS bed, p.species_id AS species, p.display_name AS name,
+               r.label AS row, p.seat, COALESCE(r.label || p.seat, '') AS spot
+        FROM garden.plantings p LEFT JOIN garden.bed_rows r USING (row_id)
+        WHERE p.removed_on IS NULL ORDER BY p.bed_id, r.grid_j NULLS LAST, p.seat, p.planting_id""")]
     return {"beds": beds, "species": species, "plantings": plantings, "photos": photos_out,
             "text": {"philosophy": text.get("hero", DEFAULT_TEXT["hero"]), "note": text.get("gallery_note", DEFAULT_TEXT["gallery_note"])},
             "totals": {"beds": len(beds), "plants": sum(b["plants"] for b in beds),

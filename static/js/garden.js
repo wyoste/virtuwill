@@ -327,7 +327,11 @@ window.VW.Garden = (() => {
       });
       const d = await r.json();
       window.toast?.(d.ok ? '💾 Garden saved' : 'Save failed', d.ok?'success':'error');
-      if (d.ok) { _savedSnapshot = saving; GDN?.Viewer?.init?.(); _renderBedList(); }
+      if (d.ok) {
+        _savedSnapshot = saving; GDN?.Viewer?.init?.(); _renderBedList();
+        // New plants get their row and seat when saved: fetch them, unless something changed meanwhile.
+        if (_snapshot() === saving) _loadData().then(() => { _savedSnapshot = _snapshot(); _renderBedList(); render(); });
+      }
     } catch {
       window.toast?.('Save failed', 'error');
     }
@@ -492,6 +496,23 @@ window.VW.Garden = (() => {
           ctx.strokeStyle='rgba(47,122,75,0.9)'; ctx.lineWidth=1.5; ctx.stroke();
         }
       }
+    });
+
+    // 4b. Rows laid over the grid: a plant's spot (B4) is its row and its seat along it.
+    const rowBox = polyBounds(shapeLocalVertices(bed.shape));
+    const rowOrigin = bedGridOrigin(bed);
+    (bed.rows || []).forEach(row => {
+      const ly = rowOrigin.y + row.gj * GRID;
+      const wa = localToWorld(rowBox.minX, ly, bed), wb = localToWorld(rowBox.maxX, ly, bed);
+      const a = worldToScreen(wa.x, wa.y, _cam), b = worldToScreen(wb.x, wb.y, _cam);
+      ctx.save();
+      ctx.setLineDash([6, 5]); ctx.strokeStyle = 'rgba(227,176,64,0.75)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = 'bold 11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(27,63,39,0.85)'; ctx.fillRect(a.x - 20, a.y - 8, 16, 16);
+      ctx.fillStyle = '#F4EBD5'; ctx.textAlign = 'center'; ctx.fillText(row.label, a.x - 12, a.y);
+      ctx.restore();
     });
 
     // 5. Plants — non-hovered first, hovered last so label is always on top
@@ -1265,7 +1286,7 @@ window.VW.Garden = (() => {
             <div class="gdn-plant-health">
               <span class="gdn-art-slot"></span></div>
             <div style="flex:1;min-width:0">
-              <div class="gdn-plant-name">${p.displayName}</div>
+              <div class="gdn-plant-name">${p.displayName}${p.spot ? ` <span class="gdn-plant-spot" title="Row ${p.spot.replace(/\d+$/, '')}, seat ${p.spot.match(/\d+$/)[0]}">${p.spot}</span>` : ' <span class="gdn-plant-spot new" title="Gets its spot when saved">new</span>'}</div>
               <div class="gdn-plant-meta">${h.icon} ${h.label}</div>
               ${isSel ? `<button type="button" class="gdn-draw-btn" onclick="event.stopPropagation();gdn.uploadPlantPhoto('${p.id}')">Add photos</button>` : ''}
             </div>
