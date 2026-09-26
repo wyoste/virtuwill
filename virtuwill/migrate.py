@@ -44,6 +44,7 @@ def run_pending(conn):
     music.sync_bundled(conn)
     if conn.execute("INSERT INTO virtuwill.migrations (name) VALUES ('relational_v1') ON CONFLICT DO NOTHING").rowcount:
         move_to_relational(conn)
+    travel.fill_codes(conn)
 
 
 # ── The one-time move ────────────────────────────────────────────────────────

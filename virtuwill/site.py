@@ -12,7 +12,7 @@ import uuid
 
 from flask import Blueprint, jsonify, request
 
-from . import content, db, media, travel
+from . import content, db, geo, media, travel
 from .auth import admin_required, is_admin
 
 bp = Blueprint("site", __name__)
@@ -166,7 +166,22 @@ def diagnostics():
 @bp.route("/api/v1/travel")
 def travel_v1():
     with db.tx() as conn:
-        return jsonify({"places": travel.pins(conn), "visited": travel.visited(conn)})
+        return jsonify({"places": travel.pins(conn), "visited": travel.visited(conn, detail=is_admin())})
+
+
+@bp.route("/api/v1/travel/regions")
+@admin_required
+def travel_regions_v1():
+    """A country's states or regions, for the stop picker."""
+    return jsonify(geo.regions(request.args.get("country", "")))
+
+
+@bp.route("/api/v1/travel/cities")
+@admin_required
+def travel_cities_v1():
+    """Cities matching ?q= in ?country= (and ?region=), for the stop picker."""
+    return jsonify(geo.search(request.args.get("q", "")[:80], request.args.get("country", ""),
+                              request.args.get("region") or None, limit=25))
 
 
 @bp.route("/api/v1/travel/places", methods=["PUT"])
