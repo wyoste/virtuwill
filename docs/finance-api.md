@@ -129,3 +129,39 @@ A prompt for a daily routine (with the five variables above in its environment):
 > and load it with `python scripts/finance_feed.py push today.json`. If the
 > response is 400, fix what `error` names and retry once. Report the counts from
 > `report`.
+
+## 5. Plaid as a Databricks job
+
+`jobs/plaid_to_virtuwill.py` replaces the CSV notebook's posting step. Each run
+asks Plaid only for what changed since the last run (`/transactions/sync` with a
+saved cursor), maps it onto the finance model and posts it here. It saves the
+cursor only once the app has taken the data, so a failed run is picked up by the
+next. Balances come with the sync response, so no billed `/accounts/balance/get`
+calls unless you pass `--live-balances`.
+
+How Plaid maps onto the model:
+
+| Plaid | VirtuWill |
+|---|---|
+| `type` / `subtype` | account type: checking, savings, credit_card, loan, brokerage, retirement, other |
+| `mask` | the account's last four digits. Accounts without a four-digit mask are skipped and named in the run's output; add them to `PLAID_MASKS`. |
+| `balances.current` / `available` | a `reported` balance (for cards, the amount owed), plus `available` for bank accounts |
+| `amount` | the same sign convention: positive means money out |
+| `personal_finance_category` | kind (card payment, transfer, income, refund, expense) and a category (Dining, Groceries, Shopping, Travel…). Anything unmapped goes to Review. |
+| `pending_transaction_id` | a settled charge takes its pending twin's id, so it updates that row instead of adding a second one |
+| `date` / `authorized_date` | `posted_on` / `transacted_on` |
+
+A pending charge that Plaid drops without ever settling stays in the app marked
+pending; the run's output counts these as `removed_by_plaid`.
+
+Setting it up:
+
+1. **Secrets:** create a secret scope called `virtuwill` and add these keys:
+   - `plaid-client-id`, `plaid-secret`, `plaid-env`
+   - `plaid-access-tokens`: JSON such as `{"Chase": "access-production-…", "Amex": "…"}`, taken from the setup notebook's `items` table
+   - `virtuwill-url`, `virtuwill-token`
+   - `databricks-host`, `databricks-client-id`, `databricks-client-secret`
+2. **Cursor store:** create a volume for the cursors, e.g. `workspace.virtuwill.plaid`. The job writes `state.json` there. To keep it elsewhere, set `PLAID_STATE_PATH`.
+3. **Job:** add a Python script task that points at `jobs/plaid_to_virtuwill.py` from this repository, on serverless compute, with `plaid-python` as a dependency.
+4. **Schedule:** once a day. Start with a run using `--dry-run` as a parameter to see the counts without loading anything.
+
