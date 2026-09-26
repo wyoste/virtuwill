@@ -411,24 +411,101 @@ window.VW.Travel = (() => {
     _markers[pin.id] = marker;
   }
 
+  // A pin shows a small tooltip on hover; a click opens the stop's own window.
   function _bindPopup(marker, pin) {
     const t = PIN_TYPES[pin.type] || PIN_TYPES.visited;
+    const where = [pin.city && pin.city !== pin.name ? pin.city : null].filter(Boolean).join('');
+    marker.unbindTooltip();
+    marker.bindTooltip('<strong>' + _esc(pin.name) + '</strong>' + (where ? '<span>' + _esc(where) + '</span>' : '')
+      + '<em>' + t.icon + ' ' + t.label + (_photoItems(pin).length ? ' · ' + _photoItems(pin).length + ' photo' + (_photoItems(pin).length === 1 ? '' : 's') : '') + '</em>',
+      { direction: 'top', offset: [0, -30], className: 'tv-pin-tip', opacity: 1 });
+    marker.off('click');
+    marker.on('click', () => openStop(pin.id));
+  }
+
+  const _photoItems = pin => pin.photoItems || (pin.photos || []).map(url => ({ url, caption: '' }));
+  let _galleryView = (() => { try { return localStorage.getItem('vw_travel_gallery') || 'grid'; } catch { return 'grid'; } })();
+
+  // ── A stop's window: where it is, when, the story, and its photos ──────────
+  function openStop(id) {
+    const pin = _pins.find(p => String(p.id) === String(id));
+    if (!pin) return;
+    const h = window.VW.h;
+    const t = PIN_TYPES[pin.type] || PIN_TYPES.visited;
+    const items = _photoItems(pin);
     const admin = window.VW?.Auth?.isAdmin?.() || false;
-    // Photos attached in the workspace, each with its caption.
-    const items = pin.photoItems || (pin.photos || []).map(url => ({ url, caption: '' }));
-    const photos = items.map(p => '<figure style="margin:6px 0 0"><img src="' + _esc(p.url) + '" alt="' + _esc(p.caption || pin.name) + '" loading="lazy" style="width:100%;border-radius:4px;object-fit:cover;max-height:140px;display:block"/>'
-      + (p.caption ? '<figcaption style="font-size:11px;color:#555;margin-top:2px">' + _esc(p.caption) + '</figcaption>' : '') + '</figure>').join('');
-    const adminRow = admin
-      ? '<div style="margin-top:8px;display:flex;gap:12px;align-items:center"><a href="#" onclick="VW.Travel.removePin(' + pin.id + ');return false;" style="font-size:11px;color:#e84235">Remove</a><span style="font-size:10px;color:#aaa">Drag to reposition</span></div>'
-      : '';
-    marker.bindPopup(
-      '<div style="min-width:180px;font-family:Inter,sans-serif">'
-      + '<div style="font-weight:700;font-size:14px;margin-bottom:2px">' + _esc(pin.name) + '</div>'
-      + '<div style="font-size:11px;color:#666;margin-bottom:6px">' + t.icon + ' ' + t.label + ' &middot; ' + _esc(pin.city) + '</div>'
-      + (pin.note ? '<div style="font-size:12px;color:#444;margin-bottom:6px">' + _esc(pin.note) + '</div>' : '')
-      + photos + adminRow + '</div>',
-      { maxWidth:240 }
-    );
+    document.getElementById('tv-stop')?.remove();
+    const place = [pin.city && pin.city !== pin.name ? pin.city : null, pin.region_name && !String(pin.city || '').includes(pin.region_name) ? pin.region_name : null]
+      .filter(Boolean).join(' · ');
+    const when = pin.visited ? new Date(pin.visited + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+    const facts = [
+      ['Where', [place || pin.city, pin.country ? _flag(pin.country) : ''].filter(Boolean).join(' ')],
+      [pin.type === 'wishlist' ? 'Hoping to go' : pin.type === 'recommend' ? 'Recommended' : 'Visited', when || (pin.type === 'visited' ? 'Date not set' : '')],
+      ['Coordinates', `${Number(pin.lat).toFixed(4)}, ${Number(pin.lng).toFixed(4)}`],
+    ].filter(([, v]) => v);
+
+    const gallery = h('div', { class: 'tv-gallery' });
+    const viewer = h('div', { class: 'tv-viewer', hidden: true, role: 'dialog', 'aria-label': 'Photo' });
+    const showPhoto = i => {
+      const p = items[i];
+      viewer.replaceChildren(
+        h('img', { src: p.url, alt: p.caption || pin.name }),
+        h('div', { class: 'tv-viewer-bar' },
+          items.length > 1 ? h('button', { class: 'tv-viewer-btn', 'aria-label': 'Previous photo', onclick: () => showPhoto((i - 1 + items.length) % items.length) }, '‹') : null,
+          h('span', { class: 'tv-viewer-caption' }, p.caption || '', items.length > 1 ? h('small', {}, ` ${i + 1} / ${items.length}`) : null),
+          items.length > 1 ? h('button', { class: 'tv-viewer-btn', 'aria-label': 'Next photo', onclick: () => showPhoto((i + 1) % items.length) }, '›') : null,
+          h('button', { class: 'tv-viewer-btn', 'aria-label': 'Close photo', onclick: () => { viewer.hidden = true; } }, '×')));
+      viewer.hidden = false;
+      viewer.querySelector('.tv-viewer-btn:last-child').focus();
+    };
+    const drawGallery = () => {
+      gallery.className = 'tv-gallery tv-gallery-' + _galleryView;
+      gallery.replaceChildren(...items.map((p, i) => h('figure', {},
+        h('button', { class: 'tv-gallery-photo', 'aria-label': 'Open photo' + (p.caption ? ': ' + p.caption : ''), onclick: () => showPhoto(i) },
+          h('img', { src: p.url, alt: p.caption || pin.name, loading: 'lazy' })),
+        p.caption ? h('figcaption', {}, p.caption) : null)));
+      toggle.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === _galleryView)));
+    };
+    const toggle = h('div', { class: 'tv-view-toggle', role: 'group', 'aria-label': 'Show photos as' },
+      [['grid', '▦ Grid'], ['list', '☰ List']].map(([v, label]) => h('button', { 'data-view': v, onclick: () => {
+        _galleryView = v; try { localStorage.setItem('vw_travel_gallery', v); } catch { /* private mode */ }
+        drawGallery();
+      } }, label)));
+
+    const mini = h('div', { class: 'tv-stop-map', 'aria-label': 'Map of ' + pin.name });
+    let stopMap = null;
+    const box = h('dialog', { id: 'tv-stop', class: 'tv-stop', 'aria-labelledby': 'tv-stop-title' },
+      h('header', { class: 'tv-stop-hd' },
+        h('div', {}, h('div', { class: 'tv-stop-kind' }, t.icon + ' ' + t.label),
+          h('h2', { id: 'tv-stop-title' }, pin.name)),
+        h('button', { class: 'tv-stop-close', 'aria-label': 'Close', onclick: () => box.close() }, '×')),
+      h('div', { class: 'tv-stop-body' },
+        h('div', { class: 'tv-stop-top' },
+          h('dl', { class: 'tv-stop-facts' }, facts.map(([k, v]) => h('div', {}, h('dt', {}, k), h('dd', {}, v)))),
+          mini),
+        h('div', { class: 'tv-stop-links' },
+          h('button', { class: 'tv-link-btn', onclick: () => { box.close(); _map?.flyTo([pin.lat, pin.lng], 12, { duration: 1 }); } }, 'Show on the big map'),
+          h('a', { class: 'tv-link-btn', href: `https://www.openstreetmap.org/?mlat=${pin.lat}&mlon=${pin.lng}#map=14/${pin.lat}/${pin.lng}`, target: '_blank', rel: 'noopener' }, 'Open in OpenStreetMap ↗'),
+          h('a', { class: 'tv-link-btn', href: `https://www.google.com/maps/search/?api=1&query=${pin.lat},${pin.lng}`, target: '_blank', rel: 'noopener' }, 'Google Maps ↗')),
+        pin.note ? h('section', { class: 'tv-stop-story' }, String(pin.note).split(/\n{2,}/).map(par => h('p', {}, par))) : null,
+        h('section', { class: 'tv-stop-photos' },
+          h('div', { class: 'tv-stop-photos-hd' }, h('h3', {}, items.length ? `Photos (${items.length})` : 'Photos'), items.length ? toggle : null),
+          items.length ? gallery : h('p', { class: 'tv-empty' }, 'No photos from here yet.')),
+        admin ? h('div', { class: 'tv-stop-admin' }, h('a', { href: '/app/site/travel' }, 'Edit in the workspace'),
+          h('button', { class: 'tv-link-btn danger', onclick: () => { box.close(); removePin(pin.id); } }, 'Remove pin')) : null),
+      viewer);
+    box.addEventListener('keydown', e => { if (e.key === 'Escape' && !viewer.hidden) { e.preventDefault(); viewer.hidden = true; } });
+    box.addEventListener('close', () => { stopMap?.remove(); box.remove(); });
+    document.body.append(box);
+    if (items.length) drawGallery();
+    box.showModal();
+    // A small map of just this place, to look around it.
+    if (window.L) {
+      stopMap = L.map(mini, { center: [pin.lat, pin.lng], zoom: 12, scrollWheelZoom: false, attributionControl: false });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(stopMap);
+      L.marker([pin.lat, pin.lng], { icon: L.divIcon({ className: '', html: '<div class="tv-marker tv-marker-' + pin.type + '"><span class="tv-marker-icon">' + t.icon + '</span></div>', iconSize: [32, 32], iconAnchor: [16, 32] }) }).addTo(stopMap);
+      setTimeout(() => stopMap.invalidateSize(), 50);
+    }
   }
 
   function removePin(id) {
@@ -442,7 +519,7 @@ window.VW.Travel = (() => {
     const pin = _pins.find(p => p.id === id);
     if (!pin || !_map) return;
     _map.flyTo([pin.lat, pin.lng], 10, {animate:true, duration:1});
-    _markers[id]?.openPopup();
+    _map.once('moveend', () => openStop(id));
   }
 
   function _renderPinList() {
@@ -548,7 +625,7 @@ window.VW.Travel = (() => {
   // ── Public API ─────────────────────────────────────────────────────────────
   return {
     init, onAuthChange,
-    addPin, removePin, focusPin,
+    addPin, removePin, focusPin, openStop,
     uploadPhoto, embedGoogleMap,
     addVisitedPlace, removeVisited,
     toggleCountry, toggleState,

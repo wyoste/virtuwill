@@ -9,6 +9,7 @@
 # ── Core ────────────────────────────────────────────────────────────────────
 flask>=3.0.0
 python-dotenv>=1.0.0
+Pillow>=10.4.0  # garden capture-date metadata
 
 # ── Production server ────────────────────────────────────────────────────────
 gunicorn>=22.0.0

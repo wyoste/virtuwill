@@ -676,3 +676,42 @@ select.gdn-input option:checked,
   .gal-grid { grid-template-columns: 1fr; }
   .gdn-explorer-hd { flex-direction: column; align-items: flex-start; }
 }
+
+/* Shared botanical artwork: stable dimensions prevent layout shift. */
+.gdn-plant-thumbnail { width:36px; height:36px; object-fit:contain; flex:0 0 36px; vertical-align:middle; }
+.gdn-plant-placeholder { display:inline-flex; align-items:center; justify-content:center; color:#526c48; font-size:24px; }
+.gd-bed-plants li { display:flex; align-items:center; gap:7px; }
+.gdn-plant-health { background:transparent; border-color:transparent; }
+
+.garden-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.garden-tag { display:inline-flex; align-items:center; border:1px solid #c8d2ba; border-radius:999px; padding:4px 9px; background:#edf1e4; color:#284631; font:inherit; font-size:12px; line-height:1.4; overflow-wrap:anywhere; }
+button.garden-tag { cursor:pointer; }
+button.garden-tag:focus-visible { outline:2px solid #9b7416; outline-offset:2px; }
+.gd-plant-link { display:flex; align-items:center; gap:7px; border:0; background:none; color:inherit; font:inherit; cursor:pointer; padding:0; text-align:left; }
+.gd-plant-detail { padding:20px; max-width:min(90vw,650px); background:#faf6e9; color:#243d2b; border:1px solid #d8d0b5; border-radius:16px; }
+.gd-plant-detail::backdrop { background:#0008; }
+.ws-garden-beds { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); gap:16px; }
+.ws-garden-bed { padding:16px; border:1px solid #d8d0b5; border-radius:12px; }
+
+/* Plant window: a bed's seating chart, one spot per plant */
+.gd-plant-hd { display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+.gd-plant-hd h2 { margin:0; font-size:22px; }
+.gd-plant-hd p { margin:2px 0 0; font-size:13px; }
+.gd-plant-close { margin-left:auto; width:36px; height:36px; padding:0; font-size:20px; line-height:1; }
+.gd-chart { display:grid; gap:4px; margin:14px 0; padding:10px; background:#f1ecd9; border:1px solid #ddd3b3; border-radius:12px; overflow-x:auto; }
+.gd-chart-row { display:flex; align-items:center; gap:4px; }
+.gd-chart-label { width:22px; flex:0 0 22px; font:700 11px/1 system-ui, sans-serif; color:#6b5a2a; text-align:center; }
+.gd-chart-spot { flex:0 0 auto; min-width:30px; height:26px; padding:0 4px; display:inline-grid; place-items:center; border-radius:6px;
+  font:600 10.5px/1 ui-monospace, Menlo, monospace; color:#8a8a78; background:#faf6e9; border:1px dashed #d4ccb0; }
+.gd-chart-spot.on { color:#fff; background:#2f5d3a; border:1px solid #2f5d3a; cursor:pointer; }
+.gd-chart-spot.on:hover, .gd-chart-spot.on:focus-visible { background:#1B3F27; outline:2px solid #E3B040; outline-offset:1px; }
+.gdn-plant-spot { display:inline-block; margin-left:4px; padding:0 5px; border-radius:5px; background:#1B3F27; color:#F4EBD5; font:600 10px/1.6 ui-monospace, Menlo, monospace; vertical-align:1px; }
+.gdn-plant-spot.new { background:#E3B040; color:#1B3F27; }
+/* Workspace bed cards: one line per plant type, its plants by spot */
+.ws-bed-types { display:grid; gap:6px; margin-top:6px; }
+.ws-bed-type { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.ws-bed-type .gdn-plant-thumbnail { width:28px; height:28px; flex-basis:28px; }
+.ws-spots { display:flex; flex-wrap:wrap; gap:4px; }
+.ws-spot { min-width:30px; padding:2px 6px; border-radius:6px; border:1px solid #c8d2ba; background:#faf6e9; color:#1B3F27;
+  font:600 11px/1.5 ui-monospace, Menlo, monospace; cursor:pointer; }
+.ws-spot:hover, .ws-spot:focus-visible { background:#1B3F27; color:#F4EBD5; }

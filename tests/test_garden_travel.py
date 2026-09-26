@@ -81,26 +81,32 @@ class GardenPhotoTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT COUNT(*) AS n FROM garden.photos").fetchone()["n"], 0)
             self.assertIsNone(conn.execute("SELECT 1 FROM core.media_assets WHERE path LIKE 'garden/photos/%%'").fetchone())
 
-    def test_editing_keeps_labels_and_planting_tags(self):
-        photo = upload(self.owner, "/api/v1/garden/photos", beds=["bed-a"]).json["photos"][0]
-        with db.tx() as conn:
-            conn.execute("INSERT INTO garden.photo_subjects VALUES (%s, 'label', 'Volunteer squash'), (%s, 'planting', 'p1')",
-                         (photo["id"], photo["id"]))
-        tags = lambda: {(r["subject_type"], r["subject_ref"]) for r in db.all(
-            "SELECT subject_type, subject_ref FROM garden.photo_subjects WHERE photo_id = %s", photo["id"])}
-        # The edit dialog sends every tag back with a caption change: nothing should move.
-        shown = self.owner.get("/api/v1/garden").json["photos"][0]
-        self.assertEqual(shown["species"], [self.species[0]])                       # the planting counts as its plant type
-        self.owner.put(f"/api/v1/garden/photos/{photo['id']}", json={"caption": "New caption", "beds": shown["beds"], "species": shown["species"]})
-        self.assertEqual(tags(), {("bed", "bed-a"), ("label", "Volunteer squash"), ("planting", "p1")})
-        # Adding a plant type adds it; unticking the planting's plant type removes the planting tag; the label stays.
-        self.owner.put(f"/api/v1/garden/photos/{photo['id']}", json={"beds": ["bed-a"], "species": [self.species[0], self.species[1]]})
-        self.assertEqual(tags(), {("bed", "bed-a"), ("label", "Volunteer squash"), ("planting", "p1"), ("species", self.species[1])})
-        self.owner.put(f"/api/v1/garden/photos/{photo['id']}", json={"beds": [], "species": [self.species[1]]})
-        self.assertEqual(tags(), {("label", "Volunteer squash"), ("species", self.species[1])})
-        # A bad date changes nothing, not even the caption sent with it.
-        self.assertEqual(self.owner.put(f"/api/v1/garden/photos/{photo['id']}", json={"caption": "Oops", "taken_on": "someday"}).status_code, 400)
-        self.assertEqual(self.owner.get("/api/v1/garden").json["photos"][0]["caption"], "New caption")
+    def test_capture_dates_multiple_beds_labels_and_individual_plant_survive_edits(self):
+        from tests.test_garden_metadata import photo
+        source = photo('2024:04:03 23:59:00').stream.getvalue()
+        made = upload(self.owner, "/api/v1/garden/photos", name="plant.jpg", content=source,
+                      beds=["bed-a", "bed-b"], plantings=["p1"], tags=["#Spring blooms", "spring-blooms"])
+        self.assertEqual(made.status_code, 201, made.json)
+        item = made.json["photos"][0]
+        self.assertEqual(item["date"], "2024-04-03")
+        self.assertEqual(item["beds"], ["bed-a", "bed-b"])
+        self.assertEqual(item["plantings"], ["p1"])
+        self.assertEqual(item["tags"], ["spring-blooms"])
+        self.assertIn(self.species[0], item["species"])
+        updated = self.owner.put(f"/api/v1/garden/photos/{item['id']}", json={"caption": "Later caption"})
+        self.assertEqual(updated.json["plantings"], ["p1"])
+        self.assertEqual(updated.json["tags"], ["spring-blooms"])
+        self.assertEqual(updated.json["date"], "2024-04-03")
+        invalid = self.owner.put(f"/api/v1/garden/photos/{item['id']}", json={"caption": "Must not save", "taken_on": "badTdate"})
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(self.visitor.get("/api/v1/garden").json["photos"][0]["caption"], "Later caption")
+
+    def test_metadata_free_upload_is_undated_and_invalid_dates_are_rejected(self):
+        made = upload(self.owner, "/api/v1/garden/photos")
+        self.assertEqual(made.status_code, 201)
+        self.assertIsNone(made.json["photos"][0]["date"])
+        self.assertEqual(upload(self.owner, "/api/v1/garden/photos", taken_on="not-a-date").status_code, 400)
+        self.assertEqual(upload(self.owner, "/api/v1/garden/photos", plantings=["unsaved-plant"]).status_code, 400)
 
     def test_a_photo_uploads_and_shows_when_the_app_folder_is_read_only(self):
         from unittest import mock
@@ -147,6 +153,51 @@ class CityListTests(unittest.TestCase):
         self.assertEqual(travel.locate("", 29.95, -90.07), ("US", "LA"))                  # no city text: by position
         self.assertEqual(travel.locate("Somewhere, France", 48.85, 2.35)[0], "FR")
         self.assertEqual(travel.locate("", 0.0, -140.0), ("", ""))                          # open ocean
+
+
+@needs_database
+class PlantSpotTests(unittest.TestCase):
+    """Every plant has a spot: its row (A, B, … from the top) and seat (1, 2, … from the left), kept for life."""
+
+    def setUp(self):
+        fresh_database()
+        self.owner = admin_client(app)
+
+    def doc(self, beds):
+        return {"calibration": {}, "beds": [{"id": bed_id, "name": bed_id, "shape": {"type": "rectangle", "width": 6, "height": 4},
+                                             "transform": {"x": 0, "y": 0, "rotation": 0},
+                                             "plants": [{"id": pid, "speciesId": "canna", "displayName": "Canna", "gi": gi, "gj": gj}
+                                                        for pid, gi, gj in plants]} for bed_id, plants in beds.items()]}
+
+    def save(self, beds):
+        from virtuwill import garden
+        with db.tx() as conn:
+            garden.save(conn, self.doc(beds))
+
+    def spots(self):
+        return {p["id"]: p["spot"] for p in self.owner.get("/api/v1/garden").json["plantings"]}
+
+    def test_rows_and_seats_are_given_once_and_kept(self):
+        # Two rows: three plants along the top (one a little lower but still in that row), one lower down.
+        self.save({"bed-s": [("t-a", 8, 2), ("t-b", 2, 2), ("t-c", 14, 3), ("t-d", 4, 10)]})
+        self.assertEqual(self.spots(), {"t-b": "A1", "t-a": "A2", "t-c": "A3", "t-d": "B1"})
+        # A new plant at the far left of row A takes the next seat; nobody is renumbered. One between the rows starts row C.
+        self.save({"bed-s": [("t-a", 8, 2), ("t-b", 2, 2), ("t-c", 14, 3), ("t-d", 4, 10), ("t-e", 0, 2), ("t-f", 6, 6)]})
+        self.assertEqual(self.spots(), {"t-b": "A1", "t-a": "A2", "t-c": "A3", "t-d": "B1", "t-e": "A4", "t-f": "C1"})
+        # Moving a plant within its bed keeps its spot.
+        self.save({"bed-s": [("t-a", 20, 12), ("t-b", 2, 2), ("t-c", 14, 3), ("t-d", 4, 10), ("t-e", 0, 2), ("t-f", 6, 6)]})
+        self.assertEqual(self.spots()["t-a"], "A2")
+        # Moving it to another bed gives it a spot there.
+        self.save({"bed-s": [("t-b", 2, 2), ("t-c", 14, 3), ("t-d", 4, 10), ("t-e", 0, 2), ("t-f", 6, 6)], "bed-u": [("t-a", 3, 3)]})
+        self.assertEqual(self.spots()["t-a"], "A1")
+        with db.tx() as conn:
+            rows = conn.execute("SELECT bed_id, label FROM garden.bed_rows ORDER BY bed_id, label").fetchall()
+        self.assertEqual([(r["bed_id"], r["label"]) for r in rows], [("bed-s", "A"), ("bed-s", "B"), ("bed-s", "C"), ("bed-u", "A")])
+        # The planner sees each plant's spot and the rows to draw.
+        planner = self.owner.get("/api/garden").json
+        bed = next(b for b in planner["beds"] if b["id"] == "bed-s")
+        self.assertEqual(next(p for p in bed["plants"] if p["id"] == "t-e")["spot"], "A4")
+        self.assertEqual([r["label"] for r in bed["rows"]], ["A", "C", "B"])       # top to bottom by where they run
 
 
 @needs_database
