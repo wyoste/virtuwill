@@ -57,11 +57,20 @@ def _photos(conn, place_id):
             for r in rows if r["url"] or r["path"]]
 
 
-def pins(conn):
-    rows = conn.execute("SELECT * FROM travel.places ORDER BY created_at, place_id").fetchall()
+def pins(conn, place_id=None):
+    """Every stop with its photos (or just one stop): two queries, however many stops there are."""
+    where, args = ("WHERE place_id = %s", (str(place_id),)) if place_id is not None else ("", ())
+    rows = conn.execute(f"SELECT * FROM travel.places {where} ORDER BY created_at, place_id", args).fetchall()
+    by_place = {}
+    for ph in conn.execute(f"""SELECT ph.place_id, ph.position, ph.url, ph.caption, ph.asset_id, m.path
+                               FROM travel.place_photos ph LEFT JOIN core.media_assets m USING (asset_id)
+                               {where.replace('place_id', 'ph.place_id')} ORDER BY ph.place_id, ph.position""", args):
+        if ph["url"] or ph["path"]:
+            by_place.setdefault(ph["place_id"], []).append(
+                {"position": ph["position"], "url": ph["url"] or media.url(ph["path"]), "caption": ph["caption"], "asset_id": ph["asset_id"]})
     out = []
     for r in rows:
-        photos = _photos(conn, r["place_id"])
+        photos = by_place.get(r["place_id"], [])
         pin = {"id": _id_out(r["place_id"]), "name": r["name"], "city": r["city"], "lat": float(r["latitude"]),
                "lng": float(r["longitude"]), "type": r["pin_type"], "note": r["note"],
                "visited": r["visited_on"].isoformat() if r["visited_on"] else None,
@@ -73,6 +82,12 @@ def pins(conn):
             pin["display"] = r["display_name"]
         out.append(pin)
     return out
+
+
+def pin(conn, place_id):
+    """One stop with its photos, or None."""
+    found = pins(conn, place_id)
+    return found[0] if found else None
 
 
 def write_place(conn, place_id, p):

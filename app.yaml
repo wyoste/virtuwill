@@ -3,6 +3,14 @@ command:
   - app:app
   - --bind
   - 0.0.0.0:$DATABRICKS_APP_PORT
+  # Photo uploads from a phone can take a while: several workers with threads so one upload never
+  # blocks the app, and a timeout long enough that a slow upload isn't cut off (gunicorn's default is 30 s).
+  - --workers
+  - "2"
+  - --threads
+  - "4"
+  - --timeout
+  - "300"
 
 # Values come from secret resources attached to the Databricks app
 # (Edit → Resources), never from this file.
