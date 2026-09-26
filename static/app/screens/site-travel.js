@@ -1,6 +1,6 @@
 // Site › Travel: the stops on the public map, grouped by city, each with its photos;
 // and the countries and states visited.
-import { h, api, card, pageHead, empty, toast, run, field, values, dialog, confirmDelete, editable, saveAll, photoPicker } from '../lib.js';
+import { h, api, card, pageHead, empty, toast, run, field, values, dialog, confirmDelete, editable, saveAll, photoPicker, PHOTO_TYPES } from '../lib.js';
 
 const TYPES = [['visited', '📍 Visited'], ['recommend', '⭐ Recommend'], ['wishlist', '🌟 Want to go']];
 const typeLabel = t => TYPES.find(x => x[0] === t)?.[1] || t;
@@ -28,7 +28,7 @@ export async function render(view) {
 }
 
 function stop(p, redraw) {
-  const files = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+  const files = h('input', { type: 'file', accept: PHOTO_TYPES, multiple: true, hidden: true });
   files.onchange = () => run(null, async () => {
     const f = new FormData();
     for (const file of files.files) f.append('files', file);
@@ -240,8 +240,10 @@ async function editStop(p = {}) {
         field('Latitude', 'lat', { kind: 'number', step: 'any', value: p.id ? p.lat : '' }),
         field('Longitude', 'lng', { kind: 'number', step: 'any', value: p.id ? p.lng : '' }))));
   const error = h('p', { class: 'ws-note warn', role: 'alert' });
+  // Once the stop exists, a retry (say, after a photo was refused) updates it rather than adding it again.
+  let id = p.id;
   for (;;) {
-    if (!(await dialog(p.id ? 'Edit stop' : 'Add a stop', h('div', {}, form, error), [['Cancel', null], ['Save', true]]))) return false;
+    if (!(await dialog(p.id ? 'Edit stop' : 'Add a stop', h('div', {}, form, error), [['Cancel', null], ['Save', true]]))) return id !== p.id;
     const v = values(form);
     const c = country.value;
     if (!c) { error.textContent = 'Choose a country.'; continue; }
@@ -255,7 +257,8 @@ async function editStop(p = {}) {
       const body = { name: v.name || where?.name || c.name, city: [where?.name, c.name].filter(Boolean).join(', '), lat: at.lat, lng: at.lng,
                      type: v.type, visited: v.visited, note: v.note, display: at.display || (moved ? '' : p.display || ''),
                      country: c.code, region: region.value || where?.region || '' };
-      const saved = await api(p.id ? `/api/v1/travel/places/${p.id}` : '/api/v1/travel/places', { method: p.id ? 'PUT' : 'POST', body, quiet: true });
+      const saved = await api(id ? `/api/v1/travel/places/${id}` : '/api/v1/travel/places', { method: id ? 'PUT' : 'POST', body, quiet: true });
+      id = saved.id;
       if (photos.files().length) {
         const f = new FormData();
         photos.files().forEach(file => f.append('files', file));

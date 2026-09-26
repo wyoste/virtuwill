@@ -72,6 +72,36 @@ class GardenPhotoTests(unittest.TestCase):
         self.assertEqual(self.visitor.get("/api/v1/garden").json["photos"][0]["beds"], [])
 
 
+    def test_a_refused_file_keeps_nothing_from_the_same_upload(self):
+        both = self.owner.post("/api/v1/garden/photos", content_type="multipart/form-data",
+                               data={"files": [(io.BytesIO(PNG), "good.png"), (io.BytesIO(b"x"), "IMG_0001.HEIC")]})
+        self.assertEqual(both.status_code, 400)
+        self.assertIn("IMG_0001.HEIC", both.json["error"])
+        with db.tx() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) AS n FROM garden.photos").fetchone()["n"], 0)
+            self.assertIsNone(conn.execute("SELECT 1 FROM core.media_assets WHERE path LIKE 'garden/photos/%%'").fetchone())
+
+    def test_editing_keeps_labels_and_planting_tags(self):
+        photo = upload(self.owner, "/api/v1/garden/photos", beds=["bed-a"]).json["photos"][0]
+        with db.tx() as conn:
+            conn.execute("INSERT INTO garden.photo_subjects VALUES (%s, 'label', 'Volunteer squash'), (%s, 'planting', 'p1')",
+                         (photo["id"], photo["id"]))
+        tags = lambda: {(r["subject_type"], r["subject_ref"]) for r in db.all(
+            "SELECT subject_type, subject_ref FROM garden.photo_subjects WHERE photo_id = %s", photo["id"])}
+        # The edit dialog sends every tag back with a caption change: nothing should move.
+        shown = self.owner.get("/api/v1/garden").json["photos"][0]
+        self.assertEqual(shown["species"], [self.species[0]])                       # the planting counts as its plant type
+        self.owner.put(f"/api/v1/garden/photos/{photo['id']}", json={"caption": "New caption", "beds": shown["beds"], "species": shown["species"]})
+        self.assertEqual(tags(), {("bed", "bed-a"), ("label", "Volunteer squash"), ("planting", "p1")})
+        # Adding a plant type adds it; unticking the planting's plant type removes the planting tag; the label stays.
+        self.owner.put(f"/api/v1/garden/photos/{photo['id']}", json={"beds": ["bed-a"], "species": [self.species[0], self.species[1]]})
+        self.assertEqual(tags(), {("bed", "bed-a"), ("label", "Volunteer squash"), ("planting", "p1"), ("species", self.species[1])})
+        self.owner.put(f"/api/v1/garden/photos/{photo['id']}", json={"beds": [], "species": [self.species[1]]})
+        self.assertEqual(tags(), {("label", "Volunteer squash"), ("species", self.species[1])})
+        # A bad date changes nothing, not even the caption sent with it.
+        self.assertEqual(self.owner.put(f"/api/v1/garden/photos/{photo['id']}", json={"caption": "Oops", "taken_on": "someday"}).status_code, 400)
+        self.assertEqual(self.owner.get("/api/v1/garden").json["photos"][0]["caption"], "New caption")
+
     def test_a_photo_uploads_and_shows_when_the_app_folder_is_read_only(self):
         from unittest import mock
         with mock.patch("pathlib.Path.write_bytes", side_effect=OSError("read-only file system")):
@@ -169,6 +199,13 @@ class TravelStopTests(unittest.TestCase):
         self.assertEqual(self.owner.delete(f"/api/v1/travel/places/{pid}").status_code, 200)
         self.assertEqual(self.owner.delete(f"/api/v1/travel/places/{pid}").status_code, 404)
 
+
+    def test_a_refused_file_adds_no_photos_to_a_stop(self):
+        stop = self.owner.post("/api/v1/travel/places", json={"name": "Test Pier", "lat": 10, "lng": 10}).json
+        r = self.owner.post(f"/api/v1/travel/places/{stop['id']}/photos", content_type="multipart/form-data",
+                            data={"files": [(io.BytesIO(PNG), "good.png"), (io.BytesIO(b"x"), "clip.mov")]})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(next(p for p in self.owner.get("/api/v1/travel").json["places"] if p["id"] == stop["id"])["photos"], [])
 
     def test_visited_stops_mark_their_country_and_state(self):
         from virtuwill import db, travel
