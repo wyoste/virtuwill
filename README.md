@@ -26,7 +26,7 @@ one sidebar and one screen at a time:
 | Journal | entries by date, editor, habits, balance check-in, photo transcription | `journal.entries`, tags, habit logs, journal balance snapshots |
 | Health | Overview · Activity · Food · Body · Goals | workouts, meals, weigh-ins, drinks, foods, profile, goals |
 | Money | Overview (full analysis, or goals only) · Transactions · Receipts · Accounts & balances · Budgets & bills · Goals & retirement · Imports · Finance tracker | bank activity, statements, paychecks and receipts through Imports; budgets, goals and the pay plan in the Finance tracker |
-| Site | Music (songs, their meaning, setup, lyrics and chords by section, line notes, version notes) · Career (profile & ethos, skills & education with school logos, experience, projects, CV upload) · Writing · Garden (photos tagged to beds and plant types, the bed planner, page text) · Travel (add a stop by picking its country from a searchable list, with photos attached in the same step; stops by city; regions visited) · Messages | everything the public site shows |
+| Site | Music (songs, their meaning, setup, lyrics and chords by section, line notes, version notes) · Career (profile & ethos, skills & education with school logos, experience, projects, CV upload) · Writing · Garden (photos tagged to beds and plant types, the bed planner, page text) · Travel (add a stop by picking its country, state and a real city from searchable lists, with photos attached in the same step; stops by city; a visited stop marks its country and US state by itself, plus any marked by hand) · Messages | everything the public site shows |
 | Settings | site switches, journal check-in accounts, diagnostics | `core.settings` |
 
 Each record has one editor. The same logging forms (workout, meal, weigh-in, drink)
@@ -389,3 +389,7 @@ gunicorn app:app --bind 0.0.0.0:5000
 ```
 
 Set all environment variables via the host's secrets manager rather than `.env`.
+
+## Credits
+
+The travel city and region lists (`data/geo/`) come from [GeoNames](https://www.geonames.org/) by way of the [cities.json](https://github.com/lutangar/cities.json) package, under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

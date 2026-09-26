@@ -98,6 +98,27 @@ class CountryListTests(unittest.TestCase):
         self.assertAlmostEqual(by_code["FR"]["lat"], 46.6, delta=2)    # mainland France, not an overseas territory
 
 
+class CityListTests(unittest.TestCase):
+    """The city pick list, and working out where a pin is."""
+
+    def test_search_ranks_exact_names_first_and_ignores_accents(self):
+        from virtuwill import geo
+        first = geo.search("new york", "US")[0]
+        self.assertEqual((first["name"], first["region"], first["region_name"]), ("New York City", "NY", "New York"))
+        self.assertEqual(geo.search("sao paulo", "BR")[0]["name"], "São Paulo")
+        self.assertTrue(all(c["region"] == "MS" for c in geo.search("ox", "US", "MS")))
+        self.assertEqual(geo.search("", "US"), [])
+        self.assertEqual(geo.search("paris", "ZZ"), [])
+        self.assertEqual(len([r for r in geo.regions("US") if len(r["code"]) == 2]), 51)     # 50 states and DC
+
+    def test_a_pin_is_placed_in_its_country_and_state(self):
+        from virtuwill import travel
+        self.assertEqual(travel.locate("New York City, United States", 40.7128, -74.006), ("US", "NY"))
+        self.assertEqual(travel.locate("", 29.95, -90.07), ("US", "LA"))                  # no city text: by position
+        self.assertEqual(travel.locate("Somewhere, France", 48.85, 2.35)[0], "FR")
+        self.assertEqual(travel.locate("", 0.0, -140.0), ("", ""))                          # open ocean
+
+
 @needs_database
 class TravelStopTests(unittest.TestCase):
     def setUp(self):
@@ -147,6 +168,41 @@ class TravelStopTests(unittest.TestCase):
         self.assertEqual(self.visitor.get(url).status_code, 404)
         self.assertEqual(self.owner.delete(f"/api/v1/travel/places/{pid}").status_code, 200)
         self.assertEqual(self.owner.delete(f"/api/v1/travel/places/{pid}").status_code, 404)
+
+
+    def test_visited_stops_mark_their_country_and_state(self):
+        from virtuwill import db, travel
+        self.assertEqual(self.owner.get("/api/v1/travel/cities?country=US&q=new%20york").json[0]["name"], "New York City")
+        self.assertEqual(self.visitor.get("/api/v1/travel/cities?country=US&q=x").status_code, 401)
+        self.assertEqual(len([r for r in self.owner.get("/api/v1/travel/regions?country=US").json if len(r["code"]) == 2]), 51)
+
+        # A stop sent without codes is placed by its position; one sent with them keeps them.
+        nyc = self.owner.post("/api/v1/travel/places", json={"name": "Test Deli", "city": "New York City, United States",
+                                                             "lat": 40.7128, "lng": -74.006, "type": "visited"}).json
+        self.assertEqual((nyc["country"], nyc["region"], nyc["region_name"]), ("US", "NY", "New York"))
+        wish = self.owner.post("/api/v1/travel/places", json={"name": "Test Lake", "city": "Somewhere, Canada", "lat": 51.4,
+                                                              "lng": -116.2, "type": "wishlist", "country": "CA", "region": "01"}).json
+        self.assertEqual((wish["country"], wish["region"]), ("CA", "01"))
+        self.owner.put("/api/v1/travel/visited", json={"countries": ["MX", "US"], "states": ["TX"]})
+        visited = self.visitor.get("/api/v1/travel").json["visited"]
+        self.assertEqual((visited["countries"], visited["states"]), (["MX", "US"], ["NY", "TX"]))     # a wishlist stop counts for nothing
+        self.assertNotIn("from_stops", visited)
+        owner = self.owner.get("/api/v1/travel").json["visited"]
+        self.assertEqual(owner["from_stops"], {"countries": ["US"], "states": ["NY"]})
+        with db.tx() as conn:
+            stored = conn.execute("SELECT region_type, code FROM travel.visited_regions ORDER BY code").fetchall()
+        self.assertEqual([r["code"] for r in stored], ["MX", "TX"])       # US and NY come from the stop, not stored twice
+
+        # Stops saved before codes existed are filled in on start.
+        with db.tx() as conn:
+            conn.execute("UPDATE travel.places SET country_code = NULL, region_code = NULL")
+            travel.fill_codes(conn)
+            rows = {r["place_id"]: (r["country_code"], r["region_code"]) for r in conn.execute("SELECT * FROM travel.places")}
+        self.assertEqual(rows[str(nyc["id"])], ("US", "NY"))
+        self.assertEqual(rows[str(wish["id"])][0], "CA")
+
+        self.owner.delete(f"/api/v1/travel/places/{nyc['id']}")
+        self.assertEqual(self.visitor.get("/api/v1/travel").json["visited"]["states"], ["TX"])
 
 
 if __name__ == "__main__":
