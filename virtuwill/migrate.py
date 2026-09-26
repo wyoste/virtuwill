@@ -45,6 +45,7 @@ def run_pending(conn):
     if conn.execute("INSERT INTO virtuwill.migrations (name) VALUES ('relational_v1') ON CONFLICT DO NOTHING").rowcount:
         move_to_relational(conn)
     travel.fill_codes(conn)
+    garden.assign_spots(conn)       # rows and seats for plants saved before spots existed
 
 
 # ── The one-time move ────────────────────────────────────────────────────────

@@ -53,7 +53,9 @@
     };
     window.go = () => { location.href = '/app'; };
   </script>
-  <script src="{{ url_for('static', filename='js/garden.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/plant-assets.js') }}"></script>
+<script src="{{ url_for('static', filename='js/garden-tags.js') }}"></script>
+<script src="{{ url_for('static', filename='js/garden.js') }}"></script>
   <script src="{{ url_for('static', filename='js/trackers.js') }}"></script>
 {% else %}
   <div id="ws-toasts" class="ws-toasts"></div>

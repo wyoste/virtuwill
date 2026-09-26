@@ -28,7 +28,6 @@ window.VW.Garden = (() => {
 
   const GRID           = 0.25;   // ft — plant placement grid spacing
   const DRAG_THRESHOLD = 5;      // px — click vs drag
-  const PLANT_HIT      = 0.5;    // ft — hit radius for plant selection
   const FREE_MIN_DIST  = 0.3;    // ft — min distance between free-draw sample pts
   const FREE_MIN_VERTS = 3;      // minimum polygon vertices after simplification
   const SIMPLIFY_TOL   = 0.4;    // ft — Ramer-Douglas-Peucker tolerance
@@ -267,6 +266,7 @@ window.VW.Garden = (() => {
 
   function init() {
     _loadBg();
+    VW.PlantArt.preload(SPECIES.map(s => s.id)).then(render);
     _loadData().then(() => { _savedSnapshot = _snapshot(); _fitAll(); _buildSpeciesDropdown(); _renderBedList(); render(); });
     if (!_eventsOk) { _attachEvents(); _eventsOk = true; }
   }
@@ -327,7 +327,11 @@ window.VW.Garden = (() => {
       });
       const d = await r.json();
       window.toast?.(d.ok ? '💾 Garden saved' : 'Save failed', d.ok?'success':'error');
-      if (d.ok) { _savedSnapshot = saving; GDN?.Viewer?.init?.(); _renderBedList(); }
+      if (d.ok) {
+        _savedSnapshot = saving; GDN?.Viewer?.init?.(); _renderBedList();
+        // New plants get their row and seat when saved: fetch them, unless something changed meanwhile.
+        if (_snapshot() === saving) _loadData().then(() => { _savedSnapshot = _snapshot(); _renderBedList(); render(); });
+      }
     } catch {
       window.toast?.('Save failed', 'error');
     }
@@ -342,9 +346,7 @@ window.VW.Garden = (() => {
     const wrap = document.getElementById('gdn-cv-wrap');
     if (!cv || !wrap) return;
     const W = wrap.clientWidth, H = wrap.clientHeight;
-    if (cv.width!==W || cv.height!==H) { cv.width=W; cv.height=H; }
-    const ctx = cv.getContext('2d');
-    ctx.clearRect(0,0,W,H);
+    const ctx = VW.PlantArt.canvasContext(cv, W, H);
     _plantDelBtn = null;   // reset each frame
 
     // Background
@@ -496,6 +498,23 @@ window.VW.Garden = (() => {
       }
     });
 
+    // 4b. Rows laid over the grid: a plant's spot (B4) is its row and its seat along it.
+    const rowBox = polyBounds(shapeLocalVertices(bed.shape));
+    const rowOrigin = bedGridOrigin(bed);
+    (bed.rows || []).forEach(row => {
+      const ly = rowOrigin.y + row.gj * GRID;
+      const wa = localToWorld(rowBox.minX, ly, bed), wb = localToWorld(rowBox.maxX, ly, bed);
+      const a = worldToScreen(wa.x, wa.y, _cam), b = worldToScreen(wb.x, wb.y, _cam);
+      ctx.save();
+      ctx.setLineDash([6, 5]); ctx.strokeStyle = 'rgba(227,176,64,0.75)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = 'bold 11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(27,63,39,0.85)'; ctx.fillRect(a.x - 20, a.y - 8, 16, 16);
+      ctx.fillStyle = '#F4EBD5'; ctx.textAlign = 'center'; ctx.fillText(row.label, a.x - 12, a.y);
+      ctx.restore();
+    });
+
     // 5. Plants — non-hovered first, hovered last so label is always on top
     bed.plants.filter(p => p.id !== _hoveredPlantId && p.id !== _selectedPlantId).forEach(plant => {
       const lp  = plantLocalPos(plant, bed);
@@ -534,7 +553,7 @@ window.VW.Garden = (() => {
         ctx.fillStyle='#2F7A4B'; ctx.fill();
         ctx.font=`${Math.max(10,r*0.9)}px sans-serif`;
         ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText(sp.emoji, ms.x, ms.y);
+        VW.PlantArt.draw(ctx, sp.id, ms.x, ms.y, VW.PlantArt.markerSize(_cam.z));
         ctx.globalAlpha=1;
       }
     }
@@ -563,7 +582,7 @@ window.VW.Garden = (() => {
   function _drawPlant(ctx, plant, sx, sy, isSel, isHov, isDrag) {
     const sp      = SPECIES.find(s=>s.id===plant.speciesId)||{dia:1.5,emoji:'🌿'};
     const radiusFt = plant.radiusFt != null ? plant.radiusFt : sp.dia / 2;
-    const r        = Math.min(36, Math.max(4, radiusFt * _cam.z));
+    const r        = VW.PlantArt.markerSize(_cam.z) / 2;
     const h    = HEALTH[plant.health??2];
     ctx.globalAlpha = isDrag ? 0.4 : 1;
     if (isSel||isHov) {
@@ -583,12 +602,17 @@ window.VW.Garden = (() => {
       // Store delete hit zone for click handler
       _plantDelBtn = { x: bx, y: by, r: br, plantId: plant.id };
     }
-    ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2);
-    ctx.fillStyle=h.col+'44'; ctx.fill();
-    ctx.strokeStyle=isSel?'#fff':h.col; ctx.lineWidth=isSel?2:1; ctx.stroke();
-    const fs=Math.max(10,r*0.9);
-    ctx.font=`${fs}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(sp.emoji,sx,sy);
+    // Mature spread is a world-space footprint, separate from the readable icon.
+    if (isSel || isHov) {
+      ctx.beginPath(); ctx.arc(sx, sy, radiusFt * _cam.z, 0, Math.PI * 2);
+      ctx.strokeStyle = h.col; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    VW.PlantArt.draw(ctx, plant.speciesId, sx, sy, r * 2);
+    if (plant.health != null) {
+      ctx.beginPath(); ctx.arc(sx + r - 3, sy + r - 3, 3, 0, Math.PI * 2);
+      ctx.fillStyle = h.col; ctx.fill();
+    }
     // Only show name on hover — one at a time, no clutter
     if (isHov && plant.displayName) {
       const lfs = Math.max(10, r*0.6);
@@ -734,13 +758,15 @@ window.VW.Garden = (() => {
   }
 
   function _hitPlant(wx, wy, bed) {
-    return bed.plants.find(plant => {
-      const lp=plantLocalPos(plant,bed);
-      const wp=localToWorld(lp.x,lp.y,bed);
-      const sp = SPECIES.find(s=>s.id===plant.speciesId)||{dia:1.5};
-      const pr = plant.radiusFt != null ? plant.radiusFt : sp.dia/2;
-      return Math.hypot(wp.x-wx,wp.y-wy) <= Math.max(pr, PLANT_HIT);
-    }) || null;
+    // Choose the nearest center, rather than the first overlapping mature footprint.
+    let nearest = null, distance = Math.max(22, VW.PlantArt.markerSize(_cam.z) / 2) / _cam.z;
+    for (const plant of bed.plants) {
+      const lp = plantLocalPos(plant, bed);
+      const wp = localToWorld(lp.x, lp.y, bed);
+      const d = Math.hypot(wp.x - wx, wp.y - wy);
+      if (d <= distance) { nearest = plant; distance = d; }
+    }
+    return nearest;
   }
 
   // Snap world point to nearest valid grid point inside bed
@@ -1218,11 +1244,19 @@ window.VW.Garden = (() => {
     el.innerHTML='<option value="">— Choose species —</option>'+
       Object.entries(cats).map(([cat,sps])=>
         `<optgroup label="${cat}">${sps.map(sp=>
-          `<option value="${sp.id}">${sp.emoji} ${sp.name} (${sp.dia}ft)</option>`
+          `<option value="${sp.id}">${sp.name} (${sp.dia}ft)</option>`
         ).join('')}</optgroup>`
       ).join('');
+    const preview = document.createElement('div');
+    preview.className = 'gdn-species-preview';
+    el.after(preview);
     el.onchange=()=>{
-      if(el.value){_activeSpeciesId=el.value;_setIMode('place_plant');}
+      preview.replaceChildren();
+      if(el.value){
+        _activeSpeciesId=el.value;
+        preview.append(VW.PlantArt.thumbnail(el.value));
+        _setIMode('place_plant');
+      }
     };
   }
 
@@ -1244,17 +1278,17 @@ window.VW.Garden = (() => {
     const plants=bed.plants;
     el.innerHTML = plants.length
       ? plants.map(p=>{
-          const sp=SPECIES.find(s=>s.id===p.speciesId);
           const h=HEALTH[p.health??2];
           const isSel=p.id===_selectedPlantId;
           return `<div class="gdn-plant-card${isSel?' sel':''}"
               onclick="gdn.selectPlant('${p.id}')"
               ondblclick="gdn._openModalById('${p.id}')">
-            <div class="gdn-plant-health" style="background:${h.col}22;border-color:${h.col}55">
-              <span style="font-size:14px">${sp?.emoji||'🌿'}</span></div>
+            <div class="gdn-plant-health">
+              <span class="gdn-art-slot"></span></div>
             <div style="flex:1;min-width:0">
-              <div class="gdn-plant-name">${p.displayName}</div>
+              <div class="gdn-plant-name">${p.displayName}${p.spot ? ` <span class="gdn-plant-spot" title="Row ${p.spot.replace(/\d+$/, '')}, seat ${p.spot.match(/\d+$/)[0]}">${p.spot}</span>` : ' <span class="gdn-plant-spot new" title="Gets its spot when saved">new</span>'}</div>
               <div class="gdn-plant-meta">${h.icon} ${h.label}</div>
+              ${isSel ? `<button type="button" class="gdn-draw-btn" onclick="event.stopPropagation();gdn.uploadPlantPhoto('${p.id}')">Add photos</button>` : ''}
             </div>
               <button class="gdn-plant-del-btn" title="Delete plant"
               onclick="event.stopPropagation();gdn.deletePlant('${p.id}')">✕</button>
@@ -1262,6 +1296,9 @@ window.VW.Garden = (() => {
           </div>`;
         }).join('')
       : '<div class="gdn-empty">No plants yet. Choose a species then click a grid point.</div>';
+    el.querySelectorAll('.gdn-art-slot').forEach((slot, i) => {
+      slot.replaceWith(VW.PlantArt.thumbnail(plants[i].speciesId));
+    });
   }
 
   function _renderDimPanel(el, bed) {
@@ -1460,6 +1497,7 @@ window.VW.Garden = (() => {
     confirmDeleteBed: _confirmDeleteBed,
     cancelDeleteBed:  _cancelDeleteBed,
     selectPlant(id){_selectedPlantId=id;_updateSidebar();render();},
+    uploadPlantPhoto(id) { window.dispatchEvent(new CustomEvent('garden:upload-photo', { detail: { plantingId: id } })); },
     _openModalById,
     savePlantDetail, closePlantModal,
     updateHealthLabel(v){_updateHealthLabel(v);},
