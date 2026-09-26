@@ -17,6 +17,7 @@ window.GDN.Viewer = (() => {
   let _bgReady = false;
   let _drag    = null;
   let _inited  = false;
+  let _focusedBedId = null;
   let _hovBedId    = null;
   let _hovPlantId  = null;
   let _tooltip     = { bedId: null, plantId: null };
@@ -114,6 +115,8 @@ window.GDN.Viewer = (() => {
         _viewerState = d;
       }
     } catch { /* keep empty state */ }
+    VW.PlantArt.preload(_viewerState.beds.flatMap(b => b.plants.map(p => p.speciesId))).then(render);
+    _focusedBedId = null;
     _fitAll();
     render();
   }
@@ -136,9 +139,7 @@ window.GDN.Viewer = (() => {
     if (!cv || !wrap) return;
     const W = wrap.clientWidth;
     const H = cv.clientHeight || 340;
-    if (cv.width!==W || cv.height!==H) { cv.width=W; cv.height=H; }
-    const ctx = cv.getContext('2d');
-    ctx.clearRect(0,0,W,H);
+    const ctx = VW.PlantArt.canvasContext(cv, W, H);
 
     // Background
     if (_bgReady && _bgImg) {
@@ -159,6 +160,8 @@ window.GDN.Viewer = (() => {
       const isHov = bed.id === _hovBedId;
       _drawBed(ctx, bed, verts, isHov);
 
+      if (!_showPlants(bed)) return;
+
       // Plants — non-hovered first
       bed.plants.filter(p => p.id !== HPID).forEach(plant => {
         const wp = _plantWorldPos(plant, bed);
@@ -171,7 +174,7 @@ window.GDN.Viewer = (() => {
     if (HPID) {
       state.beds.forEach(bed => {
         const p = bed.plants.find(p => p.id === HPID);
-        if (!p) return;
+        if (!p || !_showPlants(bed)) return;
         const wp = _plantWorldPos(p, bed);
         const sp = w2s(wp.x, wp.y);
         _drawViewerPlant(ctx, p, sp.x, sp.y, true);
@@ -185,9 +188,9 @@ window.GDN.Viewer = (() => {
     ctx.beginPath(); ctx.moveTo(sp[0].x, sp[0].y);
     sp.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
     ctx.closePath();
-    ctx.fillStyle   = bed.color + (isHov ? 'aa' : '44');
+    ctx.fillStyle   = bed.color + (isHov ? '44' : '18');
     ctx.fill();
-    ctx.strokeStyle = bed.color;
+    ctx.strokeStyle = isHov ? bed.color : '#69795f';
     ctx.lineWidth   = isHov ? 2.5 : 1.5;
     ctx.setLineDash([]);
     ctx.stroke();
@@ -199,25 +202,25 @@ window.GDN.Viewer = (() => {
     ctx.font = `600 ${fs}px Inter,sans-serif`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.strokeStyle='rgba(0,0,0,.6)'; ctx.lineWidth=3;
-    ctx.strokeText(bed.name, cx, cy);
-    ctx.fillStyle='#fff'; ctx.fillText(bed.name, cx, cy);
+    const label = _showPlants(bed) ? bed.name : `${bed.name} · ${bed.plants.length}`;
+    const labelY = _showPlants(bed) ? Math.min(...sp.map(p => p.y)) - 12 : cy;
+    ctx.strokeText(label, cx, labelY);
+    ctx.fillStyle='#fff'; ctx.fillText(label, cx, labelY);
   }
 
   function _drawViewerPlant(ctx, plant, sx, sy, isHov) {
-    const sp  = _species(plant.speciesId);
-    const r   = Math.min(28, Math.max(3, (sp.dia/2) * _cam.z));
+    const r   = VW.PlantArt.markerSize(_cam.z) / 2;
     const h   = HEALTH[plant.health ?? 2];
 
     if (isHov) {
       ctx.beginPath(); ctx.arc(sx,sy,r+4,0,Math.PI*2);
       ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=1.5; ctx.stroke();
     }
-    ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2);
-    ctx.fillStyle  = h.col+'44'; ctx.fill();
-    ctx.strokeStyle= h.col; ctx.lineWidth=1; ctx.stroke();
-    const fs = Math.max(8, r*0.9);
-    ctx.font=`${fs}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(sp.emoji, sx, sy);
+    VW.PlantArt.draw(ctx, plant.speciesId, sx, sy, r * 2);
+    if (plant.health != null) {
+      ctx.beginPath(); ctx.arc(sx + r - 3, sy + r - 3, 3, 0, Math.PI * 2);
+      ctx.fillStyle = h.col; ctx.fill();
+    }
 
     // Name pill — only on hover
     if (isHov && plant.displayName) {
@@ -235,15 +238,61 @@ window.GDN.Viewer = (() => {
     }
   }
 
+  function _state() {
+    const live = window.gdn?.getState?.();
+    return live?.beds?.length ? live : _viewerState;
+  }
+  function _showPlants(bed) { return bed.id === _focusedBedId || _cam.z >= 8; }
+  function focusBed(id) {
+    const bed = _state().beds.find(b => b.id === id);
+    const cv = document.getElementById('gdn-viewer-cv');
+    if (!bed || !cv) return;
+    const verts = _bedVerts(bed);
+    if (!verts.length) return;
+    const xs = verts.map(v => v.x), ys = verts.map(v => v.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const w = cv.clientWidth, h = cv.clientHeight;
+    _cam.z = Math.max(1, Math.min(40, (w - 64) / Math.max(1, maxX - minX),
+      (h - 64) / Math.max(1, maxY - minY)));
+    _cam.x = w / (2 * _cam.z) - (minX + maxX) / 2;
+    _cam.y = h / (2 * _cam.z) - (minY + maxY) / 2;
+    _focusedBedId = id; _hovPlantId = null;
+    _hideTooltip(); render();
+  }
+  function _hit(sx, sy) {
+    const world = s2w(sx, sy);
+    let nearest = null, distance = Math.max(22, VW.PlantArt.markerSize(_cam.z) / 2);
+    for (const bed of _state().beds) {
+      if (!_showPlants(bed)) continue;
+      for (const plant of bed.plants) {
+        const wp = _plantWorldPos(plant, bed), sp = w2s(wp.x, wp.y);
+        const d = Math.hypot(sp.x - sx, sp.y - sy);
+        if (d <= distance) { nearest = { bed, plant }; distance = d; }
+      }
+    }
+    if (nearest) return nearest;
+    const bed = [..._state().beds].reverse().find(b => _ptInPoly(world.x, world.y, _bedVerts(b)));
+    return { bed, plant: null };
+  }
+  function _activate(sx, sy) {
+    const { bed, plant } = _hit(sx, sy);
+    if (plant) {
+      _hovBedId = bed.id; _hovPlantId = plant.id;
+      _showTooltip(`${plant.displayName || _species(plant.speciesId).name} · ${bed.name}`, sx, sy);
+      render();
+    } else if (bed) focusBed(bed.id);
+    else { _hovPlantId = null; _hideTooltip(); render(); }
+  }
+
   // ── Tooltip (HTML overlay for bed hover) ──────────────────────────────────
   function _showTooltip(text, sx, sy) {
     const el = document.getElementById('gdn-viewer-tooltip');
     const fr = document.getElementById('gdn-viewer-frame');
     if (!el || !fr) return;
-    const frRect = fr.getBoundingClientRect();
     el.textContent = text;
     el.style.display = 'block';
-    el.style.left = Math.min(sx + 10, fr.clientWidth - 180) + 'px';
+    el.style.left = Math.max(8, Math.min(sx + 10, fr.clientWidth - 180)) + 'px';
     el.style.top  = Math.max(sy - 36, 8) + 'px';
   }
   function _hideTooltip() {
@@ -305,6 +354,11 @@ window.GDN.Viewer = (() => {
     }, { passive: false });
 
     cv.addEventListener('touchend', e => {
+      if (e.touches.length === 0 && _t0 && !_t1) {
+        const t = e.changedTouches[0], rect = cv.getBoundingClientRect();
+        if (Math.hypot(t.clientX - _t0.x, t.clientY - _t0.y) < 6)
+          _activate(t.clientX - rect.left, t.clientY - rect.top);
+      }
       if (e.touches.length === 0) { _t0 = null; _t1 = null; }
     }, { passive: true });
   }
@@ -346,27 +400,9 @@ window.GDN.Viewer = (() => {
       }
     }
 
-    // Hit detection
-    const gdnSt = window.gdn?.getState?.();
-    const state = (gdnSt?.beds?.length ? gdnSt : _viewerState);
-    let newBedId = null, newPlantId = null;
-
-    for (const bed of state.beds) {
-      const verts = _bedVerts(bed);
-      if (verts.length >= 3 && _ptInPoly(w.x, w.y, verts)) {
-        newBedId = bed.id;
-        // Check plants within this bed
-        for (const plant of bed.plants) {
-          const wp = _plantWorldPos(plant, bed);
-          const sp = _species(plant.speciesId);
-          const pr = plant.radiusFt ?? (sp.dia/2);
-          if (Math.hypot(wp.x-w.x, wp.y-w.y) <= Math.max(pr, 0.5)) {
-            newPlantId = plant.id; break;
-          }
-        }
-        break;
-      }
-    }
+    const state = _state();
+    const hit = _hit(sx, sy);
+    const newBedId = hit.bed?.id || null, newPlantId = hit.plant?.id || null;
 
     const changed = newBedId !== _hovBedId || newPlantId !== _hovPlantId;
     _hovBedId   = newBedId;
@@ -389,6 +425,10 @@ window.GDN.Viewer = (() => {
 
   function _onUp(e) {
     const cv = document.getElementById('gdn-viewer-cv');
+    if (_drag && !_drag.moved) {
+      const rect = cv.getBoundingClientRect();
+      _activate(e.clientX - rect.left, e.clientY - rect.top);
+    }
     _drag = null;
     cv.style.cursor = 'grab';
   }
@@ -468,8 +508,8 @@ window.GDN.Viewer = (() => {
     render();
   }
 
-  function resetView() { _fitAll(); render(); }
+  function resetView() { _focusedBedId = null; _hovPlantId = null; _hideTooltip(); _fitAll(); render(); }
 
-  return { init, render, zoom, resetView };
+  return { init, render, zoom, resetView, focusBed };
 
 })();

@@ -676,3 +676,9 @@ select.gdn-input option:checked,
   .gal-grid { grid-template-columns: 1fr; }
   .gdn-explorer-hd { flex-direction: column; align-items: flex-start; }
 }
+
+/* Shared botanical artwork: stable dimensions prevent layout shift. */
+.gdn-plant-thumbnail { width:36px; height:36px; object-fit:contain; flex:0 0 36px; vertical-align:middle; }
+.gdn-plant-placeholder { display:inline-flex; align-items:center; justify-content:center; color:#526c48; font-size:24px; }
+.gd-bed-plants li { display:flex; align-items:center; gap:7px; }
+.gdn-plant-health { background:transparent; border-color:transparent; }

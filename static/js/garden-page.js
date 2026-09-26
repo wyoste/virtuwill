@@ -102,7 +102,11 @@ window.VW.GardenPage = (() => {
       h('div', { class: 'gd-section-hd' }, h('h2', { id: 'gd-beds-h' }, 'What’s growing')),
       h('div', { class: 'gd-beds' }, data.beds.map(b => h('article', { class: 'gd-bed', style: { borderTopColor: b.color } },
         h('div', { class: 'gd-bed-hd' }, h('h3', {}, b.name), h('span', { class: 'site-muted' }, b.plants ? `${b.plants} plants` : 'Resting')),
-        b.species.length ? h('ul', { class: 'gd-bed-plants' }, b.species.map(s => h('li', {}, `${s.emoji ? s.emoji + ' ' : ''}${s.name}`))) : null,
+        b.species.length ? h('ul', { class: 'gd-bed-plants' }, b.species.map(s => h('li', {}, VW.PlantArt.thumbnail(s.id), h('span', {}, s.name)))) : null,
+        h('button', { class: 'gd-bed-photos', onclick: () => {
+          GDN.Viewer.focusBed(b.id);
+          document.getElementById('gd-map').scrollIntoView({ behavior: 'smooth' });
+        } }, 'Explore bed →'),
         b.photos ? h('button', { class: 'gd-bed-photos', onclick: () => {
           filter = { bed: b.id, plant: '' };
           const g = document.getElementById('gd-photos'); g.redraw(); g.scrollIntoView({ behavior: 'smooth' });

@@ -28,7 +28,6 @@ window.VW.Garden = (() => {
 
   const GRID           = 0.25;   // ft — plant placement grid spacing
   const DRAG_THRESHOLD = 5;      // px — click vs drag
-  const PLANT_HIT      = 0.5;    // ft — hit radius for plant selection
   const FREE_MIN_DIST  = 0.3;    // ft — min distance between free-draw sample pts
   const FREE_MIN_VERTS = 3;      // minimum polygon vertices after simplification
   const SIMPLIFY_TOL   = 0.4;    // ft — Ramer-Douglas-Peucker tolerance
@@ -267,6 +266,7 @@ window.VW.Garden = (() => {
 
   function init() {
     _loadBg();
+    VW.PlantArt.preload(SPECIES.map(s => s.id)).then(render);
     _loadData().then(() => { _savedSnapshot = _snapshot(); _fitAll(); _buildSpeciesDropdown(); _renderBedList(); render(); });
     if (!_eventsOk) { _attachEvents(); _eventsOk = true; }
   }
@@ -342,9 +342,7 @@ window.VW.Garden = (() => {
     const wrap = document.getElementById('gdn-cv-wrap');
     if (!cv || !wrap) return;
     const W = wrap.clientWidth, H = wrap.clientHeight;
-    if (cv.width!==W || cv.height!==H) { cv.width=W; cv.height=H; }
-    const ctx = cv.getContext('2d');
-    ctx.clearRect(0,0,W,H);
+    const ctx = VW.PlantArt.canvasContext(cv, W, H);
     _plantDelBtn = null;   // reset each frame
 
     // Background
@@ -534,7 +532,7 @@ window.VW.Garden = (() => {
         ctx.fillStyle='#2F7A4B'; ctx.fill();
         ctx.font=`${Math.max(10,r*0.9)}px sans-serif`;
         ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText(sp.emoji, ms.x, ms.y);
+        VW.PlantArt.draw(ctx, sp.id, ms.x, ms.y, VW.PlantArt.markerSize(_cam.z));
         ctx.globalAlpha=1;
       }
     }
@@ -563,7 +561,7 @@ window.VW.Garden = (() => {
   function _drawPlant(ctx, plant, sx, sy, isSel, isHov, isDrag) {
     const sp      = SPECIES.find(s=>s.id===plant.speciesId)||{dia:1.5,emoji:'🌿'};
     const radiusFt = plant.radiusFt != null ? plant.radiusFt : sp.dia / 2;
-    const r        = Math.min(36, Math.max(4, radiusFt * _cam.z));
+    const r        = VW.PlantArt.markerSize(_cam.z) / 2;
     const h    = HEALTH[plant.health??2];
     ctx.globalAlpha = isDrag ? 0.4 : 1;
     if (isSel||isHov) {
@@ -583,12 +581,17 @@ window.VW.Garden = (() => {
       // Store delete hit zone for click handler
       _plantDelBtn = { x: bx, y: by, r: br, plantId: plant.id };
     }
-    ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2);
-    ctx.fillStyle=h.col+'44'; ctx.fill();
-    ctx.strokeStyle=isSel?'#fff':h.col; ctx.lineWidth=isSel?2:1; ctx.stroke();
-    const fs=Math.max(10,r*0.9);
-    ctx.font=`${fs}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(sp.emoji,sx,sy);
+    // Mature spread is a world-space footprint, separate from the readable icon.
+    if (isSel || isHov) {
+      ctx.beginPath(); ctx.arc(sx, sy, radiusFt * _cam.z, 0, Math.PI * 2);
+      ctx.strokeStyle = h.col; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    VW.PlantArt.draw(ctx, plant.speciesId, sx, sy, r * 2);
+    if (plant.health != null) {
+      ctx.beginPath(); ctx.arc(sx + r - 3, sy + r - 3, 3, 0, Math.PI * 2);
+      ctx.fillStyle = h.col; ctx.fill();
+    }
     // Only show name on hover — one at a time, no clutter
     if (isHov && plant.displayName) {
       const lfs = Math.max(10, r*0.6);
@@ -734,13 +737,15 @@ window.VW.Garden = (() => {
   }
 
   function _hitPlant(wx, wy, bed) {
-    return bed.plants.find(plant => {
-      const lp=plantLocalPos(plant,bed);
-      const wp=localToWorld(lp.x,lp.y,bed);
-      const sp = SPECIES.find(s=>s.id===plant.speciesId)||{dia:1.5};
-      const pr = plant.radiusFt != null ? plant.radiusFt : sp.dia/2;
-      return Math.hypot(wp.x-wx,wp.y-wy) <= Math.max(pr, PLANT_HIT);
-    }) || null;
+    // Choose the nearest center, rather than the first overlapping mature footprint.
+    let nearest = null, distance = Math.max(22, VW.PlantArt.markerSize(_cam.z) / 2) / _cam.z;
+    for (const plant of bed.plants) {
+      const lp = plantLocalPos(plant, bed);
+      const wp = localToWorld(lp.x, lp.y, bed);
+      const d = Math.hypot(wp.x - wx, wp.y - wy);
+      if (d <= distance) { nearest = plant; distance = d; }
+    }
+    return nearest;
   }
 
   // Snap world point to nearest valid grid point inside bed
@@ -1218,11 +1223,19 @@ window.VW.Garden = (() => {
     el.innerHTML='<option value="">— Choose species —</option>'+
       Object.entries(cats).map(([cat,sps])=>
         `<optgroup label="${cat}">${sps.map(sp=>
-          `<option value="${sp.id}">${sp.emoji} ${sp.name} (${sp.dia}ft)</option>`
+          `<option value="${sp.id}">${sp.name} (${sp.dia}ft)</option>`
         ).join('')}</optgroup>`
       ).join('');
+    const preview = document.createElement('div');
+    preview.className = 'gdn-species-preview';
+    el.after(preview);
     el.onchange=()=>{
-      if(el.value){_activeSpeciesId=el.value;_setIMode('place_plant');}
+      preview.replaceChildren();
+      if(el.value){
+        _activeSpeciesId=el.value;
+        preview.append(VW.PlantArt.thumbnail(el.value));
+        _setIMode('place_plant');
+      }
     };
   }
 
@@ -1244,14 +1257,13 @@ window.VW.Garden = (() => {
     const plants=bed.plants;
     el.innerHTML = plants.length
       ? plants.map(p=>{
-          const sp=SPECIES.find(s=>s.id===p.speciesId);
           const h=HEALTH[p.health??2];
           const isSel=p.id===_selectedPlantId;
           return `<div class="gdn-plant-card${isSel?' sel':''}"
               onclick="gdn.selectPlant('${p.id}')"
               ondblclick="gdn._openModalById('${p.id}')">
-            <div class="gdn-plant-health" style="background:${h.col}22;border-color:${h.col}55">
-              <span style="font-size:14px">${sp?.emoji||'🌿'}</span></div>
+            <div class="gdn-plant-health">
+              <span class="gdn-art-slot"></span></div>
             <div style="flex:1;min-width:0">
               <div class="gdn-plant-name">${p.displayName}</div>
               <div class="gdn-plant-meta">${h.icon} ${h.label}</div>
@@ -1262,6 +1274,9 @@ window.VW.Garden = (() => {
           </div>`;
         }).join('')
       : '<div class="gdn-empty">No plants yet. Choose a species then click a grid point.</div>';
+    el.querySelectorAll('.gdn-art-slot').forEach((slot, i) => {
+      slot.replaceWith(VW.PlantArt.thumbnail(plants[i].speciesId));
+    });
   }
 
   function _renderDimPanel(el, bed) {
