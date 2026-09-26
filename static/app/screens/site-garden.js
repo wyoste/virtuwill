@@ -1,6 +1,6 @@
 // Site › Garden: photos tagged to beds and plant types, the bed planner, and the Garden page's text.
 import { setDirty } from '../main.js';
-import { h, api, card, pageHead, tabs, empty, toast, run, dialog, field, values, confirmDelete, editable, saveAll, photoPicker } from '../lib.js';
+import { h, api, card, pageHead, tabs, empty, toast, run, dialog, field, values, confirmDelete, editable, saveAll, photoPicker, uploadEach, megabytes } from '../lib.js';
 
 const TABS = [['/app/site/garden', 'Photos'], ['/app/site/garden/planner', 'Beds & planner'], ['/app/site/garden/text', 'Page text']];
 
@@ -55,7 +55,20 @@ function photoFields(d, origin, onchange) {
     plantings.forEach(id => f.append('plantings', id)); tags.values().forEach(tag => f.append('tags', tag));
     return f;
   }
-  return { form, picker, payload };
+  // Photos go up one at a time, full size (their capture dates are read from them), each saved as it
+  // arrives; a retry sends only the ones not yet saved. `progress` is the element that says how far it's got.
+  const sent = new Set();
+  const progress = h('p', { class: 'ws-note wide', role: 'status' });
+  form.append(progress);
+  async function send() {
+    if (!picker.files().length) throw new Error('Choose photos to upload.');
+    const v = values(form);
+    await uploadEach(picker.files(), '/api/v1/garden/photos',
+      { caption: v.caption || '', taken_on: v.taken_on || '', beds: [...beds], species: [...plants], plantings: [...plantings], tags: tags.values() },
+      { done: sent, onProgress: (n, total, file) => { progress.textContent = `Uploading photo ${n} of ${total} (${megabytes(file.size)})…`; } });
+    progress.textContent = '';
+  }
+  return { form, picker, payload, send };
 }
 
 async function uploadForPlant(id) {
@@ -68,7 +81,7 @@ async function uploadForPlant(id) {
   const upload = h('button', { type: 'button', class: 'btn primary', onclick: async () => {
     upload.disabled = true; error.textContent = '';
     try {
-      await api('/api/v1/garden/photos', { method: 'POST', form: fields.payload() });
+      await fields.send();
       toast('Photos added'); box.close();
     } catch (e) { error.textContent = e.message; }
     finally { upload.disabled = false; }
@@ -85,7 +98,7 @@ function photos(view, d, ctx, redraw) {
   const form = fields.form;
   form.append(h('div', { class: 'ws-field wide' }, h('button', { type: 'button', class: 'btn primary',
     onclick: e => { if (fields.picker.files().length) upload.touch(); saveAll(e.currentTarget); } }, 'Upload')));
-  upload = editable(form, () => api('/api/v1/garden/photos', { method: 'POST', form: fields.payload(), quiet: true }), { then: redraw });
+  upload = editable(form, () => fields.send(), { then: redraw });
 
   // The gallery redraws on its own, so filtering or editing a photo keeps an upload in progress.
   const gallery = h('div', {});

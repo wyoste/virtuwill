@@ -295,28 +295,26 @@ export function textToHTML(text) {
 // out before uploading. picker.files() → File[]; onchange runs on every change.
 export const PHOTO_TYPES = 'image/jpeg,image/png,image/webp,image/gif';
 
-// A phone photo made ready for the web: at most `max` pixels on its long side, as JPEG. Phone photos are
-// 3–8 MB; this makes them a few hundred KB, so they upload quickly, and it drops their metadata, including
-// the GPS position they were taken at. GIFs, and anything the browser can't read, are sent as they are.
-export async function shrinkPhoto(file, { max = 2400, quality = 0.85 } = {}) {
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type) && !/\.(jpe?g|png|webp)$/i.test(file.name)) return file;
-  let bitmap;
-  try { bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { return file; }
-  const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff';                 // transparent PNGs get a white background as JPEG
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close?.();
-  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
-  if (!blob || (blob.size >= file.size && scale === 1 && file.type === 'image/jpeg')) return file;
-  return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: file.lastModified });
-}
-
 export const megabytes = bytes => (bytes / 1024 / 1024).toFixed(bytes < 1024 * 1024 ? 2 : 1) + ' MB';
+
+// Photos go up one per request, each saved as it arrives, so a big batch from a phone never becomes one huge
+// upload that can time out. `done` remembers the ones already sent: after a failure, trying again sends only the
+// rest. onProgress(i, total, file) runs before each one.
+export async function uploadEach(files, url, extra = {}, { done = new Set(), onProgress } = {}) {
+  const todo = files.filter(f => !done.has(f));
+  for (const [i, file] of todo.entries()) {
+    onProgress?.(i + 1 + (files.length - todo.length), files.length, file);
+    const form = new FormData();
+    form.append('files', file);
+    for (const [k, v] of Object.entries(extra)) [].concat(v).forEach(x => form.append(k, x));
+    try {
+      await api(url, { method: 'POST', form, quiet: true });
+    } catch (e) {
+      throw Object.assign(new Error(`${file.name}: ${e.message}` + (done.size ? ` (${done.size} of ${files.length} already saved; Save again to send the rest)` : '')), { status: e.status });
+    }
+    done.add(file);
+  }
+}
 export const PHOTO_NAME = /\.(jpe?g|png|webp|gif)$/i;
 
 export function photoPicker({ onchange, hint = 'or drop them here' } = {}) {

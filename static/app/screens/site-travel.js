@@ -1,7 +1,7 @@
 // Site › Travel: the stops on the public map, grouped by city, each with its photos;
 // and the countries and states visited.
 import { setDirty } from '../main.js';
-import { h, api, card, pageHead, empty, toast, run, field, values, dialog, confirmDelete, editable, saveAll, photoPicker, shrinkPhoto, megabytes } from '../lib.js';
+import { h, api, card, pageHead, empty, toast, run, field, values, dialog, confirmDelete, editable, saveAll, photoPicker, uploadEach, megabytes } from '../lib.js';
 
 const TYPES = [['visited', '📍 Visited'], ['recommend', '⭐ Recommend'], ['wishlist', '🌟 Want to go']];
 const typeLabel = t => TYPES.find(x => x[0] === t)?.[1] || t;
@@ -295,6 +295,7 @@ async function stopForm(p = {}) {
   const error = h('p', { class: 'ws-note warn', role: 'alert' });
   // Once the stop exists, a retry (say, after a photo was refused) updates it rather than adding it again.
   let id = p.id;
+  const sent = new Set();            // photos already saved, so a retry doesn't send them twice
   async function submit() {
     const v = values(form);
     const c = country.value;
@@ -313,19 +314,9 @@ async function stopForm(p = {}) {
       id = saved.id;
       const chosen = photos.files();
       if (chosen.length) {
-        // Shrunk on this device first: quicker to send, and without the GPS position phones write into photos.
-        error.textContent = `Preparing ${chosen.length} photo${chosen.length === 1 ? '' : 's'}…`;
-        const ready = [];
-        for (const [i, file] of chosen.entries()) {
-          ready.push(await shrinkPhoto(file));
-          error.textContent = `Preparing photos… ${i + 1} of ${chosen.length}`;
-        }
-        const total = ready.reduce((sum, f) => sum + f.size, 0);
-        error.textContent = `Uploading ${ready.length} photo${ready.length === 1 ? '' : 's'} (${megabytes(total)})…`;
-        const f = new FormData();
-        ready.forEach(file => f.append('files', file));
-        f.append('caption', v.caption || '');
-        await api(`/api/v1/travel/places/${saved.id}/photos`, { method: 'POST', form: f, quiet: true });
+        // Full-size originals, one at a time; a retry sends only the ones not yet saved.
+        await uploadEach(chosen, `/api/v1/travel/places/${saved.id}/photos`, { caption: v.caption || '' }, { done: sent,
+          onProgress: (n, total, file) => { error.textContent = `Uploading photo ${n} of ${total} (${megabytes(file.size)})…`; } });
       }
       error.textContent = '';
       toast(p.id ? 'Stop saved' : `Pinned ${body.name}${photos.files().length ? ' with ' + photos.files().length + ' photo' + (photos.files().length === 1 ? '' : 's') : ''}`);
