@@ -87,16 +87,33 @@ function photos(view, d, ctx, redraw) {
     onclick: e => { if (fields.picker.files().length) upload.touch(); saveAll(e.currentTarget); } }, 'Upload')));
   upload = editable(form, () => api('/api/v1/garden/photos', { method: 'POST', form: fields.payload(), quiet: true }), { then: redraw });
 
-  // Filter the gallery by bed or plant type.
-  const params = ctx.params;
-  const byBed = params.get('bed') || '', byPlant = params.get('plant') || '';
-  const shown = d.photos.filter(p => (!byBed || p.beds.includes(byBed)) && (!byPlant || p.species.includes(byPlant)));
-  const filter = (name, label, options, value) => h('label', { class: 'ws-field' }, h('span', {}, label),
-    h('select', { 'data-untracked': '', onchange: e => { const q = new URLSearchParams(params); if (e.target.value) q.set(name, e.target.value); else q.delete(name);
-      history.replaceState({}, '', '/app/site/garden' + (q.toString() ? '?' + q : '')); ctx.params = q; redraw(); } },
-      h('option', { value: '' }, 'Any'), options.map(o => h('option', { value: o.id, selected: o.id === value }, o.label))));
+  // The gallery redraws on its own, so filtering or editing a photo keeps an upload in progress.
+  const gallery = h('div', {});
   const bedName = id => d.beds.find(b => b.id === id)?.name || id;
   const plantName = id => plantOptions(d).find(s => s.id === id)?.label || id;
+  const filter = (name, label, options) => h('label', { class: 'ws-field' }, h('span', {}, label),
+    h('select', { 'data-untracked': '', onchange: e => {
+      const q = new URLSearchParams(ctx.params);
+      if (e.target.value) q.set(name, e.target.value); else q.delete(name);
+      history.replaceState({}, '', '/app/site/garden' + (q.toString() ? '?' + q : ''));
+      ctx.params = q;
+      drawGallery();
+    } }, h('option', { value: '' }, 'Any'), options.map(o => h('option', { value: o.id, selected: o.id === (ctx.params.get(name) || '') }, o.label))));
+  const filters = h('div', { class: 'ws-filters', style: { marginBottom: '12px' } }, filter('bed', 'Bed', bedOptions(d)), filter('plant', 'Plant type', plantOptions(d)));
+  const refresh = async () => { d.photos = (await api('/api/v1/garden')).photos; drawGallery(); };
+  const title = h('span', {});
+  function drawGallery() {
+    const byBed = ctx.params.get('bed') || '', byPlant = ctx.params.get('plant') || '';
+    const shown = d.photos.filter(p => (!byBed || p.beds.includes(byBed)) && (!byPlant || p.species.includes(byPlant)));
+    title.textContent = `Photos (${shown.length}${shown.length !== d.photos.length ? ' of ' + d.photos.length : ''})`;
+    gallery.replaceChildren(shown.length ? h('div', { class: 'ws-photo-grid' }, shown.map(p => h('button', { type: 'button', class: 'ws-photo', onclick: () => editPhoto(p, d, refresh) },
+        h('img', { src: p.url, alt: p.caption || 'Garden photo', loading: 'lazy' }),
+        h('span', { class: 'ws-photo-meta' }, p.caption ? h('strong', {}, p.caption) : null,
+          h('span', { class: 'garden-tags' }, [...p.beds.map(bedName), ...p.species.map(plantName), ...(p.tags || [])].map(t => VW.GardenTags.pill(t))),
+          h('small', {}, p.date || 'Capture date unknown')))))
+      : empty(d.photos.length ? 'No photos match.' : 'No photos yet. Add some above.'));
+  }
+  drawGallery();
 
   view.append(
     card('Add photos', form),
@@ -110,14 +127,7 @@ function photos(view, d, ctx, redraw) {
           h('span', { class: 'ws-spots' }, plants.map(p => h('button', { type: 'button', class: 'ws-spot', title: `Add photos of ${p.name} at ${p.spot}`,
             'aria-label': `Add photos of ${p.name} at ${p.spot}`, onclick: () => run(null, () => uploadForPlant(p.id)) }, p.spot || '?'))));
       })))))),
-    card(h('span', {}, `Photos (${shown.length}${shown.length !== d.photos.length ? ' of ' + d.photos.length : ''})`),
-      h('div', { class: 'ws-filters', style: { marginBottom: '12px' } }, filter('bed', 'Bed', bedOptions(d), byBed), filter('plant', 'Plant type', plantOptions(d), byPlant)),
-      shown.length ? h('div', { class: 'ws-photo-grid' }, shown.map(p => h('button', { type: 'button', class: 'ws-photo', onclick: () => editPhoto(p, d, redraw) },
-        h('img', { src: p.url, alt: p.caption || 'Garden photo', loading: 'lazy' }),
-        h('span', { class: 'ws-photo-meta' }, p.caption ? h('strong', {}, p.caption) : null,
-          h('span', { class: 'garden-tags' }, [...p.beds.map(bedName), ...p.species.map(plantName), ...(p.tags || [])].map(t => VW.GardenTags.pill(t))),
-          h('small', {}, p.date || 'Capture date unknown')))))
-        : empty(d.photos.length ? 'No photos match.' : 'No photos yet. Add some above.')));
+    card(title, filters, gallery));
 }
 
 async function editPhoto(p, d, redraw) {

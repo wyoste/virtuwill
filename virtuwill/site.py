@@ -235,6 +235,10 @@ def travel_photos_add_v1(place_id):
     if not files:
         return jsonify({"error": "Choose one or more photos"}), 400
     caption = request.form.get("caption", "").strip()[:500]
+    # Every file is checked before any is kept, so a refused upload leaves nothing behind to duplicate on retry.
+    refused = [f.filename for f in files if os.path.splitext(f.filename)[1].lower() not in media.IMAGES]
+    if refused:
+        return jsonify({"error": f"{', '.join(refused)}: only JPEG, PNG, WebP or GIF images. Nothing was added."}), 400
     with db.tx() as conn:
         if not conn.execute("SELECT 1 FROM travel.places WHERE place_id = %s", (place_id,)).fetchone():
             return jsonify({"error": "Not found"}), 404
@@ -242,8 +246,6 @@ def travel_photos_add_v1(place_id):
                                 (place_id,)).fetchone()["n"]
         for f in files:
             ext = os.path.splitext(f.filename)[1].lower()
-            if ext not in media.IMAGES:
-                return jsonify({"error": f"{f.filename}: only JPEG, PNG, WebP or GIF images"}), 400
             asset = media.save_upload(conn, f, f"travel/photos/{uuid.uuid4().hex[:12]}{ext}")
             conn.execute("INSERT INTO travel.place_photos (place_id, position, asset_id, caption) VALUES (%s, %s, %s, %s)",
                          (place_id, position, asset, caption))

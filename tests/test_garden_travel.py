@@ -72,6 +72,15 @@ class GardenPhotoTests(unittest.TestCase):
         self.assertEqual(self.visitor.get("/api/v1/garden").json["photos"][0]["beds"], [])
 
 
+    def test_a_refused_file_keeps_nothing_from_the_same_upload(self):
+        both = self.owner.post("/api/v1/garden/photos", content_type="multipart/form-data",
+                               data={"files": [(io.BytesIO(PNG), "good.png"), (io.BytesIO(b"x"), "IMG_0001.HEIC")]})
+        self.assertEqual(both.status_code, 400)
+        self.assertIn("IMG_0001.HEIC", both.json["error"])
+        with db.tx() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) AS n FROM garden.photos").fetchone()["n"], 0)
+            self.assertIsNone(conn.execute("SELECT 1 FROM core.media_assets WHERE path LIKE 'garden/photos/%%'").fetchone())
+
     def test_capture_dates_multiple_beds_labels_and_individual_plant_survive_edits(self):
         from tests.test_garden_metadata import photo
         source = photo('2024:04:03 23:59:00').stream.getvalue()
@@ -241,6 +250,13 @@ class TravelStopTests(unittest.TestCase):
         self.assertEqual(self.owner.delete(f"/api/v1/travel/places/{pid}").status_code, 200)
         self.assertEqual(self.owner.delete(f"/api/v1/travel/places/{pid}").status_code, 404)
 
+
+    def test_a_refused_file_adds_no_photos_to_a_stop(self):
+        stop = self.owner.post("/api/v1/travel/places", json={"name": "Test Pier", "lat": 10, "lng": 10}).json
+        r = self.owner.post(f"/api/v1/travel/places/{stop['id']}/photos", content_type="multipart/form-data",
+                            data={"files": [(io.BytesIO(PNG), "good.png"), (io.BytesIO(b"x"), "clip.mov")]})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(next(p for p in self.owner.get("/api/v1/travel").json["places"] if p["id"] == stop["id"])["photos"], [])
 
     def test_visited_stops_mark_their_country_and_state(self):
         from virtuwill import db, travel
