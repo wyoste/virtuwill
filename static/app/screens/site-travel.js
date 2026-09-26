@@ -296,8 +296,20 @@ async function stopForm(p = {}) {
   // Once the stop exists, a retry (say, after a photo was refused) updates it rather than adding it again.
   let id = p.id;
   const sent = new Set();            // photos already saved, so a retry doesn't send them twice
+  // Adding photos to a saved stop leaves the stop alone: no re-save, no position lookup, just the photos.
+  let detailsChanged = !p.id;
+  const touched = e => { if (!photos.el.contains(e.target) && e.target.name !== 'caption') detailsChanged = true; };
+  form.addEventListener('input', touched);
+  form.addEventListener('change', touched);
   async function submit() {
     const v = values(form);
+    if (id && !detailsChanged) {
+      if (!photos.files().length) { error.textContent = ''; return true; }
+      try { await sendPhotos(id, v); } catch (e) { error.textContent = e.message; return false; }
+      error.textContent = '';
+      toast(`Added ${photos.files().length} photo${photos.files().length === 1 ? '' : 's'} to ${p.name}`);
+      return true;
+    }
     const c = country.value;
     if (!c) { error.textContent = 'Choose a country.'; return false; }
     const where = city.value;
@@ -312,16 +324,19 @@ async function stopForm(p = {}) {
                      country: c.code, region: region.value || where?.region || '' };
       const saved = await api(id ? `/api/v1/travel/places/${id}` : '/api/v1/travel/places', { method: id ? 'PUT' : 'POST', body, quiet: true });
       id = saved.id;
-      const chosen = photos.files();
-      if (chosen.length) {
-        // Full-size originals, one at a time; a retry sends only the ones not yet saved.
-        await uploadEach(chosen, `/api/v1/travel/places/${saved.id}/photos`, { caption: v.caption || '' }, { done: sent,
-          onProgress: (n, total, file) => { error.textContent = `Uploading photo ${n} of ${total} (${megabytes(file.size)})…`; } });
-      }
+      detailsChanged = false;        // saved: a retry after a refused photo only sends the photos
+      await sendPhotos(id, v);
       error.textContent = '';
       toast(p.id ? 'Stop saved' : `Pinned ${body.name}${photos.files().length ? ' with ' + photos.files().length + ' photo' + (photos.files().length === 1 ? '' : 's') : ''}`);
       return true;
     } catch (e) { error.textContent = e.message; return false; }
+  }
+  // Full-size originals, one at a time; a retry sends only the ones not yet saved.
+  async function sendPhotos(stopId, v) {
+    const chosen = photos.files();
+    if (!chosen.length) return;
+    await uploadEach(chosen, `/api/v1/travel/places/${stopId}/photos`, { caption: v.caption || '' }, { done: sent,
+      onProgress: (n, total, file) => { error.textContent = `Uploading photo ${n} of ${total} (${megabytes(file.size)})…`; } });
   }
   return { el: form, error, submit, created: () => id !== p.id };
 }
