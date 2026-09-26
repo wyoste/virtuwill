@@ -293,9 +293,13 @@ export function textToHTML(text) {
 // ── Photo picker ─────────────────────────────────────────────────────────────
 // Choose or drop photos; shows a thumbnail of each, any of which can be taken
 // out before uploading. picker.files() → File[]; onchange runs on every change.
+export const PHOTO_TYPES = 'image/jpeg,image/png,image/webp,image/gif';
+export const PHOTO_NAME = /\.(jpe?g|png|webp|gif)$/i;
+
 export function photoPicker({ onchange, hint = 'or drop them here' } = {}) {
   let chosen = [];
-  const input = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, 'data-untracked': '' });
+  // The types the server keeps. Asking for these lets an iPhone hand over JPEG in place of HEIC.
+  const input = h('input', { type: 'file', accept: PHOTO_TYPES, multiple: true, hidden: true, 'data-untracked': '' });
   const previews = h('div', { class: 'ws-thumbs' });
   const count = h('span', { class: 'ws-note' }, 'No photos chosen');
   const tally = h('input', { type: 'hidden', value: '0' });   // so choosing photos counts as an edit
@@ -309,8 +313,9 @@ export function photoPicker({ onchange, hint = 'or drop them here' } = {}) {
     count.textContent = chosen.length ? `${chosen.length} photo${chosen.length === 1 ? '' : 's'} chosen` : 'No photos chosen';
   };
   const add = list => {
-    const images = [...list].filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(f.name));
-    if (images.length < list.length) toast('Only photos can be added (JPEG, PNG, WebP or GIF).', 'error');
+    const images = [...list].filter(f => PHOTO_NAME.test(f.name));
+    const refused = [...list].filter(f => !PHOTO_NAME.test(f.name)).map(f => f.name);
+    if (refused.length) toast(`Not added: ${refused.join(', ')}. Photos must be JPEG, PNG, WebP or GIF.`, 'error');
     chosen = [...chosen, ...images];
     draw();
     onchange?.();

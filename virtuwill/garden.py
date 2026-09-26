@@ -275,11 +275,23 @@ def _tags(conn, data):
 
 
 def _retag(conn, photo_id, beds, species):
-    conn.execute("DELETE FROM garden.photo_subjects WHERE photo_id = %s", (photo_id,))
+    """Make a photo's beds and plant types these, touching nothing else: free-text labels stay, and a tag on a
+    particular planting stays while its plant type is still chosen (it already counts as that plant type)."""
+    conn.execute("""DELETE FROM garden.photo_subjects WHERE photo_id = %s AND subject_type = 'bed'
+                    AND NOT (subject_ref = ANY(%s))""", (photo_id, list(beds)))
     for bed in beds:
-        conn.execute("INSERT INTO garden.photo_subjects VALUES (%s, 'bed', %s)", (photo_id, bed))
+        conn.execute("INSERT INTO garden.photo_subjects VALUES (%s, 'bed', %s) ON CONFLICT DO NOTHING", (photo_id, bed))
+    conn.execute("""DELETE FROM garden.photo_subjects t USING garden.plantings p
+                    WHERE t.photo_id = %s AND t.subject_type = 'planting' AND p.planting_id = t.subject_ref
+                      AND NOT (p.species_id = ANY(%s))""", (photo_id, list(species)))
+    by_planting = {r["species_id"] for r in conn.execute(
+        """SELECT p.species_id FROM garden.photo_subjects t JOIN garden.plantings p ON p.planting_id = t.subject_ref
+           WHERE t.photo_id = %s AND t.subject_type = 'planting'""", (photo_id,))}
+    conn.execute("""DELETE FROM garden.photo_subjects WHERE photo_id = %s AND subject_type = 'species'
+                    AND NOT (subject_ref = ANY(%s))""", (photo_id, [sp for sp in species if sp not in by_planting]))
     for sp in species:
-        conn.execute("INSERT INTO garden.photo_subjects VALUES (%s, 'species', %s)", (photo_id, sp))
+        if sp not in by_planting:
+            conn.execute("INSERT INTO garden.photo_subjects VALUES (%s, 'species', %s) ON CONFLICT DO NOTHING", (photo_id, sp))
 
 
 @bp.route("/api/v1/garden")
@@ -299,12 +311,14 @@ def photos_add_v1():
     if not in_calendar(taken_on):
         return jsonify({"error": "taken_on must be a date (YYYY-MM-DD)"}), 400
     caption = request.form.get("caption", "").strip()[:500]
+    # Every file is checked before any is kept, so a refused upload leaves nothing behind to duplicate on retry.
+    refused = [f.filename for f in files if os.path.splitext(f.filename)[1].lower() not in media.IMAGES]
+    if refused:
+        return jsonify({"error": f"{', '.join(refused)}: only JPEG, PNG, WebP or GIF images. Nothing was uploaded."}), 400
     with db.tx() as conn:
         beds, species = _tags(conn, request.form)
         for f in files:
             ext = os.path.splitext(f.filename)[1].lower()
-            if ext not in media.IMAGES:
-                return jsonify({"error": f"{f.filename}: only JPEG, PNG, WebP or GIF images"}), 400
             asset = media.save_upload(conn, f, f"{PHOTOS_DIR}/{uuid.uuid4().hex[:12]}{ext}")
             photo_id = str(uuid.uuid4())
             conn.execute("INSERT INTO garden.photos (photo_id, asset_id, taken_on, caption) VALUES (%s, %s, %s, %s)",
@@ -320,6 +334,8 @@ def photo_update_v1(photo_id):
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify({"error": "Expected a JSON object"}), 400
+    if data.get("taken_on") and not in_calendar(parse_date(data["taken_on"])):
+        return jsonify({"error": "taken_on must be a date (YYYY-MM-DD)"}), 400
     with db.tx() as conn:
         if not conn.execute("SELECT 1 FROM garden.photos WHERE photo_id = %s", (photo_id,)).fetchone():
             return jsonify({"error": "Not found"}), 404
@@ -327,8 +343,6 @@ def photo_update_v1(photo_id):
             conn.execute("UPDATE garden.photos SET caption = %s WHERE photo_id = %s", (str(data["caption"] or "").strip()[:500], photo_id))
         if "taken_on" in data:
             day = parse_date(data["taken_on"]) if data["taken_on"] else None
-            if data["taken_on"] and not in_calendar(day):
-                return jsonify({"error": "taken_on must be a date (YYYY-MM-DD)"}), 400
             conn.execute("UPDATE garden.photos SET taken_on = %s WHERE photo_id = %s", (day, photo_id))
         if "beds" in data or "species" in data:
             current = next(p for p in overview(conn)["photos"] if p["id"] == photo_id)
