@@ -10,3 +10,5 @@ data/private-trackers/
 test-results/
 # Uploaded CVs live in the database; copies restored to disk are never committed.
 static/career/
+# Travel photos are uploads: kept in the database and restored to disk on start, never committed.
+static/travel/photos/
