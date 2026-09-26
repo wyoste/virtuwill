@@ -294,6 +294,29 @@ export function textToHTML(text) {
 // Choose or drop photos; shows a thumbnail of each, any of which can be taken
 // out before uploading. picker.files() → File[]; onchange runs on every change.
 export const PHOTO_TYPES = 'image/jpeg,image/png,image/webp,image/gif';
+
+// A phone photo made ready for the web: at most `max` pixels on its long side, as JPEG. Phone photos are
+// 3–8 MB; this makes them a few hundred KB, so they upload quickly, and it drops their metadata, including
+// the GPS position they were taken at. GIFs, and anything the browser can't read, are sent as they are.
+export async function shrinkPhoto(file, { max = 2400, quality = 0.85 } = {}) {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) && !/\.(jpe?g|png|webp)$/i.test(file.name)) return file;
+  let bitmap;
+  try { bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { return file; }
+  const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';                 // transparent PNGs get a white background as JPEG
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+  if (!blob || (blob.size >= file.size && scale === 1 && file.type === 'image/jpeg')) return file;
+  return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: file.lastModified });
+}
+
+export const megabytes = bytes => (bytes / 1024 / 1024).toFixed(bytes < 1024 * 1024 ? 2 : 1) + ' MB';
 export const PHOTO_NAME = /\.(jpe?g|png|webp|gif)$/i;
 
 export function photoPicker({ onchange, hint = 'or drop them here' } = {}) {

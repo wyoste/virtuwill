@@ -204,7 +204,7 @@ def travel_place_add_v1():
         problem = travel.write_place(conn, place_id, data)
         if problem:
             return jsonify({"error": problem}), 400
-        return jsonify(next(p for p in travel.pins(conn) if str(p["id"]) == place_id)), 201
+        return jsonify(travel.pin(conn, place_id)), 201
 
 
 @bp.route("/api/v1/travel/places/<place_id>", methods=["PUT", "DELETE"])
@@ -220,11 +220,11 @@ def travel_place_v1(place_id):
             for path in paths:
                 media.delete(conn, path)
             return jsonify({"ok": True})
-        current = next(p for p in travel.pins(conn) if str(p["id"]) == place_id)
+        current = travel.pin(conn, place_id)
         problem = travel.write_place(conn, place_id, {**current, **(request.get_json(silent=True) or {})})
         if problem:
             return jsonify({"error": problem}), 400
-        return jsonify(next(p for p in travel.pins(conn) if str(p["id"]) == place_id))
+        return jsonify(travel.pin(conn, place_id))
 
 
 @bp.route("/api/v1/travel/places/<place_id>/photos", methods=["POST"])
@@ -250,7 +250,7 @@ def travel_photos_add_v1(place_id):
             conn.execute("INSERT INTO travel.place_photos (place_id, position, asset_id, caption) VALUES (%s, %s, %s, %s)",
                          (place_id, position, asset, caption))
             position += 1
-        return jsonify(next(p for p in travel.pins(conn) if str(p["id"]) == place_id)), 201
+        return jsonify(travel.pin(conn, place_id)), 201
 
 
 @bp.route("/api/v1/travel/places/<place_id>/photos/<int:position>", methods=["PUT", "DELETE"])
@@ -268,7 +268,7 @@ def travel_photo_v1(place_id, position):
         else:
             caption = str((request.get_json(silent=True) or {}).get("caption") or "").strip()[:500]
             conn.execute("UPDATE travel.place_photos SET caption = %s WHERE place_id = %s AND position = %s", (caption, place_id, position))
-        return jsonify(next(p for p in travel.pins(conn) if str(p["id"]) == place_id))
+        return jsonify(travel.pin(conn, place_id))
 
 
 @bp.route("/api/v1/travel/visited", methods=["PUT"])

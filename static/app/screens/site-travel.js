@@ -1,7 +1,7 @@
 // Site › Travel: the stops on the public map, grouped by city, each with its photos;
 // and the countries and states visited.
 import { setDirty } from '../main.js';
-import { h, api, card, pageHead, empty, toast, run, field, values, dialog, confirmDelete, editable, saveAll, photoPicker } from '../lib.js';
+import { h, api, card, pageHead, empty, toast, run, field, values, dialog, confirmDelete, editable, saveAll, photoPicker, shrinkPhoto, megabytes } from '../lib.js';
 
 const TYPES = [['visited', '📍 Visited'], ['recommend', '⭐ Recommend'], ['wishlist', '🌟 Want to go']];
 const typeLabel = t => TYPES.find(x => x[0] === t)?.[1] || t;
@@ -311,12 +311,23 @@ async function stopForm(p = {}) {
                      country: c.code, region: region.value || where?.region || '' };
       const saved = await api(id ? `/api/v1/travel/places/${id}` : '/api/v1/travel/places', { method: id ? 'PUT' : 'POST', body, quiet: true });
       id = saved.id;
-      if (photos.files().length) {
+      const chosen = photos.files();
+      if (chosen.length) {
+        // Shrunk on this device first: quicker to send, and without the GPS position phones write into photos.
+        error.textContent = `Preparing ${chosen.length} photo${chosen.length === 1 ? '' : 's'}…`;
+        const ready = [];
+        for (const [i, file] of chosen.entries()) {
+          ready.push(await shrinkPhoto(file));
+          error.textContent = `Preparing photos… ${i + 1} of ${chosen.length}`;
+        }
+        const total = ready.reduce((sum, f) => sum + f.size, 0);
+        error.textContent = `Uploading ${ready.length} photo${ready.length === 1 ? '' : 's'} (${megabytes(total)})…`;
         const f = new FormData();
-        photos.files().forEach(file => f.append('files', file));
+        ready.forEach(file => f.append('files', file));
         f.append('caption', v.caption || '');
         await api(`/api/v1/travel/places/${saved.id}/photos`, { method: 'POST', form: f, quiet: true });
       }
+      error.textContent = '';
       toast(p.id ? 'Stop saved' : `Pinned ${body.name}${photos.files().length ? ' with ' + photos.files().length + ' photo' + (photos.files().length === 1 ? '' : 's') : ''}`);
       return true;
     } catch (e) { error.textContent = e.message; return false; }
