@@ -1,12 +1,15 @@
 // Site › Travel: the stops on the public map, grouped by city, each with its photos;
 // and the countries and states visited.
-import { h, api, card, pageHead, empty, toast, run, field, values, dialog, confirmDelete, editable, saveAll, photoPicker, PHOTO_TYPES } from '../lib.js';
+import { setDirty } from '../main.js';
+import { h, api, card, pageHead, empty, toast, run, field, values, dialog, confirmDelete, editable, saveAll, photoPicker } from '../lib.js';
 
 const TYPES = [['visited', '📍 Visited'], ['recommend', '⭐ Recommend'], ['wishlist', '🌟 Want to go']];
 const typeLabel = t => TYPES.find(x => x[0] === t)?.[1] || t;
 
 export async function render(view) {
   const d = await api('/api/v1/travel');
+  editing = false; closeOpen = null;
+  setDirty(() => editing);        // an open, changed stop counts as unsaved work
   const redraw = () => { view.replaceChildren(); return render(view); };
 
   // Stops grouped by city, cities A–Z.
@@ -27,42 +30,74 @@ export async function render(view) {
     regions(d));
 }
 
+// One line per stop: what and when, how many photos, the start of its story. Edit opens it in place,
+// with the whole form and its photos; only one stop is open at a time.
+let closeOpen = null;
+let editing = false;
+
 function stop(p, redraw) {
-  const files = h('input', { type: 'file', accept: PHOTO_TYPES, multiple: true, hidden: true });
-  files.onchange = () => run(null, async () => {
-    const f = new FormData();
-    for (const file of files.files) f.append('files', file);
-    await api(`/api/v1/travel/places/${p.id}/photos`, { method: 'POST', form: f });
-    toast(`Added to ${p.name}`);
-    redraw();
-  });
-  return h('li', { class: 'ws-row ws-stop' },
+  const panel = h('div', { class: 'ws-stop-edit', hidden: true });
+  const edit = h('button', { class: 'btn small', 'aria-expanded': 'false', onclick: () => (panel.hidden ? open() : close()) }, 'Edit');
+  const row = h('li', { class: 'ws-row ws-stop' },
     h('div', { class: 'ws-row-main' },
       h('div', { class: 'ws-row-title' }, p.name),
-      h('div', { class: 'ws-row-meta' }, [typeLabel(p.type), p.visited ? new Date(p.visited + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : null,
-        p.note].filter(Boolean).join(' · ')),
-      p.photoItems.length ? h('div', { class: 'ws-thumbs' }, p.photoItems.map(ph => h('div', { class: 'ws-thumb' },
-        h('button', { type: 'button', class: 'ws-thumb-open', 'aria-label': 'Edit photo caption', onclick: () => editPhoto(p, ph, redraw) },
-          h('img', { src: ph.url, alt: ph.caption || p.name, loading: 'lazy' })),
-        h('small', {}, ph.caption || 'No caption'),
-        h('button', { class: 'btn small danger', 'aria-label': 'Remove photo', onclick: async () => {
-          if (!(await confirmDelete('this photo'))) return;
-          await run(null, async () => { await api(`/api/v1/travel/places/${p.id}/photos/${ph.position}`, { method: 'DELETE' }); redraw(); });
-        } }, '×')))) : null),
-    h('div', { class: 'ws-row-end' },
-      h('button', { class: 'btn small', onclick: () => files.click() }, '+ Photos'), files,
-      h('button', { class: 'btn small', onclick: async () => { if (await editStop(p)) redraw(); } }, 'Edit'),
+      h('div', { class: 'ws-row-meta' }, [typeLabel(p.type),
+        p.visited ? new Date(p.visited + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : null,
+        p.photoItems.length ? `${p.photoItems.length} photo${p.photoItems.length === 1 ? '' : 's'}` : 'No photos'].filter(Boolean).join(' · ')),
+      p.note ? h('div', { class: 'ws-stop-note' }, p.note) : null),
+    h('div', { class: 'ws-row-end' }, edit,
       h('button', { class: 'btn small danger', 'aria-label': 'Remove ' + p.name, onclick: async () => {
         if (!(await confirmDelete(p.name + (p.photoItems.length ? ' and its photos' : '')))) return;
-        await run(null, async () => { await api(`/api/v1/travel/places/${p.id}`, { method: 'DELETE' }); redraw(); });
-      } }, '✕')));
+        await run(null, async () => { await api(`/api/v1/travel/places/${p.id}`, { method: 'DELETE' }); editing = false; redraw(); });
+      } }, '✕')),
+    panel);
+
+  function close() {
+    panel.hidden = true; panel.replaceChildren(); edit.textContent = 'Edit'; edit.setAttribute('aria-expanded', 'false');
+    row.classList.remove('open'); editing = false; closeOpen = null;
+  }
+  async function open() {
+    if (closeOpen) {
+      if (editing && !confirm('Close the stop you’re editing without saving?')) return;
+      closeOpen();
+    }
+    closeOpen = close;
+    const form = await stopForm(p);
+    panel.replaceChildren(
+      form.el,
+      h('section', { class: 'ws-stop-photos' }, h('h4', {}, `Photos (${p.photoItems.length})`),
+        p.photoItems.length ? h('div', { class: 'ws-stop-photo-grid' }, p.photoItems.map(ph => photoCard(p, ph, redraw)))
+          : h('p', { class: 'ws-note' }, 'No photos yet. Add some above.')),
+      form.error,
+      h('div', { class: 'ws-stop-actions' },
+        h('button', { class: 'btn', type: 'button', onclick: close }, 'Cancel'),
+        h('button', { class: 'btn primary', type: 'button', onclick: async e => {
+          const b = e.currentTarget;
+          b.disabled = true;
+          if (await form.submit()) { editing = false; closeOpen = null; redraw(); } else b.disabled = false;
+        } }, 'Save stop')));
+    panel.addEventListener('input', () => { editing = true; });
+    panel.hidden = false; edit.textContent = 'Close'; edit.setAttribute('aria-expanded', 'true'); row.classList.add('open');
+    panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  return row;
 }
 
-async function editPhoto(p, ph, redraw) {
-  const form = h('form', { class: 'ws-form', onsubmit: e => e.preventDefault() },
-    h('img', { src: ph.url, alt: '', class: 'ws-photo-preview' }), field('Caption', 'caption', { value: ph.caption, wide: true }));
-  if (!(await dialog('Photo at ' + p.name, form, [['Cancel', null], ['Save', true]]))) return;
-  await run(null, async () => { await api(`/api/v1/travel/places/${p.id}/photos/${ph.position}`, { method: 'PUT', body: values(form) }); redraw(); });
+// A photo in an open stop: its caption saves as soon as it's changed; × removes it.
+function photoCard(p, ph, redraw) {
+  const caption = h('input', { class: 'ws-input', value: ph.caption, placeholder: 'Add a caption', 'aria-label': 'Caption', 'data-untracked': '' });
+  const state = h('small', { class: 'ws-note' });
+  caption.onchange = () => run(null, async () => {
+    await api(`/api/v1/travel/places/${p.id}/photos/${ph.position}`, { method: 'PUT', body: { caption: caption.value }, quiet: true });
+    ph.caption = caption.value; state.textContent = 'Saved';
+  });
+  return h('figure', { class: 'ws-stop-photo' },
+    h('img', { src: ph.url, alt: ph.caption || p.name, loading: 'lazy' }),
+    h('figcaption', {}, caption, state),
+    h('button', { class: 'btn small danger ws-stop-photo-del', 'aria-label': 'Remove photo', onclick: async () => {
+      if (!(await confirmDelete('this photo'))) return;
+      await run(null, async () => { await api(`/api/v1/travel/places/${p.id}/photos/${ph.position}`, { method: 'DELETE' }); editing = false; redraw(); });
+    } }, '×'));
 }
 
 // ── Adding or editing a stop ─────────────────────────────────────────────────
@@ -205,7 +240,9 @@ async function position(v, country, city) {
   return { lat: country.lat, lng: country.lng };
 }
 
-async function editStop(p = {}) {
+// The stop's form: used in the Add a stop dialog and when a stop is opened for editing.
+// submit() saves it (and any photos chosen) and returns true, or shows what's wrong and returns false.
+async function stopForm(p = {}) {
   const list = await countryList();
   // An existing stop's city reads "Town, Country": find its country, and the town before it.
   const parts = (p.city || '').split(',').map(x => x.trim()).filter(Boolean);
@@ -232,7 +269,7 @@ async function editStop(p = {}) {
     field('Visited', 'visited', { kind: 'date', value: p.visited || '' }),
     field('About this place (shown when a visitor opens the pin)', 'note', { kind: 'textarea', value: p.note, wide: true,
       placeholder: 'What it was like, what to do there, who you were with…' }),
-    h('div', { class: 'ws-field wide' }, h('span', {}, p.id ? 'Add photos' : 'Photos'), photos.el),
+    h('div', { class: 'ws-field wide' }, h('span', {}, p.id ? 'Add more photos' : 'Photos'), photos.el),
     field('Caption for these photos (optional)', 'caption', { wide: true }),
     h('p', { class: 'ws-note wide' }, 'A visited stop shades its country (and US state) on the map by itself.'),
     h('details', { class: 'ws-manual' }, h('summary', {}, 'Exact position (optional)'),
@@ -243,11 +280,10 @@ async function editStop(p = {}) {
   const error = h('p', { class: 'ws-note warn', role: 'alert' });
   // Once the stop exists, a retry (say, after a photo was refused) updates it rather than adding it again.
   let id = p.id;
-  for (;;) {
-    if (!(await dialog(p.id ? 'Edit stop' : 'Add a stop', h('div', {}, form, error), [['Cancel', null], ['Save', true]]))) return id !== p.id;
+  async function submit() {
     const v = values(form);
     const c = country.value;
-    if (!c) { error.textContent = 'Choose a country.'; continue; }
+    if (!c) { error.textContent = 'Choose a country.'; return false; }
     const where = city.value;
     // Moving an existing stop to another country or town moves its pin too, unless exact coordinates were typed.
     const moved = p.id && (c.code !== existing?.code || (where?.name || '') !== town || (where && !where.kept));
@@ -268,7 +304,17 @@ async function editStop(p = {}) {
       }
       toast(p.id ? 'Stop saved' : `Pinned ${body.name}${photos.files().length ? ' with ' + photos.files().length + ' photo' + (photos.files().length === 1 ? '' : 's') : ''}`);
       return true;
-    } catch (e) { error.textContent = e.message; }
+    } catch (e) { error.textContent = e.message; return false; }
+  }
+  return { el: form, error, submit, created: () => id !== p.id };
+}
+
+// Adding a stop happens in a dialog.
+async function editStop(p = {}) {
+  const f = await stopForm(p);
+  for (;;) {
+    if (!(await dialog(p.id ? 'Edit stop' : 'Add a stop', h('div', {}, f.el, f.error), [['Cancel', null], ['Save', true]]))) return f.created();
+    if (await f.submit()) return true;
   }
 }
 
