@@ -354,3 +354,5 @@ button.ws-chip[aria-pressed="true"], .ws-seg button[aria-pressed="true"], .ws-ha
 .ws-stop-photo figcaption .ws-input { width: 100%; font-size: 13px; }
 .ws-stop-photo-del { position: absolute; top: 6px; right: 6px; }
 .ws-stop-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.ws-sort { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text2, #4b5a4a); }
+.ws-sort select { width: auto; padding-right: 28px; }

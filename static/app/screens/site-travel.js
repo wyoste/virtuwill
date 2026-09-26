@@ -12,19 +12,33 @@ export async function render(view) {
   setDirty(() => editing);        // an open, changed stop counts as unsaved work
   const redraw = () => { view.replaceChildren(); return render(view); };
 
-  // Stops grouped by city, cities A–Z.
+  // Stops grouped by city. Cities in the chosen order: by their latest visit (newest or oldest first), or A–Z.
+  // Stops without a date go last; within a city, stops follow the same order.
   const byCity = new Map();
   for (const p of d.places) {
     const city = p.city || 'Other places';
     byCity.set(city, [...(byCity.get(city) || []), p]);
   }
-  const cities = [...byCity.keys()].sort((a, b) => a.localeCompare(b));
+  const latest = city => byCity.get(city).map(p => p.visited || '').sort().at(-1) || '';
+  const byDate = (a, b, newest) => (!a) - (!b) || (newest ? b.localeCompare(a) : a.localeCompare(b));
+  const cities = [...byCity.keys()].sort((a, b) => order === 'az' ? a.localeCompare(b)
+    : byDate(latest(a), latest(b), order === 'newest') || a.localeCompare(b));
+  for (const stops of byCity.values()) {
+    stops.sort((a, b) => order === 'az' ? a.name.localeCompare(b.name) : byDate(a.visited || '', b.visited || '', order === 'newest') || a.name.localeCompare(b.name));
+  }
+  const sorter = h('label', { class: 'ws-sort' }, h('span', {}, 'Order'),
+    h('select', { class: 'ws-input', 'aria-label': 'Order stops', 'data-untracked': '', onchange: e => {
+      order = e.target.value;
+      try { localStorage.setItem('vw_travel_order', order); } catch { /* private mode */ }
+      redraw();
+    } }, [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['az', 'A–Z']].map(([v, t]) => h('option', { value: v, selected: v === order }, t))));
 
   view.append(
-    pageHead('Travel', 'Stops on the public Travel map, with their photos.', h('a', { class: 'btn', href: '/travel', target: '_blank' }, 'View ↗'),
+    pageHead('Travel', 'Stops on the public Travel map, with their photos.', sorter, h('a', { class: 'btn', href: '/travel', target: '_blank' }, 'View ↗'),
       h('button', { class: 'btn primary', onclick: async () => { if (await editStop({})) redraw(); } }, '+ Add a stop')),
     d.places.length ? h('div', { class: 'ws-cities' }, cities.map(city => card(h('span', {}, city, h('span', { class: 'ws-note' },
-        `${byCity.get(city).length} stop${byCity.get(city).length === 1 ? '' : 's'}`)),
+        [latest(city) ? new Date(latest(city) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'No date',
+         `${byCity.get(city).length} stop${byCity.get(city).length === 1 ? '' : 's'}`].join(' · '))),
       h('ul', { class: 'ws-list' }, byCity.get(city).map(p => stop(p, redraw))))))
       : card(null, empty('No stops yet. Add one: search for the place, then attach photos.')),
     regions(d));
@@ -33,6 +47,7 @@ export async function render(view) {
 // One line per stop: what and when, how many photos, the start of its story. Edit opens it in place,
 // with the whole form and its photos; only one stop is open at a time.
 let closeOpen = null;
+let order = (() => { try { return localStorage.getItem('vw_travel_order') || 'newest'; } catch { return 'newest'; } })();
 let editing = false;
 
 function stop(p, redraw) {
