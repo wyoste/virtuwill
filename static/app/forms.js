@@ -20,17 +20,85 @@ function form(...fields) {
   return h('form', { class: 'ws-form', onsubmit: e => e.preventDefault() }, fields);
 }
 
+// A run, ride or walk can carry its distance and the route it took (a GPX or TCX file from
+// Strava, Garmin Connect or a running app); the route fills in a blank distance and time.
 export async function workout(date, record = null) {
   const r = record || { workout_date: date, workout_type: 'Strength' };
+  const route = h('input', { type: 'file', accept: '.gpx,.tcx,application/gpx+xml,application/vnd.garmin.tcx+xml', 'aria-label': 'Route file' });
   const f = form(
     field('Date', 'workout_date', { kind: 'date', value: r.workout_date, required: true }),
     field('Type', 'workout_type', { kind: 'select', options: WORKOUT_TYPES, value: r.workout_type }),
     field('Minutes', 'minutes', { kind: 'number', value: r.minutes ?? '', min: 0, max: 1440, step: 1 }),
     field('Activity', 'activity', { value: r.activity, placeholder: 'e.g. Run, Bike, Upper body' }),
+    field('Distance', 'distance', { kind: 'number', value: r.distance ?? '', min: 0, max: 1000, step: 0.01, placeholder: 'e.g. 3.1' }),
+    field('Unit', 'distance_unit', { kind: 'select', options: [['mi', 'miles'], ['km', 'kilometres']], value: r.distance_unit || 'mi' }),
+    h('label', { class: 'ws-field wide' }, h('span', {}, r.has_route ? 'Replace the route (GPX or TCX)' : 'Route map (GPX or TCX file, optional)'), route,
+      h('small', { class: 'ws-note' }, 'Export the activity from Strava, Garmin Connect or your running app. A blank distance or time is filled in from it.')),
     field('Note', 'note', { value: r.note, wide: true }));
-  return edit(record ? 'Edit workout' : 'Log a workout', f, body => record
-    ? api(`/api/v1/health/workouts/${record.workout_id}`, { method: 'PUT', body })
-    : api('/api/v1/health/workouts', { method: 'POST', body }));
+  // Once the workout exists, a retry (say, after a route file was refused) updates it rather than logging it twice.
+  let id = record?.workout_id;
+  return edit(record ? 'Edit workout' : 'Log a workout', f, async body => {
+    const saved = await api(id ? `/api/v1/health/workouts/${id}` : '/api/v1/health/workouts', { method: id ? 'PUT' : 'POST', body });
+    id = saved.workout_id;
+    if (route.files.length) {
+      const file = new FormData();
+      file.append('file', route.files[0]);
+      await api(`/api/v1/health/workouts/${id}/route`, { method: 'POST', form: file });
+    }
+  });
+}
+
+// ── Distance, pace and the route map ────────────────────────────────────────
+const isRide = w => /bik|cycl|ride|spin/i.test(`${w.activity} ${w.note}`);
+export function pace(w) {
+  if (!w.distance || !w.minutes) return null;
+  const unit = w.distance_unit || 'mi';
+  if (isRide(w)) return `${(w.distance / (w.minutes / 60)).toFixed(1)} ${unit === 'mi' ? 'mph' : 'km/h'}`;
+  const per = w.minutes / w.distance;
+  return `${Math.floor(per)}:${String(Math.round((per % 1) * 60)).padStart(2, '0')} /${unit}`;
+}
+
+let leaflet = null;
+function loadLeaflet() {
+  leaflet = leaflet || new Promise((resolve, reject) => {
+    if (window.L) return resolve(window.L);
+    document.head.append(h('link', { rel: 'stylesheet', href: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' }));
+    const s = h('script', { src: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js' });
+    s.onload = () => resolve(window.L);
+    s.onerror = () => { leaflet = null; reject(new Error('The map couldn’t load. Check your connection.')); };
+    document.head.append(s);
+  });
+  return leaflet;
+}
+
+export async function routeMap(w) {
+  const route = await api(`/api/v1/health/workouts/${w.workout_id}/route`);
+  const unit = w.distance_unit || 'mi';
+  const km = Number(route.distance_km);
+  const facts = [
+    ['Distance', w.distance ? `${w.distance} ${unit}` : `${(unit === 'mi' ? km / 1.609344 : km).toFixed(2)} ${unit}`],
+    ['Time', w.minutes ? `${Math.round(w.minutes)} min` : null],
+    [isRide(w) ? 'Speed' : 'Pace', pace(w)],
+    ['Climbing', route.elevation_gain_m ? `${Math.round(unit === 'mi' ? route.elevation_gain_m * 3.28084 : route.elevation_gain_m)} ${unit === 'mi' ? 'ft' : 'm'}` : null],
+    ['Started', route.started_at ? new Date(route.started_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : null],
+  ].filter(([, v]) => v);
+  const map = h('div', { class: 'ws-route-map', role: 'img', 'aria-label': 'Map of the route' });
+  const body = h('div', {}, map, h('dl', { class: 'ws-route-facts' }, facts.map(([k, v]) => h('div', {}, h('dt', {}, k), h('dd', {}, v)))),
+    route.file_name ? h('p', { class: 'ws-note' }, 'From ' + route.file_name) : null);
+  const shown = dialog(`${w.activity || w.workout_type} · ${w.workout_date}`, body, [['Close', null]]);
+  try {
+    const L = await loadLeaflet();
+    const m = L.map(map, { scrollWheelZoom: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(m);
+    const line = L.polyline(route.points, { color: '#1B3F27', weight: 4, opacity: 0.9 }).addTo(m);
+    const dot = (at, color, label) => L.circleMarker(at, { radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 }).bindTooltip(label).addTo(m);
+    dot(route.points[0], '#2F7A4B', 'Start');
+    dot(route.points.at(-1), '#E3B040', 'Finish');
+    m.fitBounds(line.getBounds(), { padding: [20, 20] });
+    setTimeout(() => m.invalidateSize(), 60);
+  } catch (e) { map.replaceChildren(h('p', { class: 'ws-note warn' }, e.message)); }
+  await shown;
 }
 
 let foodsCache = null;
@@ -194,8 +262,10 @@ export function quickAdd(date, onSaved) {
 export function recordRow(kind, r, onChange) {
   const spec = {
     workouts: { id: r.workout_id, label: 'workout', editor: workout, date: r.workout_date,
-                title: `${r.activity || r.workout_type}${r.minutes != null ? ' · ' + Math.round(r.minutes) + ' min' : ''}`,
-                meta: [r.activity ? r.workout_type : null, r.is_dog_walk ? "doesn't count toward the workout goal" : null, r.note].filter(Boolean).join(' · ') },
+                title: [r.activity || r.workout_type, r.distance != null ? `${Number(r.distance)} ${r.distance_unit || 'mi'}` : null,
+                        r.minutes != null ? Math.round(r.minutes) + ' min' : null].filter(Boolean).join(' · '),
+                meta: [r.activity ? r.workout_type : null, pace(r), r.is_dog_walk ? "doesn't count toward the workout goal" : null, r.note].filter(Boolean).join(' · '),
+                extra: r.has_route ? h('button', { class: 'btn small', 'aria-label': 'Route map', onclick: () => routeMap(r).catch(e => toast(e.message, 'error')) }, '🗺 Map') : null },
     meals: { id: r.meal_id, label: 'meal', editor: meal, date: r.meal_date,
              title: (r.description || '(meal)') + (r.items?.length > 1 ? ` · ${r.items.length} foods` : ''),
              meta: [cap(r.slot), r.status === 'planned' ? 'planned' : null, r.calories != null ? Math.round(r.calories) + ' kcal' : 'calories unknown',
@@ -208,7 +278,7 @@ export function recordRow(kind, r, onChange) {
   }[kind];
   return h('li', { class: 'ws-row' },
     h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, spec.title), spec.meta ? h('div', { class: 'ws-row-meta' }, spec.meta) : null),
-    h('div', { class: 'ws-row-end' },
+    h('div', { class: 'ws-row-end' }, spec.extra || null,
       h('button', { class: 'btn small', onclick: async () => { if (await spec.editor(spec.date, r)) onChange(); } }, 'Edit'),
       h('button', { class: 'btn small danger', 'aria-label': 'Delete ' + spec.label, onclick: async () => { if (await remove(kind, spec.id, spec.label)) onChange(); } }, '✕')));
 }

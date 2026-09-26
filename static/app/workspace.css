@@ -356,3 +356,9 @@ button.ws-chip[aria-pressed="true"], .ws-seg button[aria-pressed="true"], .ws-ha
 .ws-stop-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .ws-sort { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text2, #4b5a4a); }
 .ws-sort select { width: auto; padding-right: 28px; }
+
+/* Workout route map */
+.ws-route-map { height: min(55vh, 380px); width: 100%; border-radius: 10px; border: 1px solid var(--border, #D9C79A); background: #e7ecdf; }
+.ws-route-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin: 12px 0 4px; }
+.ws-route-facts dt { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6B4E0C; }
+.ws-route-facts dd { margin: 1px 0 0; font-weight: 600; color: #1B3F27; }

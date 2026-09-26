@@ -13,12 +13,13 @@ calories) are edited in the tracker; the dashboard edits the others.
 import collections
 import hashlib
 import json
+import os
 import re
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
-from . import db, records
+from . import db, media, records, routes
 from .auth import admin_required
 from .util import in_calendar, moment, number, parse_date, plain, slug
 
@@ -436,10 +437,64 @@ MEALS_WITH_ITEMS = """
 F = records.Field
 records.Resource(bp, "/api/v1/health/workouts", "journal.workouts", "workout_id", [
     F("workout_date", "date", required=True), F("workout_type", choices=WORKOUT_TYPES, default="Other"),
-    F("activity", max_length=100), F("minutes", "number", low=0, high=1440), F("note", max_length=2000)],
+    F("activity", max_length=100), F("minutes", "number", low=0, high=1440), F("note", max_length=2000),
+    F("distance", "number", low=0, high=1000), F("distance_unit", choices={"mi", "km"}, default="mi")],
     date_column="workout_date", defaults={"source": "manual"},
-    select="""SELECT w.*, NOT t.counts_toward_goal AS is_dog_walk FROM journal.workouts w
-              JOIN journal.workout_types t USING (workout_type)""")
+    select="""SELECT w.*, NOT t.counts_toward_goal AS is_dog_walk, r.workout_id IS NOT NULL AS has_route,
+                     r.elevation_gain_m, r.started_at AS route_started_at
+              FROM journal.workouts w JOIN journal.workout_types t USING (workout_type)
+              LEFT JOIN journal.workout_routes r USING (workout_id)""")
+
+
+# ── Routes: a GPX or TCX file for a run, ride or walk ────────────────────────
+
+@bp.route("/api/v1/health/workouts/<int:workout_id>/route", methods=["GET", "POST", "DELETE"])
+@admin_required
+def workout_route_v1(workout_id):
+    """GET the route to draw; POST a GPX/TCX file as 'file' (it fills in distance and minutes when they're blank); DELETE it."""
+    with db.tx() as conn:
+        workout = conn.execute("SELECT * FROM journal.workouts WHERE workout_id = %s", (workout_id,)).fetchone()
+        if not workout:
+            return jsonify({"error": "Not found"}), 404
+        if request.method == "GET":
+            row = conn.execute("SELECT * FROM journal.workout_routes WHERE workout_id = %s", (workout_id,)).fetchone()
+            return jsonify(plain(row)) if row else (jsonify({"error": "This workout has no route"}), 404)
+        if request.method == "DELETE":
+            conn.execute("DELETE FROM journal.workout_routes WHERE workout_id = %s", (workout_id,))
+            return jsonify({"ok": True})
+        f = request.files.get("file")
+        content = f.read(routes.MAX_BYTES + 1) if f else b""
+        if not content:
+            return jsonify({"error": "Choose a GPX or TCX file"}), 400
+        try:
+            summary = routes.summarise(routes.parse(content))
+        except routes.RouteError as e:
+            return jsonify({"error": str(e)}), 400
+        name = os.path.basename(f.filename or "route.gpx")[:200]
+        ext = ".tcx" if name.lower().endswith(".tcx") else ".gpx"
+        asset = media.register(conn, f"private/health/routes/{hashlib.sha256(content).hexdigest()[:16]}{ext}", content,
+                               visibility="private")
+        conn.execute("""INSERT INTO journal.workout_routes (workout_id, points, distance_km, elevation_gain_m, started_at, ended_at,
+                                                             file_name, file_asset_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (workout_id) DO UPDATE SET points = EXCLUDED.points, distance_km = EXCLUDED.distance_km,
+                            elevation_gain_m = EXCLUDED.elevation_gain_m, started_at = EXCLUDED.started_at,
+                            ended_at = EXCLUDED.ended_at, file_name = EXCLUDED.file_name, file_asset_id = EXCLUDED.file_asset_id,
+                            created_at = now()""",
+                     (workout_id, db.jsonb(summary["points"]), summary["distance_km"], summary["elevation_gain_m"],
+                      summary["started_at"], summary["ended_at"], name, asset))
+        # Fill what the workout left blank from the track.
+        if workout["distance"] is None:
+            unit = workout["distance_unit"] or "mi"
+            km = summary["distance_km"]
+            conn.execute("UPDATE journal.workouts SET distance = %s WHERE workout_id = %s",
+                         (round(km / 1.609344 if unit == "mi" else km, 2), workout_id))
+        if workout["minutes"] is None and summary["started_at"] and summary["ended_at"]:
+            minutes = (summary["ended_at"] - summary["started_at"]).total_seconds() / 60
+            if 0 < minutes <= 1440:
+                conn.execute("UPDATE journal.workouts SET minutes = %s WHERE workout_id = %s", (round(minutes, 1), workout_id))
+        row = conn.execute("SELECT * FROM journal.workout_routes WHERE workout_id = %s", (workout_id,)).fetchone()
+        return jsonify(plain(row)), 201
 records.Resource(bp, "/api/v1/health/meals", "journal.meals", "meal_id", [
     F("meal_date", "date", required=True), F("slot", choices=SLOTS_V1, default="meal"),
     F("status", choices={"eaten", "planned"}, default="eaten"), F("description", max_length=300), F("note", max_length=2000),
