@@ -123,6 +123,9 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .ws-field input, .ws-field select, .ws-field textarea, .ws-input {
   padding: 8px 10px; border: 1px solid var(--border-dk); border-radius: 8px; background: var(--surface); font-weight: 400; font-size: 14px; min-width: 0; width: 100%;
 }
+/* iPhone Safari draws an empty date field as a short blank sliver; keep it a full-size box. */
+.ws-field input[type="date"] { -webkit-appearance: none; appearance: none; display: block; min-height: 38px; }
+.ws-field input[type="date"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
 .ws-field textarea { resize: vertical; min-height: 90px; line-height: 1.55; }
 .ws-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; padding: 6px 0; }
 .ws-check input { width: 16px; height: 16px; }
