@@ -154,7 +154,9 @@ How Plaid maps onto the model:
 A pending charge that Plaid drops without ever settling stays in the app marked
 pending; the run's output counts these as `removed_by_plaid`.
 
-Setting it up:
+Setting it up (the full list of service principals, secrets and grants, including
+writing to a volume and straight to the database, is in
+[integrations-setup.md](integrations-setup.md)):
 
 1. **Secrets:** create a secret scope called `virtuwill` and add these keys:
    - `plaid-client-id`, `plaid-secret`, `plaid-env`

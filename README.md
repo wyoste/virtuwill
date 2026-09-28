@@ -141,6 +141,8 @@ responses and revision checks protect the bridge.
   the `admin-password` secret value, and the trackers need `SECRET_KEY` of 32+
   characters and `ADMIN_PASSWORD` of 12+ characters.
 - Attach a Lakebase database so data survives redeploys (see below).
+- Scheduled integrations (Plaid, Spotify): the service principals, secret scope,
+  volumes and grants they need are listed in [`docs/integrations-setup.md`](docs/integrations-setup.md).
 
 ### Data: one relational model in Lakebase
 
