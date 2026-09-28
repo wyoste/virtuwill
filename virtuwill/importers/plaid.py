@@ -23,6 +23,9 @@ CATEGORIES = {"GENERAL_MERCHANDISE": "Shopping", "TRANSPORTATION": "Transportati
               "ENTERTAINMENT": "Entertainment", "RENT_AND_UTILITIES": "Bills & utilities", "PERSONAL_CARE": "Personal care",
               "MEDICAL": "Health", "GENERAL_SERVICES": "Services", "HOME_IMPROVEMENT": "Home",
               "GOVERNMENT_AND_NON_PROFIT": "Taxes & giving", "BANK_FEES": "Fees", "LOAN_PAYMENTS": "Loan payments"}
+# Plaid's retirement subtypes → the plans the finance model knows (the rest count as a 401(k)).
+RETIREMENT_TYPES = {"roth": "roth_ira", "ira": "traditional_ira", "sep ira": "traditional_ira", "simple ira": "traditional_ira",
+                    "sarsep": "traditional_ira", "403b": "403b", "401a": "401a"}
 PRIMARIES = set(CATEGORIES) | {"FOOD_AND_DRINK", "TRANSFER_IN", "TRANSFER_OUT", "INCOME"}
 
 
@@ -103,8 +106,11 @@ def account_row(institution, a, overrides):
     if not mask:
         return None, (f"{institution} {a.get('name')} (account_id {a.get('account_id')}): no four-digit mask; "
                       "add it to PLAID_MASKS")
-    return {"mask": mask, "institution": institution, "name": a.get("official_name") or a.get("name") or f"Account {mask}",
-            "account_type": account_type(a)}, mask
+    row = {"mask": mask, "institution": institution, "name": a.get("official_name") or a.get("name") or f"Account {mask}",
+           "account_type": account_type(a)}
+    if row["account_type"] == "retirement":
+        row["retirement_type"] = RETIREMENT_TYPES.get(str(a.get("subtype") or "").lower(), "401k")
+    return row, mask
 
 
 def balance_rows(a, mask, as_of):

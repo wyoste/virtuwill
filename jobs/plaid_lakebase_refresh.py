@@ -1,11 +1,11 @@
 """Plaid → lakehouse → Lakebase → VirtuWill: the steps after the daily Plaid pull.
 
-Run as the last task of the daily Plaid job, once the pull has landed in
-prod.bronze.raw_plaid_*:
+Runs as the second task of the ingestion_plaid_financials job, after the
+plaid_integration notebook has landed the pull in prod.bronze.raw_plaid_*:
 
-  1. serving tables: bring prod.silver.plaid_transactions / plaid_balances up to
-     date from bronze (lakehouse/plaid_serving_refresh.sql; the tables are made
-     first by plaid_serving_create.sql if they don't exist yet);
+  1. serving tables: make prod.silver.plaid_transactions / plaid_balances if they
+     don't exist (lakehouse/plaid_serving_create.sql), then merge in what bronze
+     has that they don't (plaid_serving_refresh.sql);
   2. synced tables: refresh each Lakebase synced table (triggered mode) and wait
      for it to finish;
   3. the app: ask VirtuWill to load what changed (POST /api/ingest/v1/finance/plaid-mirror).
@@ -14,9 +14,9 @@ prod.bronze.raw_plaid_*:
     python jobs/plaid_lakebase_refresh.py --dry-run    steps 1-2, then ask the app what it would load; nothing loaded
     python jobs/plaid_lakebase_refresh.py --only app   one step: serving, sync or app
 
-Settings, from environment variables or, in Databricks, the secret scope named
-by VIRTUWILL_SECRET_SCOPE (default "virtuwill"; key = the name in lower case
-with dashes):
+Settings, from environment variables or, in Databricks, a secret scope: --secret-scope,
+else VIRTUWILL_SECRET_SCOPE, else "plaid_integration" (the notebook's scope). Keys are
+the names in lower case, with underscores or dashes (virtuwill_token or virtuwill-token):
 
     PLAID_SYNCED_TABLES     comma-separated synced table names, as Unity Catalog shows them,
                             e.g. virtuwill_db.public.plaid_transactions,virtuwill_db.public.plaid_balances
@@ -46,8 +46,9 @@ SYNC_TIMEOUT = 45 * 60
 DONE = {"COMPLETED", "FAILED", "CANCELED"}
 
 
-def load_settings():
-    """Fill os.environ from the Databricks secret scope for anything not already set."""
+def load_settings(scope=None):
+    """Fill os.environ from a Databricks secret scope for anything not already set.
+    Keys are the names in lower case, with dashes (virtuwill-token) or underscores (virtuwill_token)."""
     missing = [k for k in SETTINGS if not os.environ.get(k)]
     if not missing:
         return
@@ -57,12 +58,14 @@ def load_settings():
         dbutils = DBUtils(SparkSession.builder.getOrCreate())
     except Exception:
         return
-    scope = os.environ.get("VIRTUWILL_SECRET_SCOPE", "virtuwill")
+    scope = scope or os.environ.get("VIRTUWILL_SECRET_SCOPE", "plaid_integration")
     for key in missing:
-        try:
-            os.environ[key] = dbutils.secrets.get(scope, key.lower().replace("_", "-"))
-        except Exception:
-            pass
+        for name in (key.lower().replace("_", "-"), key.lower()):
+            try:
+                os.environ[key] = dbutils.secrets.get(scope, name)
+                break
+            except Exception:
+                pass
 
 
 def statements(text):
@@ -74,15 +77,11 @@ def statements(text):
 # ── 1. Serving tables ────────────────────────────────────────────────────────
 
 def serving(spark):
-    made = []
-    if not all(spark.catalog.tableExists(t) for t in SERVING_TABLES):
-        for sql in statements((SQL_DIR / "plaid_serving_create.sql").read_text()):
+    """Make the tables if they're missing (idempotent), then merge in what bronze has that they don't."""
+    for name in ("plaid_serving_create.sql", "plaid_serving_refresh.sql"):
+        for sql in statements((SQL_DIR / name).read_text()):
             spark.sql(sql)
-        made = list(SERVING_TABLES)
-    for sql in statements((SQL_DIR / "plaid_serving_refresh.sql").read_text()):
-        spark.sql(sql)
-    counts = {t: spark.table(t).count() for t in SERVING_TABLES}
-    return {"created": made, "rows": counts}
+    return {"rows": {t: spark.table(t).count() for t in SERVING_TABLES}}
 
 
 # ── 2. Synced tables ─────────────────────────────────────────────────────────
@@ -145,8 +144,8 @@ def tell_app(dry_run=False, post=None):
     return post({"dry_run": dry_run})
 
 
-def run(only=None, dry_run=False, spark=None, workspace=None, post=None):
-    load_settings()
+def run(only=None, dry_run=False, spark=None, workspace=None, post=None, secret_scope=None):
+    load_settings(secret_scope)
     summary, failed = {}, False
     if only in (None, "serving"):
         if spark is None:
@@ -171,8 +170,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--dry-run", action="store_true", help="ask the app what it would load; load nothing")
     parser.add_argument("--only", choices=("serving", "sync", "app"), help="run one step")
+    parser.add_argument("--secret-scope", help="where the settings are kept (default: VIRTUWILL_SECRET_SCOPE, else plaid_integration)")
     args = parser.parse_args(argv)
-    return run(only=args.only, dry_run=args.dry_run)
+    return run(only=args.only, dry_run=args.dry_run, secret_scope=args.secret_scope)
 
 
 if __name__ == "__main__":

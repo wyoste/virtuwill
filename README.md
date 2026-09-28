@@ -51,11 +51,12 @@ prompt for a scheduled Claude task: [docs/finance-api.md](docs/finance-api.md).
 
 ## Plaid from the lakehouse (Lakebase synced tables)
 
-Plaid balances and transactions land in the lakehouse daily (`prod.bronze.raw_plaid_*`).
+Plaid balances and transactions land in the lakehouse daily (the `ingestion_plaid_financials`
+job runs the plaid_integration notebook, which writes `prod.bronze.raw_plaid_*`).
 Serving tables (`prod.silver.plaid_*`, [`lakehouse/`](lakehouse)) are synced into the app's
 Lakebase database as read-only tables. The app then loads what changed into the finance
-model, through the same matching as Money › Imports. The daily job
-[`jobs/plaid_lakebase_refresh.py`](jobs/plaid_lakebase_refresh.py) runs the serving SQL,
+model, through the same matching as Money › Imports.
+[`jobs/plaid_lakebase_refresh.py`](jobs/plaid_lakebase_refresh.py), a second task in that job, runs the serving SQL,
 refreshes the synced tables and asks the app to load. Setup, grants and the job:
 [docs/plaid-lakebase.md](docs/plaid-lakebase.md).
 

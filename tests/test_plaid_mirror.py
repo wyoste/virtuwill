@@ -42,6 +42,7 @@ class MappingTests(unittest.TestCase):
         self.assertEqual(plaid.personal_finance_category('{"primary": "TRAVEL", "detailed": "TRAVEL_FLIGHTS"}')["primary"], "TRAVEL")
         self.assertEqual(plaid.personal_finance_category('["Food and Drink", "Restaurants"]'), {})
         self.assertEqual(plaid.personal_finance_category("SOMETHING_ELSE"), {})
+        self.assertEqual(plaid.personal_finance_category("Food and Drink > Restaurants"), {})   # the notebook's older-category path
         self.assertEqual(plaid.personal_finance_category(None), {})
         t = {"amount": -40, "personal_finance_category": plaid.personal_finance_category("LOAN_PAYMENTS_CREDIT_CARD_PAYMENT")}
         self.assertEqual(plaid.kind_and_category(t), ("card_payment", None))
@@ -51,7 +52,7 @@ class RefreshJobTests(unittest.TestCase):
     def test_the_sql_files_split_into_their_statements(self):
         create = job.statements((job.SQL_DIR / "plaid_serving_create.sql").read_text())
         refresh = job.statements((job.SQL_DIR / "plaid_serving_refresh.sql").read_text())
-        self.assertEqual(len(create), 7)
+        self.assertEqual([s.split()[:2] for s in create], [["CREATE", "TABLE"]] * 2)
         self.assertEqual([s.split()[0] for s in refresh], ["MERGE", "MERGE"])
         self.assertTrue(all(";" not in s for s in create + refresh))
 
@@ -192,6 +193,18 @@ class MirrorTests(unittest.TestCase):
         mirror = self.owner.get("/api/v1/money/plaid-mirror").json
         self.assertEqual((mirror["transactions"]["rows"], mirror["transactions"]["not_loaded"]), (4, 0))
         self.assertEqual(mirror["last_sync"]["transactions"], 1)
+
+    def test_retirement_accounts_load_with_their_plan(self):
+        self.balance("roth", "3333", "investment", "roth", 9000, None, at("2026-03-02"), bank="Fidelity")
+        self.balance("k", "4444", "investment", "401k", 52000, None, at("2026-03-02"), bank="Fidelity")
+        self.balance("hsa", "5555", "investment", "hsa", 1200, None, at("2026-03-02"), bank="Fidelity")
+        status, reply = self.sync()
+        self.assertEqual(status, 200, reply)
+        with db.tx() as conn:
+            got = {r["mask"]: (r["institution"], r["account_type"], r["retirement_type"]) for r in conn.execute(
+                "SELECT mask, institution, account_type, retirement_type FROM finance.accounts")}
+        self.assertEqual(got, {"3333": ("Fidelity", "retirement", "roth_ira"), "4444": ("Fidelity", "retirement", "401k"),
+                               "5555": ("Fidelity", "brokerage", None)})
 
     def test_scheduled_jobs_sync_with_an_api_token(self):
         self.balance("card", "2222", "credit", "credit card", 80, None, at("2026-03-02"))
