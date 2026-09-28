@@ -347,7 +347,7 @@ button.mu-quote:hover { text-decoration: underline; text-decoration-color: var(-
 .tv-stop-facts { margin:0; display:grid; gap:8px; align-content:start; }
 .tv-stop-facts dt { font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#6B4E0C; }
 .tv-stop-facts dd { margin:1px 0 0; font-weight:600; color:#1B3F27; overflow-wrap:anywhere; }
-.tv-stop-map { min-height:190px; border-radius:12px; border:1px solid #D9C79A; overflow:hidden; }
+.tv-stop-map { min-height:190px; border-radius:12px; border:1px solid #D9C79A; overflow:hidden; position:relative; z-index:0; }  /* its own layer: Leaflet's panes (z 400+) stay under the photo viewer */
 .tv-stop-links { display:flex; flex-wrap:wrap; gap:8px; }
 .tv-link-btn { display:inline-flex; align-items:center; padding:6px 12px; border-radius:999px; border:1px solid #D9B55A; background:#FBF0D6;
   color:#1B3F27; font:600 12.5px/1.2 Inter, system-ui, sans-serif; text-decoration:none; cursor:pointer; }
