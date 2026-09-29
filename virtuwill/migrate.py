@@ -40,6 +40,7 @@ def run_pending(conn):
     garden.seed_species(conn)
     content.seed_projects(conn)
     career.seed(conn)
+    health.seed_foods(conn)
     media.sync_bundled(conn)
     music.sync_bundled(conn)
     if conn.execute("INSERT INTO virtuwill.migrations (name) VALUES ('relational_v1') ON CONFLICT DO NOTHING").rowcount:

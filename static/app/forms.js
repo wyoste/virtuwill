@@ -108,6 +108,14 @@ async function foods() {
   return foodsCache;
 }
 
+// Food groups, in the order lists show them.
+export const FOOD_GROUPS = ['Grains', 'Fruit', 'Vegetables', 'Protein', 'Dairy', 'Other'];
+export function byGroup(list) {
+  const groups = new Map(FOOD_GROUPS.map(g => [g, []]));
+  for (const f of list) (groups.get(f.category) || groups.get('Other')).push(f);
+  return [...groups].filter(([, fs]) => fs.length);
+}
+
 const NUTRIENTS = [['calories', 'kcal', 0], ['protein_g', 'g protein', 0], ['carbs_g', 'g carbs', 0], ['fat_g', 'g fat', 0], ['fiber_g', 'g fiber', 0]];
 
 // Nutrition for `servings` of a saved food.
@@ -125,7 +133,7 @@ function summary(n) {
 // list; the meal's totals are their sum. With no foods, nutrition is typed in.
 export async function meal(date, record = null) {
   const r = record || { meal_date: date, slot: guessSlot(), status: 'eaten' };
-  const list = await foods();
+  const [list, recipes] = await Promise.all([foods(), api('/api/v1/health/recipes').catch(() => [])]);
   const byId = new Map(list.map(f => [f.food_id, f]));
 
   // Chosen foods: food_id → servings, in the order ticked.
@@ -134,7 +142,50 @@ export async function meal(date, record = null) {
   if (!chosen.size && r.food_id && byId.has(r.food_id)) chosen.set(r.food_id, Number(r.quantity) || 1);
 
   const search = h('input', { class: 'ws-input', type: 'search', placeholder: 'Search saved foods', 'aria-label': 'Search saved foods' });
+  const group = h('select', { class: 'ws-input', 'aria-label': 'Food group' },
+    h('option', { value: '' }, 'All groups'), ...byGroup(list).map(([g]) => h('option', { value: g }, g)));
   const picker = h('div', { class: 'ws-picker', role: 'group', 'aria-label': 'Saved foods' });
+
+  // A usual meal (a recipe) is a head start: picking one preselects its foods, and each
+  // can still be changed or removed below. Optional extras (meatballs, cheese) are one
+  // tap away. The share is your part of the batch; changing it rescales the foods.
+  let usual = null, current = null, share = null, lastShare = 1;
+  const extras = h('div', { class: 'ws-usual-extras' });
+  const drawExtras = () => extras.replaceChildren(...(current ? current.ingredients : [])
+    .filter(i => i.optional && byId.has(i.food_id) && !chosen.has(i.food_id))
+    .map(i => h('button', { type: 'button', class: 'btn small', title: 'Optional — add it, then set how many',
+                            onclick: () => { chosen.set(i.food_id, Number(i.quantity)); drawPicker(); drawRows(); drawExtras(); } },
+                '+ ' + byId.get(i.food_id).name)));
+  if (recipes.length) {
+    const pick = h('select', { class: 'ws-input', 'aria-label': 'Usual meal' },
+      h('option', { value: '' }, 'Start from a usual meal…'), ...recipes.map(x => h('option', { value: x.recipe_id }, x.name)));
+    share = h('input', { class: 'ws-input ws-servings', type: 'number', step: '0.25', min: '0.25', value: 1,
+                         'aria-label': 'Share of the batch', title: 'Your share of the batch (0.5 = half)' });
+    pick.onchange = () => {
+      const recipe = current = recipes.find(x => String(x.recipe_id) === pick.value) || null;
+      if (!recipe) { drawExtras(); return; }
+      const part = Number(share.value) > 0 ? Number(share.value) : 1;
+      chosen.clear();
+      for (const i of recipe.ingredients) {
+        if (!i.optional && byId.has(i.food_id)) chosen.set(i.food_id, Math.round(Number(i.quantity) * part * 100) / 100);
+      }
+      lastShare = part;
+      const name = f.elements.description;
+      if (!name.value || recipes.some(x => x.name === name.value)) name.value = recipe.name;
+      drawExtras();
+      drawPicker();
+      drawRows();
+    };
+    share.oninput = () => {
+      const part = Number(share.value);
+      if (!(part > 0) || part === lastShare) return;
+      const optional = new Set(current ? current.ingredients.filter(i => i.optional).map(i => i.food_id) : []);
+      for (const [id, qty] of chosen) if (!optional.has(id)) chosen.set(id, Math.round(qty * part / lastShare * 100) / 100);
+      lastShare = part;
+      drawRows();
+    };
+    usual = h('div', { class: 'ws-usual' }, pick, h('span', { class: 'ws-note' }, 'share'), share);
+  }
   const rows = h('ul', { class: 'ws-list ws-meal-items' });
   const totals = h('p', { class: 'ws-meal-total', 'aria-live': 'polite' });
   const manual = h('details', { class: 'ws-manual' }, h('summary', {}, 'Or enter nutrition by hand'),
@@ -148,13 +199,13 @@ export async function meal(date, record = null) {
 
   const drawPicker = () => {
     const q = search.value.trim().toLowerCase();
-    const shown = list.filter(f => !q || f.name.toLowerCase().includes(q)).slice(0, 60);
-    picker.replaceChildren(...shown.map(f => {
+    const shown = list.filter(f => (!q || f.name.toLowerCase().includes(q)) && (!group.value || f.category === group.value)).slice(0, 120);
+    picker.replaceChildren(...byGroup(shown).flatMap(([g, fs]) => [h('div', { class: 'ws-pick-group' }, g), ...fs.map(f => {
       const box = h('input', { type: 'checkbox', checked: chosen.has(f.food_id) });
-      box.onchange = () => { box.checked ? chosen.set(f.food_id, 1) : chosen.delete(f.food_id); drawRows(); };
+      box.onchange = () => { box.checked ? chosen.set(f.food_id, 1) : chosen.delete(f.food_id); drawRows(); drawExtras(); };
       return h('label', { class: 'ws-pick' }, box, h('span', {}, f.name,
         h('small', {}, [f.unit, f.calories != null ? Math.round(f.calories) + ' kcal' : null].filter(Boolean).join(' · '))));
-    }));
+    })]));
     if (!shown.length) picker.replaceChildren(h('p', { class: 'ws-note' }, list.length ? 'No saved foods match.' : 'No saved foods yet — add them in Health › Food.'));
   };
 
@@ -170,7 +221,7 @@ export async function meal(date, record = null) {
         h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, f.name), meta),
         h('div', { class: 'ws-row-end' }, qty, h('span', { class: 'ws-note' }, f.unit ? '× ' + f.unit : 'servings'),
           h('button', { type: 'button', class: 'btn small danger', 'aria-label': 'Remove ' + f.name,
-                        onclick: () => { chosen.delete(id); drawRows(); drawPicker(); } }, '✕')));
+                        onclick: () => { chosen.delete(id); drawRows(); drawPicker(); drawExtras(); } }, '✕')));
     }));
     drawTotals();
   };
@@ -186,6 +237,7 @@ export async function meal(date, record = null) {
   };
 
   search.oninput = drawPicker;
+  group.onchange = drawPicker;
   drawPicker();
   drawRows();
 
@@ -194,7 +246,7 @@ export async function meal(date, record = null) {
     field('Meal', 'slot', { kind: 'select', options: SLOTS, value: r.slot }),
     field('Status', 'status', { kind: 'select', options: [['eaten', 'Eaten'], ['planned', 'Planned']], value: r.status }),
     field('Name (optional)', 'description', { value: r.description, wide: true, placeholder: 'e.g. Egg burrito — defaults to the foods' }),
-    h('div', { class: 'ws-field wide' }, h('span', {}, 'Foods in this meal'), search, picker, rows, totals),
+    h('div', { class: 'ws-field wide' }, h('span', {}, 'Foods in this meal'), usual, extras, h('div', { class: 'ws-usual' }, search, group), picker, rows, totals),
     manual,
     field('Note', 'note', { value: r.note, wide: true }));
   return edit(record ? 'Edit meal' : 'Log a meal', f, body => {
