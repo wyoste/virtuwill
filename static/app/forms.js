@@ -135,7 +135,7 @@ async function recipes() {
   return recipesCache;
 }
 
-const round2 = n => Math.round(n * 100) / 100;
+const roundQty = n => Math.round(n * 10000) / 10000;   // a sixth of a batch stays a sixth
 
 // Pick saved foods and set each one's servings. `chosen` (food_id → servings) is edited
 // in place; with `optional` (a Set of food_ids) each food can be marked optional too.
@@ -198,7 +198,8 @@ function foodChooser(list, chosen, { optional = null, onChange = () => {} } = {}
 // list; the meal's totals are their sum. With no foods, nutrition is typed in.
 // A go-to meal is a head start: picking one (or opening the editor from it) preselects
 // its foods, all still editable. Its optional extras (meatballs, cheese) are one tap
-// away. The share is your part of the batch; changing it rescales the foods.
+// away. A batch makes several portions (a Mexican scramble makes 6): logging starts at one
+// portion, its foods scaled to match, and changing the portions rescales them.
 export async function meal(date, record = null, { recipeId = null } = {}) {
   const r = record || { meal_date: date, slot: guessSlot(), status: 'eaten' };
   const [list, usualMeals] = await Promise.all([foods(), recipes()]);
@@ -230,12 +231,12 @@ export async function meal(date, record = null, { recipeId = null } = {}) {
     drawExtras();
   };
 
-  let current = null, lastShare = 1;
+  let current = null, lastEaten = 1, eaten = null;
   const extras = h('div', { class: 'ws-usual-extras' });
   const drawExtras = () => extras.replaceChildren(...(current ? current.ingredients : [])
     .filter(i => i.optional && byId.has(i.food_id) && !chosen.has(i.food_id))
     .map(i => h('button', { type: 'button', class: 'btn small', title: 'Optional — add it, then set how many',
-                            onclick: () => { chosen.set(i.food_id, Number(i.quantity)); chooser.redraw(); } },
+                            onclick: () => { chosen.set(i.food_id, roundQty(Number(i.quantity) * (Number(eaten?.value) || 1))); chooser.redraw(); } },
                 '+ ' + byId.get(i.food_id).name)));
   const chooser = foodChooser(list, chosen, { onChange: drawTotals });
 
@@ -243,29 +244,32 @@ export async function meal(date, record = null, { recipeId = null } = {}) {
   if (usualMeals.length) {
     const pick = h('select', { class: 'ws-input', 'aria-label': 'Go-to meal' },
       h('option', { value: '' }, 'Start from a go-to meal…'), ...usualMeals.map(x => h('option', { value: x.recipe_id }, x.name)));
-    const share = h('input', { class: 'ws-input ws-servings', type: 'number', step: '0.25', min: '0.25', value: 1,
-                               'aria-label': 'Share of the batch', title: 'Your share of the batch (0.5 = half)' });
+    eaten = h('input', { class: 'ws-input ws-servings', type: 'number', step: '0.5', min: '0.25', value: 1,
+                         'aria-label': 'Portions eaten', title: 'How many portions you ate' });
+    const ofBatch = h('span', { class: 'ws-note' }, 'portion');
     const apply = () => {
       current = usualMeals.find(x => String(x.recipe_id) === String(pick.value)) || null;
-      if (!current) { drawExtras(); return; }
-      const part = Number(share.value) > 0 ? Number(share.value) : 1;
+      if (!current) { ofBatch.textContent = 'portion'; drawExtras(); return; }
+      const portions = Number(current.portions) || 1;
+      ofBatch.textContent = portions === 1 ? 'portion' : `of ${+portions.toFixed(2)} portions`;
+      const part = (Number(eaten.value) > 0 ? Number(eaten.value) : 1) / portions;
       chosen.clear();
-      for (const i of current.ingredients) if (!i.optional && byId.has(i.food_id)) chosen.set(i.food_id, round2(Number(i.quantity) * part));
-      lastShare = part;
+      for (const i of current.ingredients) if (!i.optional && byId.has(i.food_id)) chosen.set(i.food_id, roundQty(Number(i.quantity) * part));
+      lastEaten = Number(eaten.value) > 0 ? Number(eaten.value) : 1;
       const name = f.elements.description;
       if (!name.value || usualMeals.some(x => x.name === name.value)) name.value = current.name;
       chooser.redraw();
     };
     pick.onchange = apply;
-    share.oninput = () => {
-      const part = Number(share.value);
-      if (!(part > 0) || part === lastShare) return;
-      const opt = new Set(current ? current.ingredients.filter(i => i.optional).map(i => i.food_id) : []);
-      for (const [id, qty] of chosen) if (!opt.has(id)) chosen.set(id, round2(qty * part / lastShare));
-      lastShare = part;
+    // More or fewer portions scale every food, extras included (8 meatballs for 2 portions).
+    eaten.oninput = () => {
+      const n = Number(eaten.value);
+      if (!(n > 0) || n === lastEaten) return;
+      for (const [id, qty] of chosen) chosen.set(id, roundQty(qty * n / lastEaten));
+      lastEaten = n;
       chooser.redraw();
     };
-    usual = h('div', { class: 'ws-usual' }, pick, h('span', { class: 'ws-note' }, 'share'), share);
+    usual = h('div', { class: 'ws-usual' }, pick, eaten, ofBatch);
     if (recipeId != null) { pick.value = String(recipeId); queueMicrotask(apply); }
   }
 
@@ -287,8 +291,9 @@ export async function meal(date, record = null, { recipeId = null } = {}) {
   });
 }
 
-// Build or edit a go-to meal: a name and its foods, each with servings for the whole
-// batch. Optional foods (meatballs, cheese) are offered when logging, not preselected.
+// Build or edit a go-to meal: a name, how many portions the batch makes, and its foods,
+// each with servings for the whole batch. Optional foods (meatballs, cheese) are offered
+// when logging, not preselected, and their amount is per portion.
 // Resolves true when saved or deleted.
 export async function goToMeal(recipe = null) {
   const list = await foods();
@@ -300,6 +305,7 @@ export async function goToMeal(recipe = null) {
     if (i.optional) optional.add(i.food_id);
   }
   const totals = h('p', { class: 'ws-meal-total', 'aria-live': 'polite' });
+  const portions = field('Makes (portions)', 'portions', { kind: 'number', value: recipe?.portions ?? 1, min: 0.25, step: 'any' });
   const drawTotals = () => {
     const sum = Object.fromEntries(NUTRIENTS.map(([k]) => [k, null]));
     for (const [id, servings] of chosen) {
@@ -307,11 +313,19 @@ export async function goToMeal(recipe = null) {
       const n = scaled(byId.get(id), servings);
       for (const [k] of NUTRIENTS) if (n[k] != null) sum[k] = Math.round(((sum[k] || 0) + n[k]) * 10) / 10;
     }
-    totals.textContent = chosen.size ? `Whole batch: ${summary(sum)}${optional.size ? ' · before optional extras' : ''}` : 'Tick the foods that go in it.';
+    const each = Number(portions.querySelector('input').value) > 0 ? Number(portions.querySelector('input').value) : 1;
+    const per = Object.fromEntries(Object.entries(sum).map(([k, v]) => [k, v == null ? null : v / each]));
+    const extra = optional.size ? ' · before optional extras' : '';
+    totals.textContent = !chosen.size ? 'Tick the foods that go in it.'
+      : each === 1 ? `Per portion: ${summary(sum)}${extra}`
+      : `Per portion: ${summary(per)}${extra} — whole batch ${Math.round(sum.calories ?? 0)} kcal`;
   };
+  portions.querySelector('input').addEventListener('input', drawTotals);
   const chooser = foodChooser(list, chosen, { optional, onChange: drawTotals });
   const f = form(
     field('Name', 'name', { value: recipe?.name, required: true, wide: true, placeholder: 'e.g. Sushi Bowls' }),
+    portions,
+    h('p', { class: 'ws-note', style: { flexBasis: '100%', margin: 0 } }, 'Enter the foods for the whole batch as you cook it. Optional extras (meatballs, cheese) are per portion.'),
     h('div', { class: 'ws-field wide' }, h('span', {}, 'Foods, for the whole batch'), ...chooser.el, totals));
   const error = h('p', { class: 'ws-note warn', role: 'alert' });
   const buttons = recipe ? [['Delete', 'delete'], ['Cancel', null], ['Save', true]] : [['Cancel', null], ['Save', true]];
@@ -323,7 +337,8 @@ export async function goToMeal(recipe = null) {
         if (!await confirmDelete(`the go-to meal “${recipe.name}”`)) continue;
         await api(`/api/v1/health/recipes/${recipe.recipe_id}`, { method: 'DELETE' });
       } else {
-        const body = { name: values(f).name,
+        const v = values(f);
+        const body = { name: v.name, portions: Number(v.portions) || 1,
                        ingredients: [...chosen].map(([food_id, quantity]) => ({ food_id, quantity, optional: optional.has(food_id) })) };
         if (!body.name) throw new Error('Name the go-to meal.');
         if (!body.ingredients.length) throw new Error('Tick at least one food.');

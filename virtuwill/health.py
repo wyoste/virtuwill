@@ -48,8 +48,8 @@ def _seed_foods(conn, data):
                         ON CONFLICT (food_id) DO NOTHING""",
                      {**f, "details": json.dumps({"presets": f["presets"]} if f.get("presets") else {})})
     for recipe in data["recipes"]:
-        row = conn.execute("INSERT INTO health.recipes (name, source) VALUES (%s, 'seed') ON CONFLICT (name) DO NOTHING RETURNING recipe_id",
-                           (recipe["name"],)).fetchone()
+        row = conn.execute("""INSERT INTO health.recipes (name, portions, source) VALUES (%s, %s, 'seed')
+                              ON CONFLICT (name) DO NOTHING RETURNING recipe_id""", (recipe["name"], recipe.get("portions", 1))).fetchone()
         if row:
             for position, (food_id, qty, *optional) in enumerate(recipe["parts"]):
                 conn.execute("""INSERT INTO health.recipe_ingredients (recipe_id, position, food_id, quantity, optional)
@@ -679,28 +679,35 @@ def food_v1(food_id):
         return jsonify(plain(conn.execute("SELECT * FROM health.foods WHERE food_id = %s", (food_id,)).fetchone()))
 
 
+# Nutrition is per portion (the batch ÷ its portions), without the optional extras;
+# batch_calories is the whole batch.
 RECIPES = """
-    SELECT r.recipe_id, r.name, r.source,
+    SELECT r.recipe_id, r.name, r.source, r.portions,
            jsonb_agg(jsonb_build_object('food_id', f.food_id, 'name', f.name, 'quantity', i.quantity, 'unit', f.unit,
                                         'optional', i.optional)
                      ORDER BY i.position) AS ingredients,
-           ROUND(SUM(f.calories * i.quantity) FILTER (WHERE NOT i.optional), 0) AS calories,
-           ROUND(SUM(f.protein_g * i.quantity) FILTER (WHERE NOT i.optional), 1) AS protein_g,
-           ROUND(SUM(f.carbs_g * i.quantity) FILTER (WHERE NOT i.optional), 1) AS carbs_g,
-           ROUND(SUM(f.fat_g * i.quantity) FILTER (WHERE NOT i.optional), 1) AS fat_g,
-           ROUND(SUM(f.fiber_g * i.quantity) FILTER (WHERE NOT i.optional), 1) AS fiber_g
+           ROUND(SUM(f.calories * i.quantity) FILTER (WHERE NOT i.optional) / r.portions, 0) AS calories,
+           ROUND(SUM(f.protein_g * i.quantity) FILTER (WHERE NOT i.optional) / r.portions, 1) AS protein_g,
+           ROUND(SUM(f.carbs_g * i.quantity) FILTER (WHERE NOT i.optional) / r.portions, 1) AS carbs_g,
+           ROUND(SUM(f.fat_g * i.quantity) FILTER (WHERE NOT i.optional) / r.portions, 1) AS fat_g,
+           ROUND(SUM(f.fiber_g * i.quantity) FILTER (WHERE NOT i.optional) / r.portions, 1) AS fiber_g,
+           ROUND(SUM(f.calories * i.quantity) FILTER (WHERE NOT i.optional), 0) AS batch_calories
     FROM health.recipes r JOIN health.recipe_ingredients i USING (recipe_id) JOIN health.foods f USING (food_id)
-    {where} GROUP BY r.recipe_id, r.name, r.source ORDER BY r.name"""
+    {where} GROUP BY r.recipe_id, r.name, r.source, r.portions ORDER BY r.name"""
 
 
 def _recipe_body(conn):
-    """A go-to meal from a JSON body: a name and 1–40 saved foods, each with servings and an optional flag."""
+    """A go-to meal from a JSON body: a name, how many portions the batch makes, and 1–40 saved
+    foods, each with servings for the batch (per portion when optional) and an optional flag."""
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         raise records.Invalid("Expected a JSON object")
     name = str(data.get("name") or "").strip()
     if not name or len(name) > 200:
         raise records.Invalid("name is required (up to 200 characters)")
+    portions = number(data.get("portions", 1))
+    if portions is None or not 0 < portions <= 100:
+        raise records.Invalid("portions must be above 0 and at most 100")
     parts = data.get("ingredients")
     if not isinstance(parts, list) or not 1 <= len(parts) <= 40:
         raise records.Invalid("A go-to meal needs 1 to 40 foods")
@@ -716,7 +723,7 @@ def _recipe_body(conn):
             raise records.Invalid(f"{food['name']} is listed twice")
         seen.add(food["food_id"])
         out.append((food["food_id"], qty, part.get("optional") is True))
-    return name, out
+    return name, portions, out
 
 
 def _save_recipe(conn, recipe_id, parts):
@@ -734,11 +741,11 @@ def recipes_v1():
     with db.tx() as conn:
         if request.method == "POST":
             try:
-                name, parts = _recipe_body(conn)
+                name, portions, parts = _recipe_body(conn)
             except records.Invalid as e:
                 return jsonify({"error": str(e)}), 400
-            row = conn.execute("INSERT INTO health.recipes (name, source) VALUES (%s, 'manual') ON CONFLICT (name) DO NOTHING RETURNING recipe_id",
-                               (name,)).fetchone()
+            row = conn.execute("""INSERT INTO health.recipes (name, portions, source) VALUES (%s, %s, 'manual')
+                                  ON CONFLICT (name) DO NOTHING RETURNING recipe_id""", (name, portions)).fetchone()
             if not row:
                 return jsonify({"error": f"There is already a go-to meal named {name}"}), 409
             return jsonify(_save_recipe(conn, row["recipe_id"], parts)), 201
@@ -754,13 +761,14 @@ def recipe_v1(recipe_id):
                 return jsonify({"error": "Not found"}), 404
             return jsonify({"ok": True})
         try:
-            name, parts = _recipe_body(conn)
+            name, portions, parts = _recipe_body(conn)
         except records.Invalid as e:
             return jsonify({"error": str(e)}), 400
         if conn.execute("SELECT 1 FROM health.recipes WHERE name = %s AND recipe_id <> %s", (name, recipe_id)).fetchone():
             return jsonify({"error": f"There is already a go-to meal named {name}"}), 409
         # Edited here, it is no longer the tracker's copy.
-        if not conn.execute("UPDATE health.recipes SET name = %s, source = 'manual' WHERE recipe_id = %s", (name, recipe_id)).rowcount:
+        if not conn.execute("UPDATE health.recipes SET name = %s, portions = %s, source = 'manual' WHERE recipe_id = %s",
+                            (name, portions, recipe_id)).rowcount:
             return jsonify({"error": "Not found"}), 404
         return jsonify(_save_recipe(conn, recipe_id, parts))
 

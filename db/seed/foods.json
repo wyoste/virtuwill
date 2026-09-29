@@ -1,5 +1,5 @@
 {
-  "_note": "Starter foods and usual meals (recipes), added once. A part marked \"optional\" is offered, not preselected (zucchini 1.65 = one large). Nutrition is per the unit given: USDA FoodData Central for whole foods, the package label for branded ones. Edit any of them in Health › Food.",
+  "_note": "Starter foods and usual meals (recipes), added once. Quantities are for the whole batch, which makes \"portions\" servings; a part marked \"optional\" is offered, not preselected, and its amount is per portion (zucchini 1.65 = one large). Nutrition is per the unit given: USDA FoodData Central for whole foods, the package label for branded ones. Edit any of them in Health › Food.",
   "foods": [
     {"food_id": "bobs-red-mill-rolled-oats", "category": "Grains", "name": "Bob's Red Mill Rolled Oats", "unit": "1/2 cup dry (40 g)",
      "calories": 150, "protein_g": 5, "carbs_g": 27, "fat_g": 2.5, "fiber_g": 4, "reference_note": "Bob's Red Mill Old Fashioned Rolled Oats label"},
@@ -78,14 +78,14 @@
      "calories": 10, "protein_g": 1, "carbs_g": 1, "fat_g": 0, "fiber_g": 0, "reference_note": "Low-sodium soy sauce label"}
   ],
   "recipes": [
-    {"name": "Sushi Bowls", "parts": [
+    {"name": "Sushi Bowls", "portions": 4, "parts": [
       ["tofu-extra-firm-pan-fried", 1],
       ["bell-pepper", 1],
       ["white-rice", 2],
       ["cucumber", 0.5],
       ["soy-sauce-low-sodium", 2]
     ]},
-    {"name": "Mexican Scramble with Spanish Rice", "parts": [
+    {"name": "Mexican Scramble with Spanish Rice", "portions": 6, "parts": [
       ["impossible-beef", 1],
       ["white-corn-canned", 1],
       ["black-beans-canned", 1],
@@ -93,7 +93,7 @@
       ["taco-seasoning", 1],
       ["uncle-bens-spanish-rice", 1]
     ]},
-    {"name": "Mexican Scramble with Cauliflower Rice", "parts": [
+    {"name": "Mexican Scramble with Cauliflower Rice", "portions": 6, "parts": [
       ["impossible-beef", 1],
       ["white-corn-canned", 1],
       ["black-beans-canned", 1],
@@ -101,7 +101,7 @@
       ["taco-seasoning", 1],
       ["tj-mexican-cauliflower-rice", 1]
     ]},
-    {"name": "Spaghetti Squash", "parts": [
+    {"name": "Spaghetti Squash", "portions": 4, "parts": [
       ["spaghetti-squash", 1],
       ["pasta-sauce", 1],
       ["baby-bella-mushrooms", 1],
