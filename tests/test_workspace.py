@@ -61,6 +61,25 @@ class WorkspaceApiTests(unittest.TestCase):
         self.assertEqual((meal["description"], meal["calories"], meal["protein_g"]), ("Test oats", 450, 15))
         self.assertEqual(self.owner.post("/api/v1/health/meals", json={"meal_date": "2026-09-24", "food_id": "nope"}).status_code, 400)
 
+    def test_starter_foods_are_grouped_and_usual_meals_are_recipes(self):
+        foods = {f["food_id"]: f for f in self.owner.get("/api/v1/health/foods").json}
+        self.assertEqual((foods["white-rice"]["category"], foods["blueberries"]["category"], foods["zucchini"]["category"]),
+                         ("Grains", "Fruit", "Vegetables"))
+        recipes = {r["name"]: r for r in self.owner.get("/api/v1/health/recipes").json}
+        self.assertEqual([(i["food_id"], i["quantity"]) for i in recipes["Sushi Bowls"]["ingredients"]],
+                         [("tofu-extra-firm-pan-fried", 1), ("bell-pepper", 1), ("white-rice", 2), ("cucumber", 0.5),
+                          ("soy-sauce-low-sodium", 2)])
+        self.assertIn("Mexican Scramble with Cauliflower Rice", recipes)
+        # Optional extras (meatballs, parmesan) are offered, not counted in the usual meal's total.
+        squash = recipes["Spaghetti Squash"]
+        self.assertEqual([i["food_id"] for i in squash["ingredients"] if i["optional"]],
+                         ["cooked-perfect-italian-meatballs", "parmesan-grated"])
+        self.assertEqual(squash["calories"], round(250 + 385 + 19 + 33 * 1.65))
+        # A new food takes a group, else Other; an unknown group is refused.
+        self.assertEqual(self.owner.post("/api/v1/health/foods", json={"name": "Test kale", "category": "Vegetables"}).json["category"], "Vegetables")
+        self.assertEqual(self.owner.post("/api/v1/health/foods", json={"name": "Test mystery"}).json["category"], "Other")
+        self.assertEqual(self.owner.post("/api/v1/health/foods", json={"name": "Test x", "category": "Candy"}).status_code, 400)
+
     def test_one_meal_of_several_foods_with_their_own_portions(self):
         make = lambda name, **n: self.owner.post("/api/v1/health/foods", json={"name": name, **n}).json["food_id"]
         egg = make("Test egg", unit="1 large", calories=70, protein_g=6, fat_g=5)

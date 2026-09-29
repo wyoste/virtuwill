@@ -27,6 +27,28 @@ bp = Blueprint("health", __name__)
 SOURCE = "health_tracker"
 LB_PER_KG, M_PER_IN = 0.45359237, 0.0254
 TRACKER_TABLES = ("journal.workouts", "journal.meals", "health.body_measurements", "health.alcohol")
+FOOD_SEED = db.ROOT / "db" / "seed" / "foods.json"
+CATEGORIES = ("Grains", "Fruit", "Vegetables", "Protein", "Dairy", "Other")
+
+
+def seed_foods(conn):
+    """A starter list of foods and usual meals; added once, so edits and deletions stick."""
+    if not conn.execute("INSERT INTO virtuwill.migrations (name) VALUES ('foods_seed_v1') ON CONFLICT DO NOTHING").rowcount:
+        return
+    data = json.loads(FOOD_SEED.read_text(encoding="utf-8"))
+    for f in data["foods"]:
+        conn.execute("""INSERT INTO health.foods (food_id, name, category, unit, calories, protein_g, carbs_g, fat_g, fiber_g,
+                                                  reference_note, source)
+                        VALUES (%(food_id)s, %(name)s, %(category)s, %(unit)s, %(calories)s, %(protein_g)s, %(carbs_g)s,
+                                %(fat_g)s, %(fiber_g)s, %(reference_note)s, 'seed')
+                        ON CONFLICT (food_id) DO NOTHING""", f)
+    for recipe in data["recipes"]:
+        row = conn.execute("INSERT INTO health.recipes (name, source) VALUES (%s, 'seed') ON CONFLICT (name) DO NOTHING RETURNING recipe_id",
+                           (recipe["name"],)).fetchone()
+        if row:
+            for position, (food_id, qty, *optional) in enumerate(recipe["parts"]):
+                conn.execute("""INSERT INTO health.recipe_ingredients (recipe_id, position, food_id, quantity, optional)
+                                VALUES (%s, %s, %s, %s, %s)""", (row["recipe_id"], position, food_id, qty, optional == ["optional"]))
 
 
 def _text(value):
@@ -617,12 +639,12 @@ def foods_v1():
                              VALUES (%s, {', '.join(['%s'] * len(values))}, 'manual')""", [food_id, *values.values()])
             return jsonify(plain(conn.execute("SELECT * FROM health.foods WHERE food_id = %s", (food_id,)).fetchone())), 201
         q = (request.args.get("q") or "").strip()
-        rows = conn.execute("""SELECT food_id, name, unit, calories, protein_g, carbs_g, fat_g, fiber_g, reference_note, url
+        rows = conn.execute("""SELECT food_id, name, category, unit, calories, protein_g, carbs_g, fat_g, fiber_g, reference_note, url
                                FROM health.foods WHERE %s = '' OR name ILIKE '%%' || %s || '%%' ORDER BY name LIMIT 200""", (q, q))
         return jsonify([plain(r) for r in rows])
 
 
-FOOD = [F("name", required=True, max_length=200), F("unit", max_length=60), F("calories", "number", low=0, high=10000),
+FOOD = [F("name", required=True, max_length=200), F("category", choices=CATEGORIES, default="Other"), F("unit", max_length=60), F("calories", "number", low=0, high=10000),
         F("protein_g", "number", low=0, high=1000), F("carbs_g", "number", low=0, high=1000), F("fat_g", "number", low=0, high=1000),
         F("fiber_g", "number", low=0, high=1000), F("reference_note", max_length=500), F("url", max_length=500)]
 
@@ -654,9 +676,11 @@ def recipes_v1():
     with db.tx() as conn:
         rows = conn.execute("""
             SELECT r.recipe_id, r.name,
-                   jsonb_agg(jsonb_build_object('food_id', f.food_id, 'name', f.name, 'quantity', i.quantity, 'unit', f.unit)
+                   jsonb_agg(jsonb_build_object('food_id', f.food_id, 'name', f.name, 'quantity', i.quantity, 'unit', f.unit,
+                                                'optional', i.optional)
                              ORDER BY i.position) AS ingredients,
-                   ROUND(SUM(f.calories * i.quantity), 0) AS calories, ROUND(SUM(f.protein_g * i.quantity), 1) AS protein_g
+                   ROUND(SUM(f.calories * i.quantity) FILTER (WHERE NOT i.optional), 0) AS calories,
+                   ROUND(SUM(f.protein_g * i.quantity) FILTER (WHERE NOT i.optional), 1) AS protein_g
             FROM health.recipes r JOIN health.recipe_ingredients i USING (recipe_id) JOIN health.foods f USING (food_id)
             GROUP BY r.recipe_id, r.name ORDER BY r.name""")
         return jsonify([plain(r) for r in rows])

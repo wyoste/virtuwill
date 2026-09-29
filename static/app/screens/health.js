@@ -1,6 +1,6 @@
 // Health: Overview · Activity · Food · Body · Goals, over the shared tables.
 import { h, api, fmt, card, stat, pageHead, tabs, isoToday, addDays, empty, toast, run, field, values, editable, saveAll } from '../lib.js';
-import { quickAdd, recordRow, meal as mealEditor, cap, forgetFoods } from '../forms.js';
+import { quickAdd, recordRow, meal as mealEditor, cap, forgetFoods, byGroup, FOOD_GROUPS } from '../forms.js';
 
 const TABS = [['/app/health', 'Overview'], ['/app/health/activity', 'Activity'], ['/app/health/food', 'Food'],
               ['/app/health/body', 'Body'], ['/app/health/goals', 'Goals']];
@@ -114,7 +114,7 @@ async function food(view, redraw, { params }) {
       foodLibrary(foods, redraw),
       card('Recipes', recipes.length ? h('ul', { class: 'ws-list' }, recipes.map(r => h('li', { class: 'ws-row' },
         h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, r.name),
-          h('div', { class: 'ws-row-meta' }, r.ingredients.map(i => `${i.quantity} × ${i.name}`).join(', '))),
+          h('div', { class: 'ws-row-meta' }, r.ingredients.map(i => `${i.quantity} × ${i.name}${i.optional ? ' (optional)' : ''}`).join(', '))),
         h('div', { class: 'ws-row-end' }, h('span', { class: 'ws-amount' }, fmt.num(r.calories) + ' kcal'))))) : empty('No recipes yet.'))),
     card(h('span', {}, 'Shopping list', h('span', { class: 'ws-note' }, 'read-only · edited in the Finance tracker until Money replaces it')),
       shopping.length ? h('ul', { class: 'ws-list' }, shopping.map(s => h('li', { class: 'ws-row' },
@@ -128,12 +128,14 @@ function foodLibrary(foods, redraw) {
   const list = h('ul', { class: 'ws-list' });
   const draw = () => {
     const q = search.value.trim().toLowerCase();
-    const shown = foods.filter(f => !q || f.name.toLowerCase().includes(q)).slice(0, 40);
-    list.replaceChildren(...shown.map(f => h('li', { class: 'ws-row' },
-      h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, f.name),
-        h('div', { class: 'ws-row-meta' }, [f.unit, f.protein_g != null ? fmt.num(f.protein_g) + ' g protein' : null].filter(Boolean).join(' · '))),
-      h('span', { class: 'ws-amount' }, f.calories != null ? fmt.num(f.calories) + ' kcal' : '—'),
-      h('button', { class: 'btn small', onclick: () => editFood(f, redraw) }, 'Edit'))));
+    const shown = foods.filter(f => !q || f.name.toLowerCase().includes(q)).slice(0, 80);
+    list.replaceChildren(...byGroup(shown).flatMap(([g, fs]) => [
+      h('li', { class: 'ws-note', style: { fontWeight: 600, paddingTop: '10px' } }, g),
+      ...fs.map(f => h('li', { class: 'ws-row' },
+        h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, f.name),
+          h('div', { class: 'ws-row-meta' }, [f.unit, f.protein_g != null ? fmt.num(f.protein_g) + ' g protein' : null].filter(Boolean).join(' · '))),
+        h('span', { class: 'ws-amount' }, f.calories != null ? fmt.num(f.calories) + ' kcal' : '—'),
+        h('button', { class: 'btn small', onclick: () => editFood(f, redraw) }, 'Edit')))]));
     if (!shown.length) list.replaceChildren(h('li', { class: 'ws-note' }, 'No foods match.'));
   };
   search.oninput = draw;
@@ -146,7 +148,9 @@ async function editFood(food, redraw) {
   const { dialog } = await import('../lib.js');
   const f = food || {};
   const form = h('form', { class: 'ws-form', onsubmit: e => e.preventDefault() },
-    field('Name', 'name', { value: f.name, required: true, wide: true }), field('Serving', 'unit', { value: f.unit, placeholder: 'e.g. 1 cup' }),
+    field('Name', 'name', { value: f.name, required: true, wide: true }),
+    field('Group', 'category', { kind: 'select', options: FOOD_GROUPS.map(g => [g, g]), value: f.category || 'Other' }),
+    field('Serving', 'unit', { value: f.unit, placeholder: 'e.g. 1 cup' }),
     field('Calories', 'calories', { kind: 'number', value: f.calories ?? '' }), field('Protein g', 'protein_g', { kind: 'number', value: f.protein_g ?? '' }),
     field('Carbs g', 'carbs_g', { kind: 'number', value: f.carbs_g ?? '' }), field('Fat g', 'fat_g', { kind: 'number', value: f.fat_g ?? '' }),
     field('Fiber g', 'fiber_g', { kind: 'number', value: f.fiber_g ?? '' }), field('Label note', 'reference_note', { value: f.reference_note, wide: true }));
