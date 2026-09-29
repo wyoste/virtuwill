@@ -161,10 +161,21 @@ function goToMeals(recipes, date, redraw) {
     match: (r, q) => !q || r.name.toLowerCase().includes(q) || r.ingredients.some(i => i.name.toLowerCase().includes(q)),
     row: r => h('li', { class: 'ws-row' },
       h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, r.name),
-        h('div', { class: 'ws-row-meta' }, r.ingredients.map(i => `${+Number(i.quantity).toFixed(2)} × ${i.name}${i.optional ? ' (optional)' : ''}`).join(', '))),
-      h('div', { class: 'ws-row-end' }, h('span', { class: 'ws-amount' }, r.calories != null ? fmt.num(r.calories) + ' kcal' : '—'),
+        h('div', { class: 'ws-row-meta' }, portionLine(r)),
+        h('div', { class: 'ws-row-meta' }, r.ingredients.map(i => `${+Number(i.quantity).toFixed(2)} × ${i.name}${i.optional ? ' (optional, per portion)' : ''}`).join(', '))),
+      h('div', { class: 'ws-row-end' }, h('span', { class: 'ws-amount' }, r.calories != null ? fmt.num(r.calories) + ' kcal' : '—',
+          Number(r.portions) !== 1 ? h('small', { class: 'ws-note', style: { display: 'block', fontWeight: 400 } }, 'per portion') : null),
         h('button', { class: 'btn small primary', onclick: async () => { if (await mealEditor(date, null, { recipeId: r.recipe_id })) redraw(); } }, 'Log'),
         h('button', { class: 'btn small', onclick: async () => { if (await goToMeal(r)) saved(); } }, 'Edit'))) });
+}
+
+// "Makes 6 portions · per portion 25 g protein · 43 g carbs · … · batch 2,035 kcal"
+function portionLine(r) {
+  const n = Number(r.portions) || 1;
+  const macros = [['protein_g', 'protein'], ['carbs_g', 'carbs'], ['fat_g', 'fat'], ['fiber_g', 'fiber']]
+    .filter(([k]) => r[k] != null).map(([k, label]) => `${fmt.num(r[k])} g ${label}`).join(' · ');
+  return [n === 1 ? 'One portion' : `Makes ${+n.toFixed(2)} portions`, n !== 1 && macros ? 'each ' + macros : macros,
+          n !== 1 && r.batch_calories != null ? `batch ${fmt.num(r.batch_calories)} kcal` : null].filter(Boolean).join(' · ');
 }
 
 function foodLibrary(foods, redraw) {
