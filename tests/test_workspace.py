@@ -80,6 +80,33 @@ class WorkspaceApiTests(unittest.TestCase):
         self.assertEqual(self.owner.post("/api/v1/health/foods", json={"name": "Test mystery"}).json["category"], "Other")
         self.assertEqual(self.owner.post("/api/v1/health/foods", json={"name": "Test x", "category": "Candy"}).status_code, 400)
 
+    def test_go_to_meals_are_built_edited_and_deleted_here(self):
+        foods = {f["food_id"]: f for f in self.owner.get("/api/v1/health/foods").json}
+        self.assertEqual(foods["tortilla-chips"]["presets"][0], ["Handful", 10])
+        self.assertEqual(foods["ground-beef-80-20"]["category"], "Protein")
+        new = self.owner.post("/api/v1/health/recipes", json={"name": "Test turkey sandwich", "ingredients": [
+            {"food_id": "deli-turkey", "quantity": 3}, {"food_id": "american-cheese", "quantity": 1},
+            {"food_id": "mayonnaise", "quantity": 1, "optional": True}]})
+        self.assertEqual(new.status_code, 201, new.json)
+        r = new.json
+        self.assertEqual((r["calories"], r["source"]), (170, "manual"))     # 3 × 30 + 80; the optional mayo is left out
+        self.assertEqual(self.owner.post("/api/v1/health/recipes", json={"name": "Test turkey sandwich",
+                                                                         "ingredients": [{"food_id": "salsa"}]}).status_code, 409)
+        for bad in ({"name": "", "ingredients": [{"food_id": "salsa"}]}, {"name": "x", "ingredients": []},
+                    {"name": "x", "ingredients": [{"food_id": "nope"}]}, {"name": "x", "ingredients": [{"food_id": "salsa", "quantity": 0}]},
+                    {"name": "x", "ingredients": [{"food_id": "salsa"}, {"food_id": "salsa"}]}):
+            self.assertEqual(self.owner.post("/api/v1/health/recipes", json=bad).status_code, 400, bad)
+        r = self.owner.put(f"/api/v1/health/recipes/{r['recipe_id']}", json={"name": "Test turkey melt", "ingredients": [
+            {"food_id": "deli-turkey", "quantity": 4}, {"food_id": "gouda-cheese", "quantity": 1}]}).json
+        self.assertEqual((r["name"], r["calories"], len(r["ingredients"])), ("Test turkey melt", 221, 2))
+        # A seeded go-to meal is edited like any other.
+        chips = next(x for x in self.owner.get("/api/v1/health/recipes").json if x["name"] == "Chips & Salsa")
+        self.assertEqual(self.owner.put(f"/api/v1/health/recipes/{chips['recipe_id']}", json={"name": "Test turkey melt",
+                                        "ingredients": [{"food_id": "salsa"}]}).status_code, 409)
+        self.assertEqual(self.owner.delete(f"/api/v1/health/recipes/{r['recipe_id']}").status_code, 200)
+        self.assertEqual(self.owner.delete(f"/api/v1/health/recipes/{r['recipe_id']}").status_code, 404)
+        self.assertEqual(self.visitor.post("/api/v1/health/recipes", json={}).status_code, 401)
+
     def test_one_meal_of_several_foods_with_their_own_portions(self):
         make = lambda name, **n: self.owner.post("/api/v1/health/foods", json={"name": name, **n}).json["food_id"]
         egg = make("Test egg", unit="1 large", calories=70, protein_g=6, fat_g=5)
