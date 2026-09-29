@@ -124,7 +124,8 @@ async function editor(view, date, navigate) {
     const slots = { B: 'breakfast', L: 'lunch', D: 'dinner', S: 'snack' };
     const meals = Object.entries(data.meals || {}).filter(([k, text]) => slots[k] && text && text.trim());
     if (meals.length && await dialog('Log the meals from this page?',
-        h('ul', {}, meals.map(([k, text]) => h('li', {}, `${slots[k]}: ${text}`))), [['Skip', false], ['Log meals', true]])) {
+        mealColumns(date, meals.map(([k, text]) => ({ slot: slots[k], description: text.trim() })), null, { readOnly: true }),
+        [['Skip', false], ['Log meals', true]])) {
       for (const [k, text] of meals) {
         await api('/api/v1/health/meals', { method: 'POST', body: { meal_date: date, slot: slots[k], description: text.trim() }, quiet: true });
       }

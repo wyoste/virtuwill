@@ -273,18 +273,65 @@ export async function meal(date, record = null, { recipeId = null, slot = null }
     if (recipeId != null) { pick.value = String(recipeId); queueMicrotask(apply); }
   }
 
+  // Save what you ate as a go-to meal too. If it was one portion of a batch, say how many
+  // portions the batch made; the go-to meal keeps the whole batch.
+  const keep = h('input', { type: 'checkbox', 'data-untracked': '' });
+  const keepName = h('input', { class: 'ws-input', placeholder: 'Go-to meal name', 'aria-label': 'Go-to meal name' });
+  const keepEaten = h('input', { class: 'ws-input ws-servings', type: 'number', min: '0.25', step: '0.25', value: 1, 'aria-label': 'Portions you ate' });
+  const keepPortions = h('input', { class: 'ws-input ws-servings', type: 'number', min: '1', step: '1', value: 1, 'aria-label': 'Portions the batch made' });
+  const keepNote = h('span', { class: 'ws-note' });
+  const keepFields = h('div', { class: 'ws-usual', hidden: true }, keepName,
+    h('span', { class: 'ws-note' }, 'this was'), keepEaten, h('span', { class: 'ws-note' }, 'of'), keepPortions, h('span', { class: 'ws-note' }, 'portions'));
+  const drawKeep = () => {
+    const existing = usualMeals.find(x => x.name.toLowerCase() === keepName.value.trim().toLowerCase());
+    keepNote.textContent = existing ? ` — updates your go-to meal “${existing.name}”` : '';
+  };
+  keep.onchange = () => {
+    keepFields.hidden = !keep.checked;
+    if (keep.checked && !keepName.value) keepName.value = f.elements.description.value || '';
+    if (keep.checked && current) {   // started from a go-to meal: same batch, same portions
+      keepEaten.value = Number(eaten?.value) || 1;
+      keepPortions.value = Number(current.portions) || 1;
+    }
+    drawKeep();
+  };
+  keepName.oninput = drawKeep;
+  const keepBox = h('div', { class: 'ws-field wide ws-keep', dataset: { untracked: '' } },
+    h('label', { class: 'ws-check' }, keep, h('span', {}, 'Also save as a go-to meal', keepNote)), keepFields);
+
   const f = form(
     field('Date', 'meal_date', { kind: 'date', value: r.meal_date, required: true }),
     field('Meal', 'slot', { kind: 'select', options: SLOTS, value: r.slot }),
     field('Status', 'status', { kind: 'select', options: [['eaten', 'Eaten'], ['planned', 'Planned']], value: r.status }),
     field('Name (optional)', 'description', { value: r.description, wide: true, placeholder: 'e.g. Egg burrito — defaults to the foods' }),
     h('div', { class: 'ws-field wide' }, h('span', {}, 'Foods in this meal'), usual, extras, ...chooser.el, totals),
+    keepBox,
     manual,
     field('Note', 'note', { value: r.note, wide: true }));
-  return edit(record ? 'Edit meal' : 'Log a meal', f, body => {
+  return edit(record ? 'Edit meal' : 'Log a meal', f, async body => {
     const items = [...chosen].map(([food_id, quantity]) => ({ food_id, quantity }));
     if (items.length) NUTRIENTS.forEach(([k]) => delete body[k]);
     if (!body.description && !items.length) throw new Error('Name the meal or tick at least one food.');
+    if (keep.checked) {
+      // Saved first, so a problem with it keeps the dialog open before the meal is logged.
+      const name = keepName.value.trim() || body.description;
+      const portions = Math.max(1, Math.round(Number(keepPortions.value) || 1));
+      const ate = Number(keepEaten.value) > 0 ? Number(keepEaten.value) : 1;
+      if (!name) throw new Error('Name the go-to meal.');
+      if (!items.length) throw new Error('A go-to meal needs saved foods: tick at least one.');
+      const existing = usualMeals.find(x => x.name.toLowerCase() === name.toLowerCase());
+      // Foods scale up to the whole batch; optional extras stay optional, per portion.
+      const wasOptional = new Set((existing || current)?.ingredients.filter(i => i.optional).map(i => i.food_id) || []);
+      const recipe = { name, portions, ingredients: items.map(i => wasOptional.has(i.food_id)
+        ? { food_id: i.food_id, quantity: roundQty(i.quantity / ate), optional: true }
+        : { food_id: i.food_id, quantity: roundQty(i.quantity * portions / ate), optional: false }) };
+      await (existing ? api(`/api/v1/health/recipes/${existing.recipe_id}`, { method: 'PUT', body: { ...recipe, name: existing.name } })
+                      : api('/api/v1/health/recipes', { method: 'POST', body: recipe }));
+      forgetRecipes();
+      toast(existing ? `Go-to meal “${existing.name}” updated` : `Saved “${name}” to your go-to meals`);
+      keep.checked = false;   // a retry after a failed meal save doesn't save it twice
+      keepFields.hidden = true;
+    }
     body.items = items;
     return record ? api(`/api/v1/health/meals/${record.meal_id}`, { method: 'PUT', body })
                   : api('/api/v1/health/meals', { method: 'POST', body });
@@ -355,7 +402,15 @@ export async function goToMeal(recipe = null) {
 // snacks and dessert after dinner. Tap a meal to edit it; + adds one to that column.
 const MEAL_COLUMNS = [['B', 'Breakfast', ['breakfast']], ['L', 'Lunch', ['lunch']], ['D', 'Dinner', ['dinner']],
                       ['S', 'Snacks & dessert', ['snack', 'meal']]];
-export function mealColumns(date, meals, onChange) {
+// With readOnly, the same columns only show the meals (e.g. a preview before logging).
+export function mealColumns(date, meals, onChange, { readOnly = false } = {}) {
+  if (readOnly) return h('div', { class: 'ws-meal-cols' }, MEAL_COLUMNS.map(([letter, label, slots]) => {
+    const rows = meals.filter(m => slots.includes(m.slot));
+    return h('section', { class: 'ws-meal-col', 'aria-label': label },
+      h('header', {}, h('span', { class: 'ws-meal-letter', 'aria-hidden': 'true' }, letter), h('span', { class: 'ws-meal-label' }, label)),
+      h('ul', {}, rows.length ? rows.map(m => h('li', {}, h('div', { class: 'ws-meal-item' }, h('span', {}, m.description || '(meal)'),
+        m.calories != null ? h('small', {}, Math.round(m.calories) + ' kcal') : null))) : h('li', { class: 'ws-note' }, '—')));
+  }));
   return h('div', { class: 'ws-meal-cols' }, MEAL_COLUMNS.map(([letter, label, slots]) => {
     const rows = meals.filter(m => slots.includes(m.slot));
     const kcal = rows.reduce((sum, m) => sum + (m.status === 'planned' ? 0 : Number(m.calories) || 0), 0);
