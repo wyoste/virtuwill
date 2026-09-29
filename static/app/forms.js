@@ -200,8 +200,8 @@ function foodChooser(list, chosen, { optional = null, onChange = () => {} } = {}
 // its foods, all still editable. Its optional extras (meatballs, cheese) are one tap
 // away. A batch makes several portions (a Mexican scramble makes 6): logging starts at one
 // portion, its foods scaled to match, and changing the portions rescales them.
-export async function meal(date, record = null, { recipeId = null } = {}) {
-  const r = record || { meal_date: date, slot: guessSlot(), status: 'eaten' };
+export async function meal(date, record = null, { recipeId = null, slot = null } = {}) {
+  const r = record || { meal_date: date, slot: slot || guessSlot(), status: 'eaten' };
   const [list, usualMeals] = await Promise.all([foods(), recipes()]);
   const byId = new Map(list.map(f => [f.food_id, f]));
 
@@ -349,6 +349,29 @@ export async function goToMeal(recipe = null) {
       return true;
     } catch (e) { error.textContent = e.message; }
   }
+}
+
+// The day's meals as four columns, as on the paper journal page: B | L | D | S, with
+// snacks and dessert after dinner. Tap a meal to edit it; + adds one to that column.
+const MEAL_COLUMNS = [['B', 'Breakfast', ['breakfast']], ['L', 'Lunch', ['lunch']], ['D', 'Dinner', ['dinner']],
+                      ['S', 'Snacks & dessert', ['snack', 'meal']]];
+export function mealColumns(date, meals, onChange) {
+  return h('div', { class: 'ws-meal-cols' }, MEAL_COLUMNS.map(([letter, label, slots]) => {
+    const rows = meals.filter(m => slots.includes(m.slot));
+    const kcal = rows.reduce((sum, m) => sum + (m.status === 'planned' ? 0 : Number(m.calories) || 0), 0);
+    return h('section', { class: 'ws-meal-col', 'aria-label': label },
+      h('header', {}, h('span', { class: 'ws-meal-letter', 'aria-hidden': 'true' }, letter), h('span', { class: 'ws-meal-label' }, label),
+        kcal ? h('span', { class: 'ws-meal-kcal' }, Math.round(kcal) + ' kcal') : null),
+      h('ul', {}, rows.map(m => h('li', {},
+        h('button', { type: 'button', class: 'ws-meal-item', title: 'Edit this meal',
+                      onclick: async () => { if (await meal(date, m)) onChange(); } },
+          h('span', {}, m.description || '(meal)'),
+          h('small', {}, [m.status === 'planned' ? 'planned' : null, m.calories != null ? Math.round(m.calories) + ' kcal' : 'kcal unknown'].filter(Boolean).join(' · '))),
+        h('button', { type: 'button', class: 'ws-meal-x', 'aria-label': 'Delete ' + (m.description || 'meal'),
+                      onclick: async () => { if (await remove('meals', m.meal_id, 'meal')) onChange(); } }, '✕')))),
+      h('button', { type: 'button', class: 'btn small ws-meal-add', 'aria-label': 'Add to ' + label,
+                    onclick: async () => { if (await meal(date, null, { slot: slots[0] })) onChange(); } }, '+ Add'));
+  }));
 }
 
 function guessSlot() {

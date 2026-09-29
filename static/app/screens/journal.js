@@ -1,8 +1,10 @@
-// Journal: one entry per date, with that day's health beside it.
-// Meals are logged in Health › Food; habits run/lift/drink tick themselves.
+// Journal: one entry per date, laid out like the paper page, top to bottom:
+// quote · meals (B | L | D | S) · habit toggles · the entry · money.
+// Habits run/lift/drink tick themselves from the day's records.
 import { h, api, fmt, card, pageHead, isoToday, addDays, empty, toast, run, cleanHTML, textToHTML, dialog, field, values } from '../lib.js';
 import { setDirty } from '../main.js';
 import { plainText } from './today.js';
+import { mealColumns } from '../forms.js';
 
 export async function render(view, { path, params, navigate }) {
   const date = path.split('/')[3];
@@ -119,14 +121,15 @@ async function editor(view, date, navigate) {
     if (data.quote && !quote.value) quote.value = data.quote;
     if (data.quoteAuthor && !author.value) author.value = data.quoteAuthor;
     if (data.freeWrite) writing.innerHTML = cleanHTML(writing.innerHTML + (writing.textContent.trim() ? '<br><br>' : '') + textToHTML(data.freeWrite));
-    const meals = Object.entries(data.meals || {}).filter(([, text]) => text && text.trim());
-    const slots = { B: 'breakfast', L: 'lunch', D: 'dinner' };
+    const slots = { B: 'breakfast', L: 'lunch', D: 'dinner', S: 'snack' };
+    const meals = Object.entries(data.meals || {}).filter(([k, text]) => slots[k] && text && text.trim());
     if (meals.length && await dialog('Log the meals from this page?',
         h('ul', {}, meals.map(([k, text]) => h('li', {}, `${slots[k]}: ${text}`))), [['Skip', false], ['Log meals', true]])) {
       for (const [k, text] of meals) {
         await api('/api/v1/health/meals', { method: 'POST', body: { meal_date: date, slot: slots[k], description: text.trim() }, quiet: true });
       }
-      toast('Meals logged in Health › Food');
+      toast('Meals logged');
+      drawMeals();
     }
     mark();
   });
@@ -137,30 +140,43 @@ async function editor(view, date, navigate) {
     await run(null, async () => { await api('/api/journal/entry/' + entry.id, { method: 'DELETE' }); dirty = false; navigate('/app/journal'); });
   } }, 'Delete') : null;
 
+  // Meals redraw on their own after a change, so unsaved writing is never lost.
+  const meals = h('div', {});
+  const drawMeals = async () => {
+    const fresh = await api('/api/v1/today?date=' + date).catch(() => null);
+    if (fresh) Object.assign(day, fresh);
+    const kcal = day.activity?.total_calories;
+    meals.replaceChildren(mealColumns(date, day.meals, drawMeals),
+      h('p', { class: 'ws-note', style: { marginTop: '6px' } },
+        kcal != null ? `${fmt.num(kcal)} kcal logged this day` : 'Nothing logged yet', ' · ',
+        h('a', { href: '/app/health/food?date=' + date }, 'Health › Food')));
+  };
+  meals.replaceChildren(mealColumns(date, day.meals, drawMeals));
+  drawMeals();
+
   const hd = day.activity || {};
   view.append(
     pageHead(fmt.longDay(date), entry ? 'Journal entry' : 'New entry',
       h('a', { class: 'btn small', href: '/app/journal/' + addDays(date, -1), 'aria-label': 'Previous day' }, '←'),
       h('a', { class: 'btn small', href: '/app/journal/' + addDays(date, 1), 'aria-label': 'Next day' }, '→'),
       h('button', { class: 'btn', onclick: () => photo.click() }, 'Transcribe a photo'), photo, remove, saveBtn),
-    h('div', { class: 'ws-grid two' },
-      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 } },
-        card(null, h('div', { class: 'ws-form' }, h('div', { style: { flex: '3 1 240px' } }, quote), h('div', { style: { flex: '1 1 140px' } }, author)),
-          h('div', { style: { marginTop: '10px' } }, writing), h('div', { style: { marginTop: '10px' } }, tags)),
-        card('Habits', habitRow, h('p', { class: 'ws-note', style: { marginTop: '8px' } },
-          '“auto” means the day’s records ticked it (a strength workout, a run, a drink). Click to set it yourself.')),
-        card('Balance check-in', h('p', { class: 'ws-note', style: { marginBottom: '8px' } },
-          'What each account showed today. Kept as that day’s observation, never rewritten by later corrections.'), accountRows)),
-      card(h('span', {}, 'That day', h('a', { class: 'btn small', href: '/app?date=' + date }, 'Open in Today')),
+    h('div', { class: 'ws-journal-page' },
+      card(null, h('div', { class: 'ws-form' }, h('div', { style: { flex: '3 1 240px' } }, quote), h('div', { style: { flex: '1 1 140px' } }, author))),
+      meals,
+      h('section', { class: 'ws-card ws-habit-strip', 'aria-label': 'Habits', title: '“auto” means the day’s records ticked it; click to set it yourself.' },
+        h('span', { class: 'ws-strip-label' }, 'Habits'), habitRow),
+      card('Journal entry', writing, h('div', { style: { marginTop: '10px' } }, tags)),
+      card(h('span', {}, 'Money', h('a', { class: 'btn small', href: '/app/money/transactions?month=' + date.slice(0, 7) }, 'Transactions')),
+        h('div', { class: 'ws-note', style: { fontWeight: 600, marginBottom: '6px' } }, 'Balance check-in'),
+        h('p', { class: 'ws-note', style: { marginBottom: '8px' } },
+          'What each account showed today. Kept as that day’s observation, never rewritten by later corrections.'), accountRows,
+        section('Spent this day', day.money.transactions.map(t => `${t.merchant || '—'} · ${fmt.money(t.amount)}`))),
+      card(h('span', {}, 'Also that day', h('a', { class: 'btn small', href: '/app?date=' + date }, 'Open in Today')),
         h('div', { class: 'ws-stats' },
           h('div', {}, h('div', { class: 'ws-stat-value' }, fmt.num(hd.workout_minutes ?? 0)), h('div', { class: 'ws-stat-sub' }, 'workout minutes')),
-          h('div', {}, h('div', { class: 'ws-stat-value' }, hd.total_calories != null ? fmt.num(hd.total_calories) : '—'), h('div', { class: 'ws-stat-sub' }, 'logged calories')),
           h('div', {}, h('div', { class: 'ws-stat-value' }, hd.weight != null ? fmt.num(hd.weight, 1) : '—'), h('div', { class: 'ws-stat-sub' }, 'lb'))),
         section('Workouts', day.workouts.map(w => `${w.activity || w.workout_type}${w.minutes != null ? ' · ' + Math.round(w.minutes) + ' min' : ''}`)),
-        section('Meals', day.meals.map(m => `${m.slot}: ${m.description || '(meal)'}${m.calories != null ? ' · ' + Math.round(m.calories) + ' kcal' : ''}`)),
-        section('Weigh-ins', day.weighIns.map(w => `${w.value} ${w.unit}${w.is_morning ? ' · morning' : ''}`)),
-        section('Money', day.money.transactions.map(t => `${t.merchant || '—'} · ${fmt.money(t.amount)}`)),
-        h('p', { class: 'ws-note', style: { marginTop: '10px' } }, 'Log workouts, meals and weigh-ins from Today or Health; they appear here.'))));
+        section('Weigh-ins', day.weighIns.map(w => `${w.value} ${w.unit}${w.is_morning ? ' · morning' : ''}`)))));
 }
 
 function section(title, items) {
