@@ -225,8 +225,13 @@ audio { width: 100%; height: 36px; }
 .ws-pick-group { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text3); padding: 8px 8px 2px; }
 .ws-usual { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
 .ws-usual > .ws-input:first-child { flex: 1; min-width: 0; }
+.ws-usual > .ws-group-filter { flex: 0 0 auto; width: auto; }
 .ws-usual-extras { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .ws-usual-extras:empty { display: none; }
+.ws-presets { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.ws-optional { font-size: 12px; gap: 4px; }
+.ws-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ws-pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .ws-meal-items { margin-top: 8px; }
 .ws-meal-items .ws-row { padding: 8px 0; }
 .ws-servings { width: 78px !important; }
