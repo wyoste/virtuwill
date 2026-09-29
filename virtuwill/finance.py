@@ -16,6 +16,7 @@ from flask import Blueprint, jsonify, request
 
 from . import db
 from .auth import admin_required
+from .importers import retirement_type as _retirement_type
 from .util import in_calendar, number, parse_date, plain, slug
 
 bp = Blueprint("finance", __name__)
@@ -37,18 +38,6 @@ def _guess_type(text, hint=None):
     if "CHECKING" in upper or "DEBIT" in upper:
         return "checking"
     return "other"
-
-
-def _retirement_type(name):
-    lower = name.lower()
-    if "roth" in lower:
-        return "roth_ira"
-    if "ira" in lower:
-        return "traditional_ira"
-    for plan in ("403(b)", "401(a)", "401(k)"):
-        if plan in lower:
-            return plan.replace("(", "").replace(")", "")
-    return "401k"
 
 
 def account_for(conn, text, hint=None):

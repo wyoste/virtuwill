@@ -3,11 +3,11 @@
 Shared by the two ways Plaid data arrives:
 
 - jobs/plaid_to_virtuwill.py pulls from Plaid and posts to the ingest API;
-- virtuwill/plaid_mirror.py reads the lakehouse's Plaid tables once they are
-  synced into Lakebase.
+- jobs/plaid_bronze_to_lakebase.py loads the lakehouse's bronze Plaid tables
+  (through plaid_load.py).
 
 Both give a transaction the same external_id (a settled charge keeps the id of
-the pending one it replaces), so the two never double a row. The job loads
+the pending one it replaces, when the source has it). The direct job loads
 this file by path, so nothing here may import from the virtuwill package.
 """
 import json

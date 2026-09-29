@@ -20,7 +20,7 @@ from datetime import date, timedelta
 
 from psycopg.types.json import Jsonb
 
-from . import SECTIONS
+from . import SECTIONS, retirement_type
 from .canonical import validate
 
 WINDOW = timedelta(days=3)
@@ -39,8 +39,7 @@ def _retirement_type(info):
     """A retirement account names its plan (the model requires one): as sent, else read from its name."""
     if info.get("account_type") != "retirement":
         return None
-    from ..finance import _retirement_type as from_name
-    return info.get("retirement_type") or from_name(info.get("name") or "")
+    return info.get("retirement_type") or retirement_type(info.get("name") or "")
 
 
 def account_id_for(conn, mask, info=None, create=False):

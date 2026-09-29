@@ -1,194 +1,93 @@
-# Plaid → Lakebase: serving the lakehouse's Plaid data to VirtuWill
+# Plaid → Lakebase: loading the lakehouse's Plaid data into VirtuWill
 
-Plaid balances and transactions land in the lakehouse every day. The Databricks job
-**`ingestion_plaid_financials`** (07:30 America/Chicago) runs the *plaid_integration*
-notebook. The notebook pulls USAA, Chase, Fidelity and Amex from Plaid, writes each pull
-as JSONL to `/Volumes/prod/bronze/stage/plaid/…`, and Auto Loader lands it in
-`prod.bronze.raw_plaid_balances` / `raw_plaid_transactions`. This page covers what happens
-next: **reverse ETL** from Delta into the app's own Lakebase database, where the Money screens
-read Plaid data like every other finance record.
+Everything runs inside the Databricks workspace. The Databricks job **`ingestion_plaid_financials`**
+(07:30 America/Chicago) runs the *plaid_integration* notebook. The notebook pulls USAA, Chase,
+Fidelity and Amex from Plaid and lands them in `prod.bronze`. A second task in the same job then
+writes the new rows straight into the app's Lakebase database, in the tables the Money and Today
+screens already read.
 
 ```
-Plaid API ─▶ stage volume (JSONL) ─▶ prod.bronze.raw_plaid_* ─▶ prod.silver.plaid_* ─▶ synced tables ─▶ finance.*
-            └──────────── plaid_integration notebook ───────────┘ └────── jobs/plaid_lakebase_refresh.py ───────┘
+Plaid API ─▶ stage volume ─▶ prod.bronze.raw_plaid_* ─▶ finance.accounts / transactions / balance_snapshots
+          └───── plaid_integration notebook ───────┘ └──── jobs/plaid_bronze_to_lakebase.py ────┘
 ```
 
 | Piece | Where | What it does |
 |---|---|---|
-| Serving tables | [`lakehouse/plaid_serving_create.sql`](../lakehouse/plaid_serving_create.sql), [`plaid_serving_refresh.sql`](../lakehouse/plaid_serving_refresh.sql) | bronze → `prod.silver.plaid_transactions` (one row per transaction) and `prod.silver.plaid_balances` (every pull), with primary keys and the Change Data Feed |
-| Synced tables | Databricks (set up once, below) | mirror the serving tables into the app's Lakebase database as `public.plaid_transactions` / `public.plaid_balances` |
-| The mirror loader | [`virtuwill/plaid_mirror.py`](../virtuwill/plaid_mirror.py) | reads what changed in the synced tables and loads it into `finance.*`, through the same matching as Money › Imports |
-| Daily refresh | [`jobs/plaid_lakebase_refresh.py`](../jobs/plaid_lakebase_refresh.py) | a second task in `ingestion_plaid_financials`, after the notebook: serving tables → refresh synced tables → ask the app to load |
+| The load task | [`jobs/plaid_bronze_to_lakebase.py`](../jobs/plaid_bronze_to_lakebase.py) | reads what landed in bronze since the last run (Spark), connects to Lakebase, loads it |
+| The mapping and matching | [`virtuwill/importers/plaid.py`](../virtuwill/importers/plaid.py), [`plaid_load.py`](../virtuwill/importers/plaid_load.py) | Plaid's fields → the finance model, through the same staging and matching as Money › Imports |
+| Where it stopped | `finance.plaid_bronze_load` ([`db/schema/105_plaid_bronze.sql`](../db/schema/105_plaid_bronze.sql)) | how far bronze has been read, saved in the same transaction as the load |
 
-## Why the app loads the synced tables instead of reading them directly
+No API calls, no synced tables and no secrets. The task reads bronze with the job's Spark
+session. It signs in to Lakebase as the identity the job runs as, using a short-lived token
+from the Databricks SDK.
 
-Every Money screen, the Today screen, budgets and receipts read `finance.transactions` and
-`finance.balance_snapshots`. The mirror loader puts Plaid's rows there, so nothing on the
-screens changes, and a Plaid transaction gets everything an imported one gets: categories
-you set stick, receipts match it, and a statement import later finds it instead of adding it
-twice. The synced tables stay exactly what the lakehouse has. Postgres writes go only to the
-app's own tables.
+## What goes where
 
-## 1. Serving tables (`prod.silver`)
-
-Bronze is append-only and not deduplicated. It also holds the API's values as the notebook
-wrote them: `_pulled_at`, `date` and `authorized_date` as text, and a missing date as the
-text `'None'`. Triggered sync needs a **primary key** and the **Change Data Feed** on its
-source. The serving tables are typed, and have both:
-
-- `prod.silver.plaid_transactions`: the current state of each `transaction_id`. The latest
-  sync of it wins, and a transaction Plaid **removed** is deleted. Key: `transaction_id`.
-- `prod.silver.plaid_balances`: every balance pull, for history. Key: `(account_id, as_of)`.
-
-`plaid_serving_create.sql` declares them (`CREATE TABLE IF NOT EXISTS`, safe to run every
-day). `plaid_serving_refresh.sql` then **MERGEs** into them and doesn't replace them. Replacing a table rewrites it whole, and each
-triggered sync would copy every row again. A MERGE writes only what changed, and a row is
-rewritten only when bronze has a newer pull of it.
-
-> Delta primary keys are informational (not enforced). The refresh's dedup keeps them
-> unique. Keep names and columns lowercase, as synced tables expect.
-
-**Pending charges.** Bronze doesn't keep Plaid's `pending_transaction_id`. When a pending
-charge settles, Plaid gives the settled charge a new id and marks the pending one
-*removed*. The refresh deletes the pending row from the serving table. The app then deletes
-it from `finance.transactions` and adds the settled one. A category you set on the pending
-row doesn't carry over. To keep it, have the notebook also write
-`"pending_transaction_id": t.get("pending_transaction_id")` (and add it to
-`transactions_schema`, with `.option("mergeSchema", "true")` on the bronze write), then add
-the column to both SQL files. The app picks it up by itself and updates the pending row in
-place.
-
-**Categories.** The notebook writes Plaid's detailed category code
-(`FOOD_AND_DRINK_GROCERIES`), or its primary code, into `category`. The app maps these the
-same way as the direct Plaid job. Transactions that only have Plaid's older category path
-(`Food and Drink > Restaurants`) carry no code, so they land in **Review**.
-
-**Accounts.** An account is matched by its last four digits (`mask`). One with no four-digit
-mask is skipped and named in the load's report. Give it one with `PLAID_MASKS` on the app.
-Fidelity retirement accounts come in as retirement accounts with their plan (Roth IRA,
-IRA, 401(k), 403(b), 401(a)). Other investment accounts come in as brokerage.
-
-## 2. Synced tables into the app's Lakebase database
-
-Create one synced table per serving table. Put both in the **same database the app is
-attached to** (`databricks_postgres` by default), schema `public`:
-
-| Source | Synced table (Postgres) | Primary key | Mode |
-|---|---|---|---|
-| `prod.silver.plaid_transactions` | `public.plaid_transactions` | `transaction_id` | Triggered |
-| `prod.silver.plaid_balances` | `public.plaid_balances` | `account_id, as_of` | Triggered |
-
-Use **Triggered** mode. The data changes once a day, so a refresh started by the daily job
-is enough and you don't pay for an always-on pipeline. (Snapshot mode replaces the whole
-table each run. Continuous mode keeps a pipeline running.)
-
-**UI:** Catalog → `prod.silver.plaid_transactions` → **Create** → **Synced table** → the
-app's Lakebase database, schema `public`, mode **Triggered**, key `transaction_id`. Do the
-same for `plaid_balances`.
-
-**CLI:** first check which kind of Lakebase you have. If `databricks postgres list-projects`
-lists your project, it is **Autoscaling**: use `databricks postgres create-synced-table`.
-Otherwise it is **Provisioned**: use `databricks database create-synced-database-table`.
-Terraform has `databricks_database_synced_database_table`.
-
-A different schema works too. Set `PLAID_MIRROR_SCHEMA` on the app to match it.
-
-## 3. Let the app read them
-
-The app already signs in to Lakebase as its own service principal, with a fresh OAuth token
-for every connection (`virtuwill/db.py`). It needs no new credentials, only read access to
-the two synced tables. In the Lakebase SQL editor, as the tables' owner:
-
-```sql
-GRANT USAGE  ON SCHEMA public TO "<app service principal client id>";
-GRANT SELECT ON public.plaid_transactions, public.plaid_balances TO "<app service principal client id>";
-```
-
-The client ID is on the app's **Authorization** tab (it is also the app's `PGUSER`).
-The app can only read these tables. It never writes to them.
-
-**Settings → Diagnostics** shows **Sync · plaid_mirror** after the first load. If a table is
-missing or the grant was forgotten, it names the table. If a synced table is ever deleted
-and made again, run the `GRANT` again.
-
-## 4. The daily refresh: a second task in `ingestion_plaid_financials`
-
-```
-07:30 CT  ingestion_plaid_financials
-  task 1  plaid_integration notebook     Plaid → stage volume → prod.bronze.raw_plaid_*
-  task 2  jobs/plaid_lakebase_refresh.py (depends on task 1)
-            1. MERGE into prod.silver.plaid_*
-            2. refresh both synced tables, wait for them
-            3. POST /api/ingest/v1/finance/plaid-mirror  → finance.*
-```
-
-In the job's **Tasks** tab, add a task:
-
-- **Type:** Python script. **Source:** Git provider, this repo, branch `main`.
-  **Path:** `jobs/plaid_lakebase_refresh.py`.
-- **Depends on:** the notebook task.
-- **Compute:** the same serverless or cluster the notebook uses. It needs `databricks-sdk`,
-  which Databricks runtimes include.
-- **Parameters:** `["--secret-scope", "plaid_integration"]` (this is also the default).
-
-Add these secrets to the `plaid_integration` scope. Keys can use underscores, like the
-notebook's own keys:
-
-| Secret key | Value |
+| Bronze | VirtuWill (Lakebase) |
 |---|---|
-| `plaid_synced_tables` | the synced tables' Unity Catalog names, comma-separated |
-| `plaid_sync_pipeline_ids` | optional: their pipeline ids, if the lookup by name fails |
-| `virtuwill_url` | the app's address, `https://virtuwill-….databricksapps.com` |
-| `virtuwill_token` | an API token from **Settings → API access**, with **finance:write** |
-| `databricks_host`, `databricks_client_id`, `databricks_client_secret` | a service principal that can use the app (see [the ingest API](finance-api.md)) |
+| `raw_plaid_balances`: each account's latest pull | `finance.accounts`: matched by the last four digits (`mask`), created on first sight, institution = `item_label` |
+| `raw_plaid_balances`: pulls since the last run | `finance.balance_snapshots`: the current balance, plus the available balance for bank accounts, one reading per account and day (in America/Chicago). A card's balance is what's owed. |
+| `raw_plaid_transactions`: each transaction touched since the last run, at its latest sync | `finance.transactions`: matched on Plaid's `transaction_id`, so a re-sent or modified one updates in place |
+| … whose latest `_sync_op` is `removed` | deleted from `finance.transactions` (unless a receipt points at it) |
 
-The job runs as you, so it can already read bronze, write `prod.silver` and run the synced
-tables' pipelines. If a synced table fails to refresh, the task stops before step 3 and fails
-the run.
+- **Categories:** Plaid's detailed code (`FOOD_AND_DRINK_GROCERIES` → Groceries, `…_COFFEE`
+  → Dining, `INCOME_*` → a payroll deposit, a card payment → a card payment). The older
+  `Food and Drink > Restaurants` paths carry no code, so those transactions land in
+  **Review**. A category you set in the app is kept.
+- **Pending charges:** when a pending charge settles, Plaid adds the settled charge under a
+  new id and removes the pending one. The load does the same. To keep a category you set on
+  the pending row, have the notebook also write Plaid's `pending_transaction_id`. The load
+  uses it when it's there and updates the pending row in place.
+- **Accounts:** Fidelity retirement accounts come in with their plan (Roth IRA, IRA, 401(k),
+  403(b), 401(a)). Other investment accounts come in as brokerage. An account with no
+  four-digit mask is skipped and named in the report. Give it one with `--masks`.
+- **Money › Imports** lists each load as `Lakehouse · Plaid · <time>`. **Settings → Diagnostics**
+  shows the latest one as **Sync · plaid_bronze**.
 
-Commands, for trying it by hand from a notebook or terminal:
+## Setting it up
 
-```bash
-python jobs/plaid_lakebase_refresh.py              # all three steps
-python jobs/plaid_lakebase_refresh.py --dry-run    # ask the app what it would load; nothing loaded
-python jobs/plaid_lakebase_refresh.py --only app   # just step 3
-```
+1. **Deploy the app from this branch.** On start it adds `finance.plaid_bronze_load`. The
+   task refuses to run without it.
+2. **Add the task.** In `ingestion_plaid_financials` → **Tasks** → **Add task**:
+   - **Type:** Python script. **Source:** Git provider (this repo, branch `main`), or the
+     repo's Git folder in the workspace. **Path:** `jobs/plaid_bronze_to_lakebase.py`.
+   - **Depends on:** the notebook task.
+   - **Compute:** the same as the notebook. Add the library `psycopg[binary]` (PyPI) to it.
+     Serverless: put it in the task's environment.
+   - **Parameters**, using the name from the Lakebase page:
+     - Provisioned: `["--instance", "<instance name>"]`
+     - Autoscaling: `["--endpoint", "projects/<project>/branches/<branch>/endpoints/<endpoint>"]`
 
-From the workspace, `POST /api/v1/money/plaid-mirror/sync` (signed in) does step 3, and
-`GET /api/v1/money/plaid-mirror` shows what the mirror holds and how much isn't loaded yet.
+     (To tell which you have: if `databricks postgres list-projects` lists your database,
+     it's Autoscaling.)
+3. **Try it first:** run the task alone with `--dry-run` added to the parameters. It
+   prints what it would add and match, and writes nothing.
+4. Run it for real. The next 07:30 run carries on from there.
 
-### What each load does
+Other parameters: `--database` (default `databricks_postgres`), `--catalog prod`,
+`--schema bronze`, `--timezone America/Chicago`, `--masks '{"<plaid account_id>": "1234"}'`,
+and `--reload` to read all of bronze again (matched, so nothing doubles).
 
-- **Transactions** synced since the last load are matched on Plaid's id and added or
-  updated. A pending charge updates when it settles.
-- **Balances** pulled since the last load become one reading per account, day (in
-  `APP_TIMEZONE`) and kind: the current balance, plus the available balance for bank
-  accounts. A card's balance is what's owed.
-- **Pending charges Plaid has dropped** are removed from `finance.transactions`: ones that
-  settled under a new id, or were voided. A row a receipt points at is left alone.
-- An account with no four-digit `mask` is skipped and listed in the report. Give it one with
-  `PLAID_MASKS` (`{"<plaid account_id>": "1234"}`) on the app.
+## Permissions
 
-The loader remembers how far it has read (`finance.plaid_mirror`), so a repeated call loads
-nothing new. Each load appears in **Money › Imports** as `Lakebase · Plaid · <time>`.
+The task signs in to Lakebase as the job's **Run as** identity (you). The finance tables
+belong to the app's own role, which made them on first start. Your role needs to be able to
+read and write them:
 
-## One path for Plaid, not two
+- If your role is an admin of the Lakebase instance (the instance's creator is), it may be
+  able to already. If it can't, the first real run stops with *"Lakebase refused the write"*
+  and changes nothing, because the whole load is one transaction.
+- If it can't, the table owner (the app) has to grant your role `SELECT, INSERT, UPDATE,
+  DELETE` on the `finance` tables, `USAGE` on their sequences, and write on
+  `virtuwill.sync_reports`. Or run the task as the app's service principal instead.
 
-`jobs/plaid_to_virtuwill.py` is a different way in: it calls Plaid itself and posts to the
-ingest API, with no lakehouse involved. The notebook pipeline replaces it. Don't schedule
-both. They would pull Plaid twice, and the mirror loader would remove pending charges the
-other path loaded but the lakehouse doesn't have.
+## If a run fails
 
-## Security
+Nothing is saved: not the rows, and not how far bronze was read. The next run reads the
+same rows again. Loads are matched, so running again never doubles anything.
 
-- The app's Postgres role only has `SELECT` on the synced tables. It can't change served data.
-- Restrict `prod.silver.plaid_*` and `prod.bronze.raw_plaid_*` in Unity Catalog to the job's
-  principal and the owner. `plaid_items` (secret names and cursors) is never served.
-- No long-lived database passwords anywhere. The app mints an OAuth token for each
-  connection, and the job's secrets live in the secret scope.
+## The older direct Plaid job
 
-## References
-
-- Lakebase: https://docs.databricks.com/aws/en/oltp/projects/
-- Synced tables: https://docs.databricks.com/aws/en/oltp/instances/sync-data/sync-table
-- Connecting an app (OAuth token rotation): https://docs.databricks.com/aws/en/oltp/projects/external-apps-connect
+`jobs/plaid_to_virtuwill.py` calls Plaid itself and posts to the app's ingest API. The
+notebook pipeline replaces it. Don't schedule both. Both use the same mapping
+(`virtuwill/importers/plaid.py`).
