@@ -1,6 +1,6 @@
 // Health: Overview · Activity · Food · Body · Goals, over the shared tables.
 import { h, api, fmt, card, stat, pageHead, tabs, isoToday, addDays, empty, toast, run, field, values, editable, saveAll } from '../lib.js';
-import { quickAdd, recordRow, meal as mealEditor, goToMeal, cap, forgetFoods, forgetRecipes, byGroup, FOOD_GROUPS } from '../forms.js';
+import { quickAdd, recordRow, meal as mealEditor, mealColumns, goToMeal, cap, forgetFoods, forgetRecipes, byGroup, FOOD_GROUPS } from '../forms.js';
 
 const TABS = [['/app/health', 'Overview'], ['/app/health/activity', 'Activity'], ['/app/health/food', 'Food'],
               ['/app/health/body', 'Body'], ['/app/health/goals', 'Goals']];
@@ -106,10 +106,8 @@ async function food(view, redraw, { params }) {
       stat('Planned', fmt.num(d.planned_calories ?? 0), `${d.meals_planned ?? 0} planned meals`)),
     h('label', { class: 'ws-check', for: 'day-complete' }, complete,
       h('span', {}, 'I logged everything I ate this day (otherwise totals are a partial log, not a low-calorie day)')),
-    h('div', { class: 'ws-grid two' },
-      card(h('span', {}, 'Meals', h('button', { class: 'btn small', onclick: async () => { if (await mealEditor(date)) redraw(); } }, '+ Meal')),
-        meals.length ? h('ul', { class: 'ws-list' }, meals.map(m => recordRow('meals', m, redraw))) : empty('No meals logged for this day.')),
-      card('Drinks', drinks.length ? h('ul', { class: 'ws-list' }, drinks.map(x => recordRow('drinks', x, redraw))) : empty('No drinks this day.'))),
+    mealColumns(date, meals, redraw),
+    card('Drinks', drinks.length ? h('ul', { class: 'ws-list' }, drinks.map(x => recordRow('drinks', x, redraw))) : empty('No drinks this day.')),
     h('div', { class: 'ws-grid two' },
       goToMeals(recipes, date, redraw),
       foodLibrary(foods, redraw)),

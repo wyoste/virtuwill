@@ -222,6 +222,8 @@ button.ws-chip[aria-pressed="true"] { background: var(--blue); color: #fff; bord
 .ws-meal-x { background: none; border: 0; color: var(--text3); cursor: pointer; padding: 6px 2px; font-size: 12px; }
 .ws-meal-x:hover { color: var(--red, #b3261e); }
 .ws-meal-add { align-self: flex-start; }
+.ws-keep { border-top: 1px dashed var(--border); padding-top: 10px; }
+.ws-keep .ws-usual[hidden] { display: none; }
 @media (max-width: 700px) {   /* keep the habit strip one thin row; it scrolls sideways */
   .ws-habit-strip .ws-habits { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .ws-habit-strip .ws-habit { flex-shrink: 0; }
