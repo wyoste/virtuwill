@@ -182,6 +182,29 @@ class SyncTests(unittest.TestCase):
         self.sync(reload=True)
         self.assertEqual(set(self.rows()), {"t1", "t2", "s1"})
 
+    def test_each_day_on_the_today_screen_shows_that_days_balances_and_transactions(self):
+        day2 = DAY1 + timedelta(days=1)
+        self.land("plaid_balance", [self.balance("card", "2222", "credit", "credit card", 120.5, bank="Chase"),
+                                    self.balance("chk", "1111", "depository", "checking", 500, 480, bank="USAA")], DAY1)
+        self.land("plaid_transaction", [self.txn("t1", "card", 12.5, "FOOD_AND_DRINK_COFFEE"),
+                                        self.txn("t2", "chk", 40, "FOOD_AND_DRINK_GROCERIES")], DAY1)
+        self.land("plaid_balance", [self.balance("card", "2222", "credit", "credit card", 153, bank="Chase"),
+                                    self.balance("chk", "1111", "depository", "checking", 460, 440, bank="USAA")], day2)
+        self.land("plaid_transaction", [self.txn("t3", "card", 32.5, "GENERAL_MERCHANDISE_OTHER", day="2026-03-03")], day2)
+        self.sync()
+
+        def day(date):
+            money = self.owner.get(f"/api/v1/today?date={date}").json["money"]
+            return ({b["mask"]: float(b["balance"]) for b in money["balances"]},
+                    sorted(t["merchant"] + " " + str(float(t["amount"])) for t in money["transactions"]), money["through"])
+
+        self.assertEqual(day("2026-03-02"), ({"2222": 120.5, "1111": 500}, ["Made Up Merchant 12.5", "Made Up Merchant 40.0"],
+                                             "2026-03-03"))
+        self.assertEqual(day("2026-03-03"), ({"2222": 153, "1111": 460}, ["Made Up Merchant 32.5"], "2026-03-03"))
+        self.assertEqual(day("2026-03-01")[0], {})                       # before the first pull: nothing to show
+        txns = self.owner.get("/api/v1/money/transactions?month=2026-03").json
+        self.assertEqual(len(txns["transactions"]), 3)
+
     def test_the_background_load_is_the_same_load(self):
         self.land("plaid_balance", [self.balance("chk", "1111", "depository", "checking", 5, 5)], DAY1)
         self.land("plaid_transaction", [self.txn("t1", "chk", 1, "BANK_FEES")], DAY1)

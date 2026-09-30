@@ -48,7 +48,7 @@ def today():
             "drinks": _rows(conn, "SELECT * FROM health.alcohol WHERE drink_date = %s ORDER BY drink_id", day),
             "money": {
                 "through": through.isoformat() if through else None,
-                "balances": finance.balances(conn),
+                "balances": finance.balances_on(conn, day),        # as the accounts stood on this day
                 "spend": finance.spend_summary(conn, day),
                 "transactions": _rows(conn, """
                     SELECT t.transaction_id, t.merchant, t.amount, t.kind, t.category, a.name AS account_name,
