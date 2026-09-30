@@ -48,15 +48,14 @@ API token and no secrets. It already signs in to Lakebase as its own service pri
    `bronze.raw_plaid_transactions`. These are the synced copies of the two bronze tables, in
    the **same Lakebase database** as the app (`databricks_postgres` by default). The names
    are fixed in `TABLES` at the top of `virtuwill/plaid_synced.py`.
-2. **Let the app read them.** In the Lakebase SQL editor, as the synced tables' owner (you),
-   use the app's service principal client ID from the app's **Authorization** tab:
+2. **Let the app read them.** In the Lakebase SQL editor (database `databricks_postgres`),
+   signed in as the synced tables' owner (you), run
+   [`db/lakebase/grant_plaid_synced_tables.sql`](../db/lakebase/grant_plaid_synced_tables.sql).
+   It checks that both tables are there, grants the app's service principal `USAGE` on
+   `bronze` and `SELECT` on the two tables, then shows the grants. Every check should
+   read `true`. The app never runs this file by itself: it isn't in `db/schema/`.
 
-   ```sql
-   GRANT USAGE  ON SCHEMA bronze TO "<app client id>";
-   GRANT SELECT ON bronze.raw_plaid_balances, bronze.raw_plaid_transactions TO "<app client id>";
-   ```
-
-   If a synced table is ever deleted and made again, run the `GRANT` again.
+   If a synced table is ever deleted and made again, run the script again.
 3. **Deploy the app from this branch.** On start it adds `finance.plaid_bronze_load` and
    starts the 15-minute loop.
 4. **Check it.** Signed in, open `/api/v1/money/plaid-sync`. It shows:
