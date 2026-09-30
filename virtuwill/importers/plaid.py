@@ -3,8 +3,8 @@
 Shared by the two ways Plaid data arrives:
 
 - jobs/plaid_to_virtuwill.py pulls from Plaid and posts to the ingest API;
-- jobs/plaid_bronze_to_lakebase.py loads the lakehouse's bronze Plaid tables
-  (through plaid_load.py).
+- virtuwill/plaid_synced.py loads the lakehouse's bronze Plaid tables from
+  their Lakebase synced copies (through plaid_load.py).
 
 Both give a transaction the same external_id (a settled charge keeps the id of
 the pending one it replaces, when the source has it). The direct job loads

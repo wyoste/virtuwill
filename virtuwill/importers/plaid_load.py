@@ -1,17 +1,14 @@
 """Load Plaid rows from the lakehouse's bronze tables into the finance model.
 
-jobs/plaid_bronze_to_lakebase.py reads prod.bronze.raw_plaid_balances and
-raw_plaid_transactions and hands the rows here, with a connection to the
-app's Lakebase database. Everything goes through the same staging and
-matching as Money › Imports, in one transaction:
+virtuwill/plaid_synced.py reads the synced copies of prod.bronze.raw_plaid_balances
+and raw_plaid_transactions in Lakebase and hands the rows here. Everything goes
+through the same staging and matching as Money › Imports, in one transaction:
 
 - accounts (from each account's latest balance row), created on first sight;
 - balances: one reading per account, day and kind, the latest pull of the day winning;
 - transactions: matched on Plaid's id, so a re-sent or modified one updates in place;
 - transactions Plaid removed (a pending charge that settled under a new id, or
   one that was voided) are deleted, unless a receipt points at them.
-
-No Flask here: the job imports this on a Databricks cluster.
 """
 import hashlib
 import json

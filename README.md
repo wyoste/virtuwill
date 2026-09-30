@@ -52,11 +52,11 @@ prompt for a scheduled Claude task: [docs/finance-api.md](docs/finance-api.md).
 ## Plaid from the lakehouse
 
 Plaid balances and transactions land in the lakehouse daily (the `ingestion_plaid_financials`
-job runs the plaid_integration notebook, which writes `prod.bronze.raw_plaid_*`). A second task
-in that job, [`jobs/plaid_bronze_to_lakebase.py`](jobs/plaid_bronze_to_lakebase.py), reads what
-landed since its last run and writes it straight into the finance tables in Lakebase, through
-the same matching as Money › Imports. It signs in as the job's identity, so it keeps no secrets.
-Setup and permissions: [docs/plaid-lakebase.md](docs/plaid-lakebase.md).
+job runs the plaid_integration notebook, which writes `prod.bronze.raw_plaid_*`), and Lakebase
+synced tables mirror them into the app's database. Every `PLAID_SYNC_MINUTES` (15 in
+`app.yaml`) the app loads what landed since its last load into the finance tables, through the
+same matching as Money › Imports ([`virtuwill/plaid_synced.py`](virtuwill/plaid_synced.py)).
+Setup, the one grant it needs, and checking it: [docs/plaid-lakebase.md](docs/plaid-lakebase.md).
 
 ## Brand
 
@@ -247,10 +247,11 @@ virtuwill/
 │   ├── db.py, migrate.py  Connection pool, versioned schema, one-time data moves
 │   ├── records.py         Record-level API resources (validated list/create/update/delete)
 │   ├── today.py           The Today screen's day across every domain
-│   ├── importers/         Portal exports → structured finance data (chase, payroll, kroger, plaid, canonical, load)
+│   ├── importers/         Portal exports → structured finance data (chase, payroll, kroger, plaid, plaid_load, canonical, load)
 │   ├── money_imports.py   Money › Imports: upload, preview, commit, download
+│   ├── plaid_synced.py    Plaid from the Lakebase synced tables into finance, every few minutes
 │   └── journal.py, health.py, finance.py, music.py, content.py, career.py, garden.py, travel.py, site.py, trackers.py
-├── jobs/                  Databricks jobs: Plaid bronze → Lakebase, and the older Plaid → ingest API job
+├── jobs/                  The older Plaid → ingest API job
 ├── db/schema/             The data model, applied in name order, once each (see db/README.md)
 ├── templates/
 │   ├── index.html         Public site shell; pages/ holds each page's markup
@@ -311,6 +312,7 @@ Lakebase (PostgreSQL); see "Data: one relational model in Lakebase" above.
 | GET/POST/DELETE | `/api/v1/api-tokens[/<id>]` | Owner | List, make (shown once) or revoke API tokens |
 | GET | `/api/ingest/v1`, `/api/ingest/v1/finance/status` | Token (finance:read) | What the API takes; what's loaded |
 | POST | `/api/ingest/v1/finance`, `/api/ingest/v1/finance/files` | Token (finance:write) | Push balances and transactions (JSON), or raw exports |
+| GET / POST | `/api/v1/money/plaid-sync` | Owner | What the Plaid synced tables hold and how far they're loaded; POST loads now (`{"dry_run": true}` to preview) |
 | GET | `/api/v1/music`, `/api/v1/music/songs/<slug>` | — | Published songs, versions and albums (`?view=owner` for everything) |
 | POST/PUT/DELETE | `/api/v1/music/{songs,recordings,albums}` | Owner | Songs, versions, albums |
 | GET/PUT/DELETE | `/api/v1/projects[/<id>]` | — / Owner | Projects (each may name its `role_id`) |
