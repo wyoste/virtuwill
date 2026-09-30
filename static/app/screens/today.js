@@ -14,6 +14,9 @@ export async function render(view, { params, navigate }) {
 
   const dayNav = h('div', { class: 'ws-daynav' },
     h('a', { class: 'btn small', href: '/app?date=' + addDays(date, -1), 'aria-label': 'Previous day' }, '←'),
+    // Jump straight to any day: the browser's calendar (a date wheel on a phone).
+    h('input', { type: 'date', class: 'ws-input ws-daypick', value: date, min: '1900-01-01', max: '2100-12-31', 'aria-label': 'Go to a date',
+                 'data-untracked': '', onchange: e => { if (e.target.value && e.target.value !== date) navigate('/app?date=' + e.target.value); } }),
     isToday ? null : h('a', { class: 'btn small', href: '/app' }, 'Today'),
     h('a', { class: 'btn small', href: '/app?date=' + addDays(date, 1), 'aria-label': 'Next day' }, '→'));
 
