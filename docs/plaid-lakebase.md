@@ -44,18 +44,16 @@ API token and no secrets. It already signs in to Lakebase as its own service pri
 
 ## Setting it up
 
-1. **Tell the app where the synced tables are.** By default it reads
-   `public.raw_plaid_balances` and `public.raw_plaid_transactions` in the database it's
-   attached to. If yours have other names, set these in `app.yaml`:
-   `PLAID_SYNCED_SCHEMA`, `PLAID_SYNCED_BALANCES`, `PLAID_SYNCED_TRANSACTIONS`. The synced
-   tables must be in the **same Lakebase database** as the app (`databricks_postgres` by
-   default).
+1. **The synced tables.** The app reads `bronze.raw_plaid_balances` and
+   `bronze.raw_plaid_transactions`. These are the synced copies of the two bronze tables, in
+   the **same Lakebase database** as the app (`databricks_postgres` by default). The names
+   are fixed in `TABLES` at the top of `virtuwill/plaid_synced.py`.
 2. **Let the app read them.** In the Lakebase SQL editor, as the synced tables' owner (you),
    use the app's service principal client ID from the app's **Authorization** tab:
 
    ```sql
-   GRANT USAGE  ON SCHEMA <schema> TO "<app client id>";
-   GRANT SELECT ON <schema>.raw_plaid_balances, <schema>.raw_plaid_transactions TO "<app client id>";
+   GRANT USAGE  ON SCHEMA bronze TO "<app client id>";
+   GRANT SELECT ON bronze.raw_plaid_balances, bronze.raw_plaid_transactions TO "<app client id>";
    ```
 
    If a synced table is ever deleted and made again, run the `GRANT` again.
@@ -63,9 +61,7 @@ API token and no secrets. It already signs in to Lakebase as its own service pri
    starts the 15-minute loop.
 4. **Check it.** Signed in, open `/api/v1/money/plaid-sync`. It shows:
    - the tables it's reading, how many rows they have, and how many aren't loaded yet;
-   - the result of the last load;
-   - `plaid_tables_here`: every table with "plaid" in its name, which helps if the names
-     in step 1 are off.
+   - the result of the last load, or why the tables can't be read (missing, or no grant).
 
    To preview a load, `POST` `{"dry_run": true}` to the same address. **Settings →
    Diagnostics** shows the latest load as **Sync · plaid_bronze**, including any error.

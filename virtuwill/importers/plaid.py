@@ -26,7 +26,11 @@ CATEGORIES = {"GENERAL_MERCHANDISE": "Shopping", "TRANSPORTATION": "Transportati
 # Plaid's retirement subtypes → the plans the finance model knows (the rest count as a 401(k)).
 RETIREMENT_TYPES = {"roth": "roth_ira", "ira": "traditional_ira", "sep ira": "traditional_ira", "simple ira": "traditional_ira",
                     "sarsep": "traditional_ira", "403b": "403b", "401a": "401a"}
-PRIMARIES = set(CATEGORIES) | {"FOOD_AND_DRINK", "TRANSFER_IN", "TRANSFER_OUT", "INCOME"}
+# Income that isn't pay: the finance model has its own movement types for these.
+INCOME_MOVEMENTS = {"INCOME_INTEREST_EARNED": "Interest income", "INCOME_DIVIDENDS": "Dividend"}
+# Names that say only what kind of account it is (Fidelity calls every account "Investment").
+GENERIC_NAMES = {"investment", "checking", "savings", "credit card", "brokerage", "cash management"}
+PRIMARIES = set(CATEGORIES) | {"FOOD_AND_DRINK", "TRANSFER_IN", "TRANSFER_OUT", "INCOME", "LOAN_DISBURSEMENTS", "OTHER"}
 
 
 def account_type(a):
@@ -62,12 +66,15 @@ def _pfc(t):
     return str(pfc.get("primary") or "").upper(), str(pfc.get("detailed") or "").upper()
 
 
-def kind_and_category(t):
-    """(kind, category) for a Plaid transaction. Plaid's sign matches the app's: positive = money out."""
+def kind_and_category(t, credit=False):
+    """(kind, category) for a Plaid transaction. Plaid's sign matches the app's: positive = money out.
+    credit: the transaction is on a credit card, where a payment received shows as money in."""
     primary, detailed = _pfc(t)
     amount = float(t.get("amount") or 0)
     if detailed == "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT":
         return "card_payment", None
+    if credit and amount < 0 and primary in ("LOAN_PAYMENTS", "LOAN_DISBURSEMENTS"):
+        return "card_payment", None            # Chase files "Payment Thank You" as a loan disbursement
     if primary in ("TRANSFER_IN", "TRANSFER_OUT"):
         return "transfer", None
     if primary == "INCOME":
@@ -106,7 +113,10 @@ def account_row(institution, a, overrides):
     if not mask:
         return None, (f"{institution} {a.get('name')} (account_id {a.get('account_id')}): no four-digit mask; "
                       "add it to PLAID_MASKS")
-    row = {"mask": mask, "institution": institution, "name": a.get("official_name") or a.get("name") or f"Account {mask}",
+    official = a.get("official_name")
+    if official and official.strip().lower() in GENERIC_NAMES and a.get("name"):
+        official = None
+    row = {"mask": mask, "institution": institution, "name": official or a.get("name") or f"Account {mask}",
            "account_type": account_type(a)}
     if row["account_type"] == "retirement":
         row["retirement_type"] = RETIREMENT_TYPES.get(str(a.get("subtype") or "").lower(), "401k")
@@ -123,8 +133,8 @@ def balance_rows(a, mask, as_of):
     return rows
 
 
-def transaction_row(t, mask):
-    kind, category = kind_and_category(t)
+def transaction_row(t, mask, credit=False):
+    kind, category = kind_and_category(t, credit)
     posted = day(t.get("date"))
     row = {"account_mask": mask, "posted_on": posted, "transacted_on": day(t.get("authorized_date")) or posted,
            "description": t.get("merchant_name") or t.get("name") or "",
@@ -132,6 +142,8 @@ def transaction_row(t, mask):
            "external_id": external_id(t), "pending": bool(t.get("pending"))}
     if category:
         row["category"] = category
+    if kind == "income" and _pfc(t)[1] in INCOME_MOVEMENTS:
+        row["movement_type"] = INCOME_MOVEMENTS[_pfc(t)[1]]
     return row
 
 
@@ -140,17 +152,19 @@ def bundle(institution, accounts, transactions, today, overrides=None):
     Returns (body, skipped) where skipped lists accounts with no usable four-digit mask."""
     overrides = overrides or {}
     body = {"source": "plaid", "accounts": [], "balances": [], "transactions": []}
-    masks, skipped = {}, []
+    masks, credit, skipped = {}, set(), []
     for a in accounts:
         account, mask = account_row(institution, a, overrides)
         if not account:
             skipped.append(mask)
             continue
         masks[a["account_id"]] = mask
+        if str(a.get("type")).lower() == "credit":
+            credit.add(a["account_id"])
         body["accounts"].append(account)
         body["balances"] += balance_rows(a, mask, today)
     for t in transactions:
         mask = masks.get(t.get("account_id"))
         if mask:
-            body["transactions"].append(transaction_row(t, mask))
+            body["transactions"].append(transaction_row(t, mask, t.get("account_id") in credit))
     return body, skipped

@@ -51,16 +51,18 @@ def state(conn):
 
 
 def apply(conn, accounts, balances, transactions, removed, *, through=None, overrides=None, tz="America/Chicago",
-          dry_run=False):
+          dry_run=False, replaced=()):
     """Load one batch. accounts: the latest raw_plaid_balances row per account; balances: the balance rows
     ingested since the last load; transactions: the current state of each transaction changed since then;
     removed: the ids of transactions whose latest state is 'removed'.
+    replaced: pending ids a posted charge names as its pending_transaction_id. The posted charge took over that
+    row (same external_id), so Plaid removing the pending id must not delete it.
     through: {"balances": ts, "transactions": ts}, how far bronze has now been read (saved with the load).
     Returns a report; a dry run changes nothing."""
     conn.execute("SELECT pg_advisory_xact_lock(hashtext('virtuwill_plaid_bronze'))")
     overrides = overrides or {}
 
-    masks, account_rows, skipped = {}, [], []
+    masks, credit, account_rows, skipped = {}, set(), [], []
     for row in accounts:
         account, mask = plaid.account_row(row.get("item_label") or row.get("institution_id") or "Plaid", account_from_row(row),
                                           overrides)
@@ -68,6 +70,8 @@ def apply(conn, accounts, balances, transactions, removed, *, through=None, over
             skipped.append(mask)
             continue
         masks[row["account_id"]] = mask
+        if str(row.get("type")).lower() == "credit":
+            credit.add(row["account_id"])
         account_rows.append(account)
 
     balance_rows = []
@@ -81,9 +85,11 @@ def apply(conn, accounts, balances, transactions, removed, *, through=None, over
         if row.get("account_id") not in masks:
             unmatched += 1
             continue
-        transaction_rows.append(plaid.transaction_row(transaction_from_row(row), masks[row["account_id"]]))
+        transaction_rows.append(plaid.transaction_row(transaction_from_row(row), masks[row["account_id"]],
+                                                      row["account_id"] in credit))
 
-    gone = _removable(conn, removed, masks)
+    replaced = set(replaced) | {t.get("pending_transaction_id") for t in transactions if t.get("pending_transaction_id")}
+    gone = _removable(conn, set(removed) - replaced, masks)
     report = {"accounts": len(account_rows), "balances": len(balance_rows), "transactions": len(transaction_rows),
               "removed": len(gone), "skipped_accounts": skipped, "transactions_without_account": unmatched}
     if balance_rows or transaction_rows:

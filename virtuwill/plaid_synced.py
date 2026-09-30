@@ -2,7 +2,7 @@
 
 The lakehouse's bronze Plaid tables (prod.bronze.raw_plaid_balances and
 raw_plaid_transactions, landed by the plaid_integration notebook) are mirrored
-into this database by Lakebase synced tables, read-only. Every
+into this database's bronze schema by Lakebase synced tables, read-only (TABLES). Every
 PLAID_SYNC_MINUTES the app reads what landed in them since the last load and
 loads it into finance.accounts, finance.transactions and
 finance.balance_snapshots, through the same staging and matching as
@@ -10,9 +10,6 @@ Money › Imports (virtuwill/importers/plaid_load.py). How far it has read is
 saved in the same transaction, so a failed load is simply retried next time.
 
     PLAID_SYNC_MINUTES          how often to check (0, the default, turns the loop off)
-    PLAID_SYNCED_SCHEMA         the synced tables' Postgres schema (default public)
-    PLAID_SYNCED_BALANCES       default raw_plaid_balances
-    PLAID_SYNCED_TRANSACTIONS   default raw_plaid_transactions
     PLAID_MASKS                 optional JSON {"<plaid account_id>": "1234"} for accounts with no four-digit mask
 
     GET  /api/v1/money/plaid-sync        what the synced tables hold, how far they've been loaded
@@ -39,20 +36,18 @@ class SyncedTablesUnavailable(Exception):
     """The synced tables are missing, or this app can't read them."""
 
 
-def tables():
-    schema = os.environ.get("PLAID_SYNCED_SCHEMA", "public")
-    return {"balances": (schema, os.environ.get("PLAID_SYNCED_BALANCES", "raw_plaid_balances")),
-            "transactions": (schema, os.environ.get("PLAID_SYNCED_TRANSACTIONS", "raw_plaid_transactions"))}
+# The synced copies of prod.bronze.raw_plaid_balances / raw_plaid_transactions, in Lakebase's bronze schema.
+TABLES = {"balances": ("bronze", "raw_plaid_balances"), "transactions": ("bronze", "raw_plaid_transactions")}
 
 
 def _columns(conn):
     """Each synced table's columns; raises SyncedTablesUnavailable if one is missing or unreadable."""
     out = {}
-    for kind, (schema, name) in tables().items():
+    for kind, (schema, name) in TABLES.items():
         qualified = f"{schema}.{name}"
         if not conn.execute("SELECT to_regclass(%s) IS NOT NULL AS ok", (sql.Identifier(schema, name).as_string(conn),)).fetchone()["ok"]:
-            raise SyncedTablesUnavailable(f"{qualified} isn't in this database. Set PLAID_SYNCED_SCHEMA / PLAID_SYNCED_{kind.upper()} "
-                                          "to the synced table's name (docs/plaid-lakebase.md).")
+            raise SyncedTablesUnavailable(f"{qualified} isn't in this database: check the synced table's name "
+                                          "(docs/plaid-lakebase.md).")
         if not conn.execute("SELECT has_table_privilege(%s, 'SELECT') AS ok", (sql.Identifier(schema, name).as_string(conn),)).fetchone()["ok"]:
             raise SyncedTablesUnavailable(f"The app can't read {qualified}: grant its role SELECT (docs/plaid-lakebase.md).")
         out[kind] = {r["column_name"] for r in conn.execute(
@@ -66,8 +61,8 @@ def _stamp(columns):
 
 
 def read(conn, since, columns):
-    """What landed since the last load: (accounts, balances, transactions, removed ids, through)."""
-    bal, txn = (sql.Identifier(*tables()[k]) for k in ("balances", "transactions"))
+    """What landed since the last load: (accounts, balances, transactions, removed ids, through, replaced pending ids)."""
+    bal, txn = (sql.Identifier(*TABLES[k]) for k in ("balances", "transactions"))
     b_at, t_at = _stamp(columns["balances"]), _stamp(columns["transactions"])
     through = {"balances": conn.execute(sql.SQL("SELECT MAX({}) AS t FROM {}").format(b_at, bal)).fetchone()["t"],
                "transactions": conn.execute(sql.SQL("SELECT MAX({}) AS t FROM {}").format(t_at, txn)).fetchone()["t"]}
@@ -90,7 +85,13 @@ def read(conn, since, columns):
                           .format(txn=txn, window=window.format(at=t_at), at=t_at),
                           {"since": since["transactions"], "until": through["transactions"]}).fetchall()
     removed = {r["transaction_id"] for r in latest if r.get("_sync_op") == "removed"}
-    return accounts, balances, [r for r in latest if r.get("_sync_op") != "removed"], removed, through
+    # Pending ids a posted charge has taken over (only when the notebook keeps pending_transaction_id).
+    replaced = set()
+    if "pending_transaction_id" in columns["transactions"] and removed:
+        replaced = {r["p"] for r in conn.execute(sql.SQL("""SELECT DISTINCT pending_transaction_id AS p FROM {txn}
+                                                             WHERE pending_transaction_id = ANY(%s)""").format(txn=txn),
+                                                 (sorted(removed),))}
+    return accounts, balances, [r for r in latest if r.get("_sync_op") != "removed"], removed, through, replaced
 
 
 def sync(conn, dry_run=False, reload=False):
@@ -100,27 +101,24 @@ def sync(conn, dry_run=False, reload=False):
     columns = _columns(conn)
     state = plaid_load.state(conn)
     since = {k: None if reload else state[f"{k}_through"] for k in ("balances", "transactions")}
-    accounts, balances, transactions, removed, through = read(conn, since, columns)
+    accounts, balances, transactions, removed, through, replaced = read(conn, since, columns)
     return plaid_load.apply(conn, accounts, balances, transactions, removed, through=through, dry_run=dry_run,
+                            replaced=replaced,
                             overrides=json.loads(os.environ.get("PLAID_MASKS") or "{}"),
                             tz=os.environ.get("APP_TIMEZONE", "America/Chicago"))
 
 
 def status(conn):
     state = plaid_load.state(conn)
-    out = {"tables": {k: ".".join(v) for k, v in tables().items()},
+    out = {"tables": {k: ".".join(v) for k, v in TABLES.items()},
            "loaded_through": {k: state[f"{k}_through"].isoformat() if state[f"{k}_through"] else None
                               for k in ("balances", "transactions")},
-           "every_minutes": _minutes(),
-           # Tables with Plaid in the name, wherever they are: a first check that the names above are right.
-           "plaid_tables_here": [f"{r['table_schema']}.{r['table_name']}" for r in conn.execute(
-               """SELECT table_schema, table_name FROM information_schema.tables WHERE table_name ILIKE '%%plaid%%'
-                  AND table_schema NOT IN ('finance', 'pg_catalog', 'information_schema') ORDER BY 1, 2""")]}
+           "every_minutes": _minutes()}
     try:
         columns = _columns(conn)
     except SyncedTablesUnavailable as e:
         return out | {"available": False, "error": str(e)}
-    for kind, (schema, name) in tables().items():
+    for kind, (schema, name) in TABLES.items():
         at = _stamp(columns[kind])
         row = conn.execute(sql.SQL("""SELECT COUNT(*) AS rows, MAX({at}) AS newest,
                                              COUNT(*) FILTER (WHERE {at} > COALESCE(%s::timestamptz, '-infinity')) AS not_loaded

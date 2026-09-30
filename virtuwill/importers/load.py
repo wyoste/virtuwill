@@ -220,7 +220,8 @@ def commit(conn, import_id):
     for t in bundle["transactions"]:
         account_id = acct(t["account_mask"])
         match = _existing_transaction(conn, account_id, t, used)
-        movement = MOVEMENT_TYPES.get(t["kind"])
+        # A source may name a finer movement type (interest rather than pay); the model knows them.
+        movement = MOVEMENT_TYPES.get(t["kind"]) and (t.get("movement_type") or MOVEMENT_TYPES[t["kind"]])
         category = None if movement else _category(conn, t.get("category") or "Review")
         raw = {k: v for k, v in t.items() if k != "source_row"}
         if match:

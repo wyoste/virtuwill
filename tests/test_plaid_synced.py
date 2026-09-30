@@ -13,13 +13,14 @@ from virtuwill import db, plaid_synced
 from virtuwill.importers import plaid, plaid_load
 
 SYNCED = """
-DROP TABLE IF EXISTS public.raw_plaid_balances, public.raw_plaid_transactions;
-CREATE TABLE public.raw_plaid_balances (
+DROP SCHEMA IF EXISTS bronze CASCADE;
+CREATE SCHEMA bronze;
+CREATE TABLE bronze.raw_plaid_balances (
     _pulled_at TEXT, item_id TEXT, item_label TEXT, institution_id TEXT, account_id TEXT, account_name TEXT,
     official_name TEXT, mask TEXT, type TEXT, subtype TEXT, current DOUBLE PRECISION, available DOUBLE PRECISION,
     limit_amt DOUBLE PRECISION, iso_currency_code TEXT, _rescued_data TEXT, _source_file TEXT,
     _ingested_at TIMESTAMPTZ, _pull_batch TEXT, PRIMARY KEY (account_id, _pulled_at));
-CREATE TABLE public.raw_plaid_transactions (
+CREATE TABLE bronze.raw_plaid_transactions (
     _pulled_at TEXT, _sync_op TEXT, item_label TEXT, transaction_id TEXT, account_id TEXT, date TEXT, authorized_date TEXT,
     name TEXT, merchant_name TEXT, amount DOUBLE PRECISION, iso_currency_code TEXT, category TEXT, pending BOOLEAN,
     _rescued_data TEXT, _source_file TEXT, _ingested_at TIMESTAMPTZ, _pull_batch TEXT,
@@ -58,14 +59,14 @@ class SyncTests(unittest.TestCase):
 
     def drop(self):
         with psycopg.connect(PG, autocommit=True) as conn:
-            conn.execute("DROP TABLE IF EXISTS public.raw_plaid_balances, public.raw_plaid_transactions")
+            conn.execute("DROP SCHEMA IF EXISTS bronze CASCADE")
 
     def land(self, table, rows, at):
         """Rows as Auto Loader lands them in bronze, and the synced table mirrors them."""
         with psycopg.connect(PG, autocommit=True) as conn:
             for r in rows:
                 r = {**r, "_ingested_at": at, "_pulled_at": r.get("_pulled_at") or (at - timedelta(minutes=2)).isoformat()}
-                conn.execute(f"INSERT INTO public.{table} ({', '.join(r)}) VALUES ({', '.join(['%s'] * len(r))})", list(r.values()))
+                conn.execute(f"INSERT INTO bronze.{table} ({', '.join(r)}) VALUES ({', '.join(['%s'] * len(r))})", list(r.values()))
 
     def balance(self, account_id, mask, kind, subtype, current, available=None, bank="Test Bank"):
         return {"item_label": bank, "institution_id": "ins_0", "account_id": account_id, "account_name": "Made-up account",
@@ -86,16 +87,53 @@ class SyncTests(unittest.TestCase):
             return {r["external_id"]: r for r in conn.execute(
                 "SELECT external_id, amount, is_pending, category, movement_type FROM finance.transactions")}
 
-    def test_missing_synced_tables_are_reported_with_what_is_there(self):
-        with mock.patch.dict(os.environ, {"PLAID_SYNCED_SCHEMA": "plaid"}):
-            status, reply = self.sync()
-            self.assertEqual(status, 409)
-            self.assertIn("plaid.raw_plaid_balances", reply["error"])
-            seen = self.owner.get("/api/v1/money/plaid-sync").json
-        self.assertFalse(seen["available"])
-        self.assertIn("public.raw_plaid_transactions", seen["plaid_tables_here"])
+    def test_missing_synced_tables_are_reported(self):
+        self.drop()
+        status, reply = self.sync()
+        self.assertEqual(status, 409)
+        self.assertIn("bronze.raw_plaid_balances", reply["error"])
+        self.assertFalse(self.owner.get("/api/v1/money/plaid-sync").json["available"])
         diag = self.owner.get("/api/admin/diagnostics").json
         self.assertIn("raw_plaid_balances", next(s for s in diag["syncs"] if s["source"] == "plaid_bronze")["error"])
+
+    def test_card_payments_interest_and_account_names_as_plaid_sends_them(self):
+        card = {**self.balance("card", "7237", "credit", "credit card", 625.89, bank="Chase"), "account_name": "CREDIT CARD",
+                "official_name": "Ultimate Rewards®"}
+        k401 = {**self.balance("k", "2047", "investment", "401k", 30791.22, bank="Fidelity"),
+                "account_name": "GREYSTAR 401(K) PLAN", "official_name": "Investment"}
+        hysa = self.balance("hysa", "8154", "depository", "savings", 21060.18, 21060.18, bank="Amex")
+        self.land("raw_plaid_balances", [card, k401, hysa], DAY1)
+        self.land("raw_plaid_transactions", [self.txn("pay", "card", -800, "LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT"),
+                                             self.txn("int", "hysa", -12.5, "INCOME_INTEREST_EARNED"),
+                                             self.txn("sal", "hysa", -2000, "INCOME_SALARY")], DAY1)
+        self.sync()
+        rows = self.rows()
+        self.assertEqual({k: rows[k]["movement_type"] for k in rows},
+                         {"pay": "Credit card payment", "int": "Interest income", "sal": "Payroll deposit"})
+        with db.tx() as conn:
+            names = {r["mask"]: r["name"] for r in conn.execute("SELECT mask, name FROM finance.accounts")}
+        self.assertEqual((names["7237"], names["2047"]), ("Ultimate Rewards®", "GREYSTAR 401(K) PLAN"))
+
+    def test_a_posted_charge_that_names_its_pending_one_keeps_the_row(self):
+        with psycopg.connect(PG, autocommit=True) as conn:
+            conn.execute("ALTER TABLE bronze.raw_plaid_transactions ADD COLUMN pending_transaction_id TEXT")
+        self.land("raw_plaid_balances", [self.balance("card", "2222", "credit", "credit card", 80)], DAY1)
+        self.land("raw_plaid_transactions", [self.txn("p1", "card", 30, "GENERAL_MERCHANDISE_OTHER", pending=True)], DAY1)
+        self.sync()
+        with db.tx() as conn:
+            conn.execute("INSERT INTO finance.categories (category) VALUES ('Gifts') ON CONFLICT DO NOTHING")
+            conn.execute("UPDATE finance.transactions SET category = 'Gifts' WHERE external_id = 'p1'")
+        day2 = DAY1 + timedelta(days=1)
+        self.land("raw_plaid_transactions", [{**self.txn("s1", "card", 32.5, "GENERAL_MERCHANDISE_OTHER", day="2026-03-03"),
+                                              "pending_transaction_id": "p1"},
+                                             {"_sync_op": "removed", "transaction_id": "p1", "account_id": "card",
+                                              "item_label": "Test Bank", "date": "None", "authorized_date": "None",
+                                              "pending": False}], day2)
+        status, report = self.sync()
+        self.assertEqual(report["removed"], 0)
+        rows = self.rows()
+        self.assertEqual(set(rows), {"p1"})                         # the posted charge took over the pending row
+        self.assertEqual((float(rows["p1"]["amount"]), rows["p1"]["is_pending"], rows["p1"]["category"]), (32.5, False, "Gifts"))
 
     def test_loads_what_landed_then_only_what_is_new(self):
         self.land("raw_plaid_balances", [self.balance("chk", "1111", "depository", "checking", 500, 480),
