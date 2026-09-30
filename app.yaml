@@ -22,3 +22,7 @@ env:
   # Calendar dates for the journal and health dashboard ("today", "this week").
   - name: APP_TIMEZONE
     value: America/Chicago
+  # Load the Plaid synced tables (bronze.raw_plaid_*) into the finance tables every 15 minutes
+  # (virtuwill/plaid_synced.py).
+  - name: PLAID_SYNC_MINUTES
+    value: "15"

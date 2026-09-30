@@ -20,7 +20,7 @@ from datetime import date, timedelta
 
 from psycopg.types.json import Jsonb
 
-from . import SECTIONS
+from . import SECTIONS, retirement_type
 from .canonical import validate
 
 WINDOW = timedelta(days=3)
@@ -35,6 +35,13 @@ def _d(value):
     return date.fromisoformat(value) if isinstance(value, str) else value
 
 
+def _retirement_type(info):
+    """A retirement account names its plan (the model requires one): as sent, else read from its name."""
+    if info.get("account_type") != "retirement":
+        return None
+    return info.get("retirement_type") or retirement_type(info.get("name") or "")
+
+
 def account_id_for(conn, mask, info=None, create=False):
     """The account with these last four digits; created (when asked) from what the file says about it."""
     row = conn.execute("""SELECT account_id, account_type, institution, name FROM finance.accounts
@@ -45,17 +52,18 @@ def account_id_for(conn, mask, info=None, create=False):
         if create:
             # Fill in what was only guessed before (type 'other', no institution).
             if info.get("account_type") and row["account_type"] == "other":
-                conn.execute("UPDATE finance.accounts SET account_type = %s WHERE account_id = %s", (info["account_type"], row["account_id"]))
+                conn.execute("UPDATE finance.accounts SET account_type = %s, retirement_type = %s WHERE account_id = %s",
+                             (info["account_type"], _retirement_type(info), row["account_id"]))
             if info.get("institution") and not row["institution"]:
                 conn.execute("UPDATE finance.accounts SET institution = %s WHERE account_id = %s", (info["institution"], row["account_id"]))
         return row["account_id"]
     if not create:
         return None
     account_id = "acct-" + mask
-    conn.execute("""INSERT INTO finance.accounts (account_id, institution, name, mask, account_type)
-                    VALUES (%s, %s, %s, %s, %s) ON CONFLICT (account_id) DO NOTHING""",
+    conn.execute("""INSERT INTO finance.accounts (account_id, institution, name, mask, account_type, retirement_type)
+                    VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (account_id) DO NOTHING""",
                  (account_id, info.get("institution") or "", info.get("name") or f"Account {mask}", mask,
-                  info.get("account_type") or "other"))
+                  info.get("account_type") or "other", _retirement_type(info)))
     return account_id
 
 
@@ -212,7 +220,8 @@ def commit(conn, import_id):
     for t in bundle["transactions"]:
         account_id = acct(t["account_mask"])
         match = _existing_transaction(conn, account_id, t, used)
-        movement = MOVEMENT_TYPES.get(t["kind"])
+        # A source may name a finer movement type (interest rather than pay); the model knows them.
+        movement = MOVEMENT_TYPES.get(t["kind"]) and (t.get("movement_type") or MOVEMENT_TYPES[t["kind"]])
         category = None if movement else _category(conn, t.get("category") or "Review")
         raw = {k: v for k, v in t.items() if k != "source_row"}
         if match:

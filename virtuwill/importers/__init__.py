@@ -34,6 +34,19 @@ class ExtractError(ValueError):
     """The file isn't one this tool knows how to read."""
 
 
+def retirement_type(name):
+    """The plan a retirement account's name describes (the model requires one): Roth IRA, IRA, 401(k) …"""
+    lower = name.lower()
+    if "roth" in lower:
+        return "roth_ira"
+    if "ira" in lower:
+        return "traditional_ira"
+    for plan in ("403(b)", "401(a)", "401(k)"):
+        if plan in lower:
+            return plan.replace("(", "").replace(")", "")
+    return "401k"
+
+
 def empty_bundle(document):
     return {"format": FORMAT, "document": document, **{s: [] for s in SECTIONS}}
 

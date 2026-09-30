@@ -132,6 +132,10 @@ A prompt for a daily routine (with the five variables above in its environment):
 
 ## 5. Plaid as a Databricks job
 
+> If Plaid already lands in the lakehouse (`prod.bronze.raw_plaid_*`), load it from there
+> instead: [plaid-lakebase.md](plaid-lakebase.md). The mapping below is shared by both paths
+> (`virtuwill/importers/plaid.py`). Use one path, not both.
+
 `jobs/plaid_to_virtuwill.py` replaces the CSV notebook's posting step. Each run
 asks Plaid only for what changed since the last run (`/transactions/sync` with a
 saved cursor), maps it onto the finance model and posts it here. It saves the

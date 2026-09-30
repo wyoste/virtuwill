@@ -13,10 +13,10 @@ from flask import Flask, Response, abort, jsonify, redirect, render_template, re
 from werkzeug.exceptions import NotFound
 
 import config
-from . import api_tokens, auth, career, content, db, finance, garden, health, ingest, journal, media, money_imports, music, site, today, trackers
+from . import api_tokens, auth, career, content, db, finance, garden, health, ingest, journal, media, money_imports, music, plaid_synced, site, today, trackers
 
 log = logging.getLogger(__name__)
-BLUEPRINTS = (auth, api_tokens, journal, health, finance, money_imports, garden, music, content, career, site, today, trackers, ingest)
+BLUEPRINTS = (auth, api_tokens, journal, health, finance, money_imports, garden, music, content, career, site, today, trackers, ingest, plaid_synced)
 
 
 def create_app():
@@ -26,6 +26,7 @@ def create_app():
     app.config["TRACKER_AUTH_CONFIGURED"] = auth.strong_credentials()
     for module in BLUEPRINTS:
         app.register_blueprint(module.bp)
+    plaid_synced.start()          # loads the Plaid synced tables every PLAID_SYNC_MINUTES, when set
 
     @app.errorhandler(db.DatabaseUnavailable)
     def database_unavailable(error):

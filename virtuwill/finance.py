@@ -16,6 +16,7 @@ from flask import Blueprint, jsonify, request
 
 from . import db
 from .auth import admin_required
+from .importers import retirement_type as _retirement_type
 from .util import in_calendar, number, parse_date, plain, slug
 
 bp = Blueprint("finance", __name__)
@@ -37,18 +38,6 @@ def _guess_type(text, hint=None):
     if "CHECKING" in upper or "DEBIT" in upper:
         return "checking"
     return "other"
-
-
-def _retirement_type(name):
-    lower = name.lower()
-    if "roth" in lower:
-        return "roth_ira"
-    if "ira" in lower:
-        return "traditional_ira"
-    for plan in ("403(b)", "401(a)", "401(k)"):
-        if plan in lower:
-            return plan.replace("(", "").replace(")", "")
-    return "401k"
 
 
 def account_for(conn, text, hint=None):
@@ -415,6 +404,37 @@ def balances(conn):
     return _rows(conn, """SELECT * FROM finance.current_balances
                           WHERE is_active AND (balance IS NOT NULL OR transactions_since > 0)
                           ORDER BY is_liability, account_type, name""")
+
+
+def balances_on(conn, day):
+    """Each active account as it stood on a day: its latest balance on or before it, and what posted from then up
+    to the day. The same fields as finance.current_balances, which is this for the latest day."""
+    return [plain(r) for r in conn.execute("""
+        SELECT a.account_id, a.name, a.institution, a.mask, a.account_type, t.is_liability, a.is_active,
+               l.as_of, l.balance, l.balance_kind, l.source AS balance_source,
+               COALESCE(x.activity, 0) AS activity_since, COALESCE(x.outflows, 0) AS outflows_since,
+               COALESCE(x.inflows, 0) AS inflows_since, COALESCE(x.transactions, 0) AS transactions_since, x.last_posted,
+               CASE WHEN l.balance IS NULL THEN NULL
+                    WHEN t.is_liability THEN l.balance + COALESCE(x.activity, 0)
+                    ELSE l.balance - COALESCE(x.activity, 0) END AS estimated_balance,
+               COALESCE(x.transactions, 0) = 0 OR (COALESCE(x.outflows, 0) > 0 AND COALESCE(x.inflows, 0) > 0) AS estimate_complete
+        FROM finance.accounts a
+        JOIN finance.account_types t USING (account_type)
+        LEFT JOIN LATERAL (
+            SELECT b.as_of, b.balance, b.balance_kind, b.source FROM finance.balance_timeline b
+            WHERE b.account_id = a.account_id AND b.as_of <= %(day)s
+            ORDER BY b.as_of DESC,
+                     CASE b.balance_kind WHEN 'statement_closing' THEN 0 WHEN 'reported' THEN 1 WHEN 'available' THEN 2 ELSE 3 END
+            LIMIT 1) l ON true
+        LEFT JOIN LATERAL (
+            SELECT SUM(tx.amount) AS activity, SUM(tx.amount) FILTER (WHERE tx.amount > 0) AS outflows,
+                   -SUM(tx.amount) FILTER (WHERE tx.amount < 0 AND tx.kind = 'movement') AS inflows,
+                   COUNT(*) AS transactions, MAX(tx.posted_on) AS last_posted
+            FROM finance.transactions tx
+            WHERE tx.account_id = a.account_id AND tx.posted_on <= %(day)s AND (l.as_of IS NULL OR tx.posted_on > l.as_of)
+        ) x ON true
+        WHERE a.is_active AND (l.balance IS NOT NULL OR COALESCE(x.transactions, 0) > 0)
+        ORDER BY t.is_liability, a.account_type, a.name""", {"day": day})]
 
 
 def spend_summary(conn, day):

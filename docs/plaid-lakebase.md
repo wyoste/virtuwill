@@ -1,0 +1,81 @@
+# Plaid → Lakebase → VirtuWill's finance tables
+
+Everything runs inside the Databricks workspace:
+
+```
+Plaid API ─▶ stage volume ─▶ prod.bronze.raw_plaid_*  ─▶  Lakebase synced tables  ─▶  finance.accounts / transactions / balance_snapshots
+          └─ plaid_integration notebook (07:30 job) ─┘   └─ synced-table pipeline ─┘   └─ the app, every 15 minutes ─┘
+```
+
+1. The **`ingestion_plaid_financials`** job runs the *plaid_integration* notebook, which lands
+   each Plaid pull in `prod.bronze.raw_plaid_balances` / `raw_plaid_transactions`.
+2. **Synced tables** mirror those two bronze tables into the app's Lakebase database, read-only.
+3. **The app** checks the synced tables every `PLAID_SYNC_MINUTES` (15 in `app.yaml`). It loads
+   what has landed since its last load into the finance tables that Money and Today read
+   ([`virtuwill/plaid_synced.py`](../virtuwill/plaid_synced.py)).
+
+The app writes only its own tables and never changes the synced ones. It needs no job, no
+API token and no secrets. It already signs in to Lakebase as its own service principal.
+
+## What goes where
+
+| Synced table | VirtuWill |
+|---|---|
+| `bronze.plaid_balance`: each account's latest pull | `finance.accounts`: matched by the last four digits (`mask`), created on first sight, institution = `item_label` |
+| `bronze.plaid_balance`: pulls since the last load | `finance.balance_snapshots`: the current balance, plus the available balance for bank accounts, one reading per account and day (America/Chicago). A card's balance is what's owed. |
+| `bronze.plaid_transaction`: each transaction touched since the last load, at its latest sync | `finance.transactions`: matched on Plaid's `transaction_id`, so a re-sent or modified one updates in place |
+| … whose latest `_sync_op` is `removed` | deleted from `finance.transactions` (unless a receipt points at it) |
+
+- **"Since the last load"** is judged by Auto Loader's `_ingested_at` (or `_pulled_at` if that
+  column wasn't synced). How far the app has read is kept in `finance.plaid_bronze_load`
+  and saved in the same transaction as the load. A failed load changes nothing and is
+  retried next time. Loads are matched, so reading rows again never doubles anything.
+- **Categories:** Plaid's code maps to the app's categories (`FOOD_AND_DRINK_GROCERIES` →
+  Groceries, `…_COFFEE` → Dining, `INCOME_*` → a payroll deposit, a card payment → a card
+  payment). The older `Food and Drink > Restaurants` paths carry no code, so those
+  transactions land in **Review**. A category you set in the app is kept.
+- **Pending charges:** when one settles, Plaid adds the settled charge under a new id and
+  removes the pending one. The app does the same.
+- **Accounts:** Fidelity retirement accounts come in with their plan (Roth IRA, IRA, 401(k),
+  403(b), 401(a)). Other investment accounts come in as brokerage. An account with no
+  four-digit mask is skipped and named in the report. Give it one with `PLAID_MASKS`
+  (`{"<plaid account_id>": "1234"}`) in `app.yaml`.
+- **Money › Imports** lists each load as `Lakehouse · Plaid · <time>`.
+
+## Setting it up
+
+1. **The synced tables.** The app reads `bronze.plaid_balance` and
+   `bronze.plaid_transaction`. These are the synced copies of the two bronze tables, in
+   the **same Lakebase database** as the app's own tables: `virtuwill` (project virtuwill ·
+   branch production). A query can't reach across databases. The names
+   are fixed in `TABLES` at the top of `virtuwill/plaid_synced.py`.
+2. **Let the app read them.** In the Lakebase SQL editor, connected to the `virtuwill` database
+   (the database button at the top right; the editor may start on `databricks_postgres`),
+   signed in as the synced tables' owner (you), run
+   [`db/lakebase/grant_plaid_synced_tables.sql`](../db/lakebase/grant_plaid_synced_tables.sql).
+   It checks that both tables are there, grants the app's service principal `USAGE` on
+   `bronze` and `SELECT` on the two tables, then shows the grants. Every check should
+   read `true`. The app never runs this file by itself: it isn't in `db/schema/`.
+
+   If a synced table is ever deleted and made again, run the script again.
+3. **Deploy the app from this branch.** On start it adds `finance.plaid_bronze_load` and
+   starts the 15-minute loop.
+4. **Check it.** Signed in, open `/api/v1/money/plaid-sync`. It shows:
+   - the tables it's reading, how many rows they have, and how many aren't loaded yet;
+   - the result of the last load, or why the tables can't be read (missing, or no grant).
+
+   To preview a load, `POST` `{"dry_run": true}` to the same address. **Settings →
+   Diagnostics** shows the latest load as **Sync · plaid_bronze**, including any error.
+
+`POST /api/v1/money/plaid-sync` with `{}` loads right away; `{"reload": true}` reads everything
+again. `PLAID_SYNC_MINUTES=0` turns the loop off.
+
+**Synced table mode:** the app reads only what's new by `_ingested_at`, so Triggered,
+Continuous and Snapshot mode all work. Triggered, refreshed after the 07:30 notebook, is
+enough for data that changes once a day.
+
+## The older direct Plaid job
+
+`jobs/plaid_to_virtuwill.py` calls Plaid itself and posts to the app's ingest API. The
+notebook pipeline replaces it. Don't schedule both. Both use the same mapping
+(`virtuwill/importers/plaid.py`).
