@@ -45,8 +45,9 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .ws-nav { display: flex; flex-direction: column; gap: 2px; }
 .ws-nav-item {
   display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; border: 0;
-  background: none; color: #E4DCC5; text-decoration: none; font-size: 14px; font-weight: 500; cursor: pointer; text-align: left;
+  background: none; color: #E4DCC5; text-decoration: none; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; text-align: left;
 }
+.ws-nav-caret { margin-left: auto; font-size: 11px; opacity: .7; }
 .ws-nav-item:hover { background: rgba(255, 255, 255, .06); color: #fff; }
 .ws-nav-item.on { background: rgba(227, 176, 64, .16); color: #fff; box-shadow: inset 3px 0 0 var(--brand-gold); }
 .ws-nav-icon { width: 20px; text-align: center; font-size: 15px; opacity: .9; }
@@ -413,3 +414,18 @@ button.ws-chip[aria-pressed="true"], .ws-seg button[aria-pressed="true"], .ws-ha
 .ws-route-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin: 12px 0 4px; }
 .ws-route-facts dt { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6B4E0C; }
 .ws-route-facts dd { margin: 1px 0 0; font-weight: 600; color: #1B3F27; }
+
+/* ── Workouts: parts shown for one workout type, the lift picker ─────────── */
+.ws-part { display: contents; }
+.ws-part[hidden] { display: none; }
+.ws-lifts { gap: 8px; }
+.ws-lift-options { max-height: 220px; overflow-y: auto; border: 1px solid var(--border-dk); border-radius: 8px; padding: 4px 10px; background: var(--surface); }
+.ws-lift-options fieldset { border: 0; margin: 0; padding: 4px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 10px; }
+.ws-lift-options legend { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text3, var(--text2)); padding: 4px 0 0; }
+.ws-lift-options .ws-check { padding: 3px 0; font-weight: 400; }
+.ws-lift-add { display: flex; gap: 8px; }
+.ws-lift-sets { display: flex; flex-direction: column; gap: 6px; }
+.ws-lift-row { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+.ws-lift-row > span { flex: 1; min-width: 0; }
+.ws-lift-row label { display: flex; align-items: center; gap: 6px; font-weight: 400; }
+.ws-lift-row input { width: 70px; }

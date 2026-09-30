@@ -58,17 +58,32 @@ async function confirmLeave() {
   return true;
 }
 
+// Groups opened by hand stay open until closed; the current page's group always opens.
+const expanded = new Set();
+
 function sidebar() {
   const path = location.pathname.replace(/\/$/, '') || '/app';
   const active = href => path === href || (href !== '/app' && path.startsWith(href + '/'));
   return h('nav', { class: 'ws-nav', 'aria-label': 'Workspace' },
     NAV.map(item => {
-      const open = item.children && (active(item.href) || item.children.some(([href]) => active(href)));
       const isOn = item.href === '/app' ? path === '/app' : active(item.href);
+      const icon = h('span', { class: 'ws-nav-icon', 'aria-hidden': 'true' }, item.icon);
+      if (!item.children) {
+        return h('div', { class: 'ws-nav-group' },
+          h('a', { href: item.href, class: 'ws-nav-item' + (isOn ? ' on' : ''), 'aria-current': isOn ? 'page' : null },
+            icon, h('span', {}, item.label)));
+      }
+      // A group with sub-pages only opens and closes; its sub-pages are what navigate.
+      const open = expanded.has(item.href);
+      const toggle = () => {
+        if (open) expanded.delete(item.href); else expanded.add(item.href);
+        document.getElementById('ws-sidebar-nav').replaceChildren(sidebar());
+        document.querySelector(`[data-group="${item.href}"]`)?.focus();
+      };
       return h('div', { class: 'ws-nav-group' + (open ? ' open' : '') },
-        h('a', { href: item.children ? item.children[0][0] : item.href, class: 'ws-nav-item' + (isOn ? ' on' : ''),
-                 'aria-current': isOn && !item.children ? 'page' : null },
-          h('span', { class: 'ws-nav-icon', 'aria-hidden': 'true' }, item.icon), h('span', {}, item.label)),
+        h('button', { type: 'button', class: 'ws-nav-item' + (isOn ? ' on' : ''), 'data-group': item.href,
+                      'aria-expanded': String(open), onclick: toggle },
+          icon, h('span', {}, item.label), h('span', { class: 'ws-nav-caret', 'aria-hidden': 'true' }, open ? '▾' : '▸')),
         open ? h('div', { class: 'ws-subnav' }, item.children.map(([href, label]) => {
           // A child is current on its own page and its sub-pages (Career › Experience), unless another child is exact.
           const on = path === href || (path.startsWith(href + '/') && !item.children.some(([other]) => other === path));
@@ -81,6 +96,8 @@ async function render() {
   const path = location.pathname.replace(/\/$/, '') || '/app';
   if (path === '/app/site') return navigate('/app/site/music', { replace: true });
   if (path === '/app/site/projects') return navigate('/app/site/career/projects', { replace: true });
+  const group = NAV.find(item => item.children && (path.startsWith(item.href + '/') || path === item.href));
+  if (group) expanded.add(group.href);
   document.getElementById('ws-sidebar-nav').replaceChildren(sidebar());
   document.body.classList.remove('nav-open');
   const main = document.getElementById('ws-main');

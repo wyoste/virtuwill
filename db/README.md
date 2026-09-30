@@ -16,7 +16,7 @@ module per schema. `virtuwill/migrate.py` moved the earlier Lakebase layout in o
 | Schema | Holds | Visibility |
 |---|---|---|
 | `core` | `calendar` (conformed date dimension, 1900–2100), `media_assets` (every file), `daily_summary` view | shared |
-| `journal` | `entries` (one per date), `entry_tags`, `habits`, `habit_logs`, `meals`, `workout_types`, `workouts` + `derived_habits`, `day_habits` views | private |
+| `journal` | `entries` (one per date), `entry_tags`, `habits`, `habit_logs`, `meals`, `workout_types`, `workouts`, `workout_routes` (cardio and dog walks), `lifts`, `workout_lifts` (strength: lifts and sets), `workout_circuits` (HIIT) + `derived_habits`, `day_habits` views | private |
 | `health` | `body_measurements` (many weigh-ins per date), `alcohol`, `daily_logs`, `foods`, `recipes`, `recipe_ingredients`, `profile`, `profile_history`, `goals` + 4 views | private |
 | `finance` | `account_types`, `accounts`, `account_aliases`, `import_profiles`, `import_batches`, `source_documents`, `statements`, `categories`, `movement_types`, `transactions`, `transaction_sources`, `receipts`, `item_categories`, `item_catalog`, `receipt_items`, `receipt_payments`, `shopping_list`, `budgets`, `budget_categories`, `recurring_expenses`, `pay_profile`, `paycheck_deposits`, `other_incomes`, `allocations`, `savings_goals`, `balance_snapshots`, `retirement_plan` + 18 views | private |
 | `garden` | `settings`, `species`, `health_levels`, `beds`, `seasons`, `plantings`, `plant_observations`, `photos`, `photo_subjects` + 2 views | public read |
