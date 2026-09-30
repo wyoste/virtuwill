@@ -1,6 +1,6 @@
 // Health: Overview · Activity · Food · Body · Goals, over the shared tables.
 import { h, api, fmt, card, stat, pageHead, tabs, isoToday, addDays, empty, toast, run, field, values, editable, saveAll } from '../lib.js';
-import { quickAdd, recordRow, meal as mealEditor, cap, forgetFoods } from '../forms.js';
+import { quickAdd, recordRow, meal as mealEditor, mealColumns, goToMeal, cap, forgetFoods, forgetRecipes, byGroup, FOOD_GROUPS } from '../forms.js';
 
 const TABS = [['/app/health', 'Overview'], ['/app/health/activity', 'Activity'], ['/app/health/food', 'Food'],
               ['/app/health/body', 'Body'], ['/app/health/goals', 'Goals']];
@@ -106,47 +106,96 @@ async function food(view, redraw, { params }) {
       stat('Planned', fmt.num(d.planned_calories ?? 0), `${d.meals_planned ?? 0} planned meals`)),
     h('label', { class: 'ws-check', for: 'day-complete' }, complete,
       h('span', {}, 'I logged everything I ate this day (otherwise totals are a partial log, not a low-calorie day)')),
+    mealColumns(date, meals, redraw),
+    card('Drinks', drinks.length ? h('ul', { class: 'ws-list' }, drinks.map(x => recordRow('drinks', x, redraw))) : empty('No drinks this day.')),
     h('div', { class: 'ws-grid two' },
-      card(h('span', {}, 'Meals', h('button', { class: 'btn small', onclick: async () => { if (await mealEditor(date)) redraw(); } }, '+ Meal')),
-        meals.length ? h('ul', { class: 'ws-list' }, meals.map(m => recordRow('meals', m, redraw))) : empty('No meals logged for this day.')),
-      card('Drinks', drinks.length ? h('ul', { class: 'ws-list' }, drinks.map(x => recordRow('drinks', x, redraw))) : empty('No drinks this day.'))),
-    h('div', { class: 'ws-grid two' },
-      foodLibrary(foods, redraw),
-      card('Recipes', recipes.length ? h('ul', { class: 'ws-list' }, recipes.map(r => h('li', { class: 'ws-row' },
-        h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, r.name),
-          h('div', { class: 'ws-row-meta' }, r.ingredients.map(i => `${i.quantity} × ${i.name}`).join(', '))),
-        h('div', { class: 'ws-row-end' }, h('span', { class: 'ws-amount' }, fmt.num(r.calories) + ' kcal'))))) : empty('No recipes yet.'))),
-    card(h('span', {}, 'Shopping list', h('span', { class: 'ws-note' }, 'read-only · edited in the Finance tracker until Money replaces it')),
-      shopping.length ? h('ul', { class: 'ws-list' }, shopping.map(s => h('li', { class: 'ws-row' },
+      goToMeals(recipes, date, redraw),
+      foodLibrary(foods, redraw)),
+    listCard(h('span', {}, 'Shopping list', h('span', { class: 'ws-note' }, 'read-only · edited in the Finance tracker until Money replaces it')),
+      shoppingView, {
+      filters: [['open', 'To buy'], ['done', 'Done']], search: 'Search the list', size: 10, items: shopping, emptyText: 'Nothing here.',
+      match: (s, q, f) => (!q || s.name.toLowerCase().includes(q)) && (!f || (f === 'done') === !!s.done),
+      row: s => h('li', { class: 'ws-row' },
         h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title', style: s.done ? { textDecoration: 'line-through', opacity: .6 } : null }, s.name),
           h('div', { class: 'ws-row-meta' }, [s.quantity_text, s.note].filter(Boolean).join(' · '))),
-        s.price_cap != null ? h('span', { class: 'ws-amount' }, 'up to ' + fmt.money(s.price_cap)) : null))) : empty('The shopping list is empty.')));
+        s.price_cap != null ? h('span', { class: 'ws-amount' }, 'up to ' + fmt.money(s.price_cap)) : null) }));
+}
+
+// A long list shown a page at a time, with a search and optional filter chips.
+// Its filters and page survive a redraw of the screen (state is kept by the caller).
+function listCard(title, state, { filters = [], search = 'Search', size = 8, items, match, row, emptyText }) {
+  const input = h('input', { class: 'ws-input', type: 'search', placeholder: search, 'aria-label': search, value: state.q || '' });
+  const chips = filters.length ? h('div', { class: 'ws-chips', role: 'group', 'aria-label': 'Filter' }) : null;
+  const body = h('div', {});
+  const draw = () => {
+    const q = (state.q || '').toLowerCase();
+    const shown = items.filter(x => match(x, q, state.filter || ''));
+    const pages = Math.max(1, Math.ceil(shown.length / size));
+    state.page = Math.min(state.page || 0, pages - 1);
+    const list = h('ul', { class: 'ws-list' }, shown.length ? shown.slice(state.page * size, (state.page + 1) * size).map(row)
+                                                           : h('li', { class: 'ws-note' }, emptyText));
+    const turn = step => () => { state.page += step; draw(); };
+    body.replaceChildren(...[list, pages > 1 ? h('div', { class: 'ws-pager' },
+      h('button', { class: 'btn small', disabled: state.page === 0, onclick: turn(-1), 'aria-label': 'Previous page' }, '‹ Prev'),
+      h('span', { class: 'ws-note' }, `${state.page + 1} of ${pages} · ${shown.length} total`),
+      h('button', { class: 'btn small', disabled: state.page >= pages - 1, onclick: turn(1), 'aria-label': 'Next page' }, 'Next ›')) : null].filter(Boolean));
+    if (chips) chips.replaceChildren(...[['', 'All'], ...filters].map(([v, label]) =>
+      h('button', { class: 'btn small' + ((state.filter || '') === v ? ' primary' : ''), 'aria-pressed': String((state.filter || '') === v),
+                    onclick: () => { state.filter = v; state.page = 0; draw(); } }, label)));
+  };
+  input.oninput = () => { state.q = input.value.trim(); state.page = 0; draw(); };
+  draw();
+  return card(title, h('div', { class: 'ws-usual' }, input), chips, body);
+}
+
+const mealsView = {}, foodsView = {}, shoppingView = {};
+
+// Go-to meals: the usual things you make. Log one to start a meal with its foods preselected.
+function goToMeals(recipes, date, redraw) {
+  const saved = async () => { forgetRecipes(); redraw(); };
+  return listCard(h('span', {}, `Go-to meals (${recipes.length})`,
+    h('button', { class: 'btn small', onclick: async () => { if (await goToMeal()) saved(); } }, '+ Go-to meal')), mealsView, {
+    search: 'Search go-to meals', size: 6, items: recipes, emptyText: recipes.length ? 'No go-to meals match.' : 'No go-to meals yet — build one.',
+    match: (r, q) => !q || r.name.toLowerCase().includes(q) || r.ingredients.some(i => i.name.toLowerCase().includes(q)),
+    row: r => h('li', { class: 'ws-row' },
+      h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, r.name),
+        h('div', { class: 'ws-row-meta' }, portionLine(r)),
+        h('div', { class: 'ws-row-meta' }, r.ingredients.map(i => `${+Number(i.quantity).toFixed(2)} × ${i.name}${i.optional ? ' (optional, per portion)' : ''}`).join(', '))),
+      h('div', { class: 'ws-row-end' }, h('span', { class: 'ws-amount' }, r.calories != null ? fmt.num(r.calories) + ' kcal' : '—',
+          Number(r.portions) !== 1 ? h('small', { class: 'ws-note', style: { display: 'block', fontWeight: 400 } }, 'per portion') : null),
+        h('button', { class: 'btn small primary', onclick: async () => { if (await mealEditor(date, null, { recipeId: r.recipe_id })) redraw(); } }, 'Log'),
+        h('button', { class: 'btn small', onclick: async () => { if (await goToMeal(r)) saved(); } }, 'Edit'))) });
+}
+
+// "Makes 6 portions · per portion 25 g protein · 43 g carbs · … · batch 2,035 kcal"
+function portionLine(r) {
+  const n = Number(r.portions) || 1;
+  const macros = [['protein_g', 'protein'], ['carbs_g', 'carbs'], ['fat_g', 'fat'], ['fiber_g', 'fiber']]
+    .filter(([k]) => r[k] != null).map(([k, label]) => `${fmt.num(r[k])} g ${label}`).join(' · ');
+  return [n === 1 ? 'One portion' : `Makes ${+n.toFixed(2)} portions`, n !== 1 && macros ? 'each ' + macros : macros,
+          n !== 1 && r.batch_calories != null ? `batch ${fmt.num(r.batch_calories)} kcal` : null].filter(Boolean).join(' · ');
 }
 
 function foodLibrary(foods, redraw) {
-  const search = h('input', { class: 'ws-input', type: 'search', placeholder: 'Search saved foods', 'aria-label': 'Search saved foods' });
-  const list = h('ul', { class: 'ws-list' });
-  const draw = () => {
-    const q = search.value.trim().toLowerCase();
-    const shown = foods.filter(f => !q || f.name.toLowerCase().includes(q)).slice(0, 40);
-    list.replaceChildren(...shown.map(f => h('li', { class: 'ws-row' },
+  const groups = byGroup(foods).map(([g, fs]) => [g, `${g} (${fs.length})`]);
+  return listCard(h('span', {}, `Saved foods (${foods.length})`, h('button', { class: 'btn small', onclick: () => editFood(null, redraw) }, '+ Food')),
+    foodsView, {
+    filters: groups, search: 'Search saved foods', size: 10, items: foods, emptyText: 'No foods match.',
+    match: (f, q, g) => (!q || f.name.toLowerCase().includes(q)) && (!g || (FOOD_GROUPS.includes(f.category) ? f.category : 'Other') === g),
+    row: f => h('li', { class: 'ws-row' },
       h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, f.name),
-        h('div', { class: 'ws-row-meta' }, [f.unit, f.protein_g != null ? fmt.num(f.protein_g) + ' g protein' : null].filter(Boolean).join(' · '))),
+        h('div', { class: 'ws-row-meta' }, [f.category, f.unit, f.protein_g != null ? fmt.num(f.protein_g) + ' g protein' : null].filter(Boolean).join(' · '))),
       h('span', { class: 'ws-amount' }, f.calories != null ? fmt.num(f.calories) + ' kcal' : '—'),
-      h('button', { class: 'btn small', onclick: () => editFood(f, redraw) }, 'Edit'))));
-    if (!shown.length) list.replaceChildren(h('li', { class: 'ws-note' }, 'No foods match.'));
-  };
-  search.oninput = draw;
-  draw();
-  return card(h('span', {}, `Saved foods (${foods.length})`, h('button', { class: 'btn small', onclick: () => editFood(null, redraw) }, '+ Food')),
-    search, list);
+      h('button', { class: 'btn small', onclick: () => editFood(f, redraw) }, 'Edit')) });
 }
 
 async function editFood(food, redraw) {
   const { dialog } = await import('../lib.js');
   const f = food || {};
   const form = h('form', { class: 'ws-form', onsubmit: e => e.preventDefault() },
-    field('Name', 'name', { value: f.name, required: true, wide: true }), field('Serving', 'unit', { value: f.unit, placeholder: 'e.g. 1 cup' }),
+    field('Name', 'name', { value: f.name, required: true, wide: true }),
+    field('Group', 'category', { kind: 'select', options: FOOD_GROUPS.map(g => [g, g]), value: f.category || 'Other' }),
+    field('Serving', 'unit', { value: f.unit, placeholder: 'e.g. 1 cup' }),
     field('Calories', 'calories', { kind: 'number', value: f.calories ?? '' }), field('Protein g', 'protein_g', { kind: 'number', value: f.protein_g ?? '' }),
     field('Carbs g', 'carbs_g', { kind: 'number', value: f.carbs_g ?? '' }), field('Fat g', 'fat_g', { kind: 'number', value: f.fat_g ?? '' }),
     field('Fiber g', 'fiber_g', { kind: 'number', value: f.fiber_g ?? '' }), field('Label note', 'reference_note', { value: f.reference_note, wide: true }));

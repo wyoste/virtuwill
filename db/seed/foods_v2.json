@@ -1,0 +1,33 @@
+{
+  "_note": "More household foods, added once. Nutrition is per the unit given: USDA FoodData Central for whole foods, the package label for branded ones. \"presets\" are quick amounts offered when logging (e.g. how many chips).",
+  "foods": [
+    {"food_id": "ground-beef-80-20", "category": "Protein", "name": "Ground Beef (80/20)", "unit": "1 lb raw (454 g)",
+     "calories": 1152, "protein_g": 78, "carbs_g": 0, "fat_g": 91, "fiber_g": 0, "reference_note": "USDA ground beef 80% lean, raw; browning and draining lowers the fat",
+     "presets": [["Quarter", 0.25], ["Third", 0.33], ["Half", 0.5], ["Whole pound", 1]]},
+    {"food_id": "steak-ribeye", "category": "Protein", "name": "Steak (Ribeye)", "unit": "8 oz cooked (227 g)",
+     "calories": 660, "protein_g": 54, "carbs_g": 0, "fat_g": 48, "fiber_g": 0, "reference_note": "USDA beef ribeye, lean and fat, grilled; a 12 oz raw steak cooks to about 9 oz",
+     "presets": [["6 oz", 0.75], ["8 oz", 1], ["12 oz", 1.5]]},
+    {"food_id": "deli-turkey", "category": "Protein", "name": "Deli Turkey", "unit": "1 slice (1 oz)",
+     "calories": 30, "protein_g": 5, "carbs_g": 1, "fat_g": 0.5, "fiber_g": 0, "reference_note": "Sliced deli turkey breast label"},
+    {"food_id": "american-cheese", "category": "Dairy", "name": "American Cheese", "unit": "1 slice (21 g)",
+     "calories": 80, "protein_g": 4, "carbs_g": 1, "fat_g": 6.5, "fiber_g": 0, "reference_note": "USDA pasteurized process American cheese, deli slice"},
+    {"food_id": "gouda-cheese", "category": "Dairy", "name": "Gouda Cheese", "unit": "1 oz (28 g)",
+     "calories": 101, "protein_g": 7.1, "carbs_g": 0.6, "fat_g": 7.8, "fiber_g": 0, "reference_note": "USDA gouda"},
+    {"food_id": "mayonnaise", "category": "Other", "name": "Mayonnaise", "unit": "1 tbsp (14 g)",
+     "calories": 94, "protein_g": 0.1, "carbs_g": 0.1, "fat_g": 10.3, "fiber_g": 0, "reference_note": "USDA mayonnaise, regular"},
+    {"food_id": "popcorn-orville-extra-butter", "category": "Other", "name": "Popcorn (Orville Redenbacher Extra Butter)", "unit": "1 bag, popped",
+     "calories": 510, "protein_g": 6, "carbs_g": 54, "fat_g": 36, "fiber_g": 9, "reference_note": "Microwave bag label, about 3 servings — check your box",
+     "presets": [["A few handfuls", 0.25], ["Half bag", 0.5], ["Whole bag", 1]]},
+    {"food_id": "tortilla-chips", "category": "Other", "name": "Tortilla Chips", "unit": "1 chip",
+     "calories": 13, "protein_g": 0.2, "carbs_g": 1.6, "fat_g": 0.6, "fiber_g": 0.1, "reference_note": "Restaurant-style chips label: about 11 chips per 1 oz (140 kcal)",
+     "presets": [["Handful", 10], ["Small plate", 20], ["Basket", 40]]},
+    {"food_id": "salsa", "category": "Other", "name": "Salsa", "unit": "1 small cup (2 oz)",
+     "calories": 20, "protein_g": 1, "carbs_g": 4, "fat_g": 0, "fiber_g": 1, "reference_note": "Jarred or restaurant salsa, 1/4 cup"}
+  ],
+  "recipes": [
+    {"name": "Chips & Salsa", "parts": [
+      ["tortilla-chips", 20],
+      ["salsa", 1]
+    ]}
+  ]
+}

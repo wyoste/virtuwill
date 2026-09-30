@@ -27,6 +27,33 @@ bp = Blueprint("health", __name__)
 SOURCE = "health_tracker"
 LB_PER_KG, M_PER_IN = 0.45359237, 0.0254
 TRACKER_TABLES = ("journal.workouts", "journal.meals", "health.body_measurements", "health.alcohol")
+# Starter foods and go-to meals, each file added once (by its migration name) so edits and deletions stick.
+FOOD_SEEDS = (("foods_seed_v1", db.ROOT / "db" / "seed" / "foods.json"),
+              ("foods_seed_v2", db.ROOT / "db" / "seed" / "foods_v2.json"))
+CATEGORIES = ("Grains", "Fruit", "Vegetables", "Protein", "Dairy", "Other")
+
+
+def seed_foods(conn):
+    for name, path in FOOD_SEEDS:
+        if conn.execute("INSERT INTO virtuwill.migrations (name) VALUES (%s) ON CONFLICT DO NOTHING", (name,)).rowcount:
+            _seed_foods(conn, json.loads(path.read_text(encoding="utf-8")))
+
+
+def _seed_foods(conn, data):
+    for f in data["foods"]:
+        conn.execute("""INSERT INTO health.foods (food_id, name, category, unit, calories, protein_g, carbs_g, fat_g, fiber_g,
+                                                  reference_note, source, details)
+                        VALUES (%(food_id)s, %(name)s, %(category)s, %(unit)s, %(calories)s, %(protein_g)s, %(carbs_g)s,
+                                %(fat_g)s, %(fiber_g)s, %(reference_note)s, 'seed', %(details)s)
+                        ON CONFLICT (food_id) DO NOTHING""",
+                     {**f, "details": json.dumps({"presets": f["presets"]} if f.get("presets") else {})})
+    for recipe in data["recipes"]:
+        row = conn.execute("""INSERT INTO health.recipes (name, portions, source) VALUES (%s, %s, 'seed')
+                              ON CONFLICT (name) DO NOTHING RETURNING recipe_id""", (recipe["name"], recipe.get("portions", 1))).fetchone()
+        if row:
+            for position, (food_id, qty, *optional) in enumerate(recipe["parts"]):
+                conn.execute("""INSERT INTO health.recipe_ingredients (recipe_id, position, food_id, quantity, optional)
+                                VALUES (%s, %s, %s, %s, %s)""", (row["recipe_id"], position, food_id, qty, optional == ["optional"]))
 
 
 def _text(value):
@@ -134,9 +161,12 @@ def project(conn, state, document=None):
         if not recipe.get("name") or not parts:
             report["skipped"]["recipes"] += 1
             continue
-        recipe_id = conn.execute("""INSERT INTO health.recipes (name, source) VALUES (%s, %s)
-                                    ON CONFLICT (name) DO UPDATE SET source = EXCLUDED.source RETURNING recipe_id""",
-                                 (recipe["name"], SOURCE)).fetchone()["recipe_id"]
+        row = conn.execute("""INSERT INTO health.recipes (name, source) VALUES (%s, %s) ON CONFLICT (name) DO NOTHING
+                              RETURNING recipe_id""", (recipe["name"], SOURCE)).fetchone()
+        if not row:             # a go-to meal of that name was built or seeded here; it wins
+            report["skipped"]["recipes"] += 1
+            continue
+        recipe_id = row["recipe_id"]
         conn.execute("DELETE FROM health.recipe_ingredients WHERE recipe_id = %s", (recipe_id,))
         for position, (food, qty) in enumerate(parts):
             conn.execute("INSERT INTO health.recipe_ingredients VALUES (%s, %s, %s, %s)", (recipe_id, position, food, qty))
@@ -617,12 +647,13 @@ def foods_v1():
                              VALUES (%s, {', '.join(['%s'] * len(values))}, 'manual')""", [food_id, *values.values()])
             return jsonify(plain(conn.execute("SELECT * FROM health.foods WHERE food_id = %s", (food_id,)).fetchone())), 201
         q = (request.args.get("q") or "").strip()
-        rows = conn.execute("""SELECT food_id, name, unit, calories, protein_g, carbs_g, fat_g, fiber_g, reference_note, url
+        rows = conn.execute("""SELECT food_id, name, category, unit, calories, protein_g, carbs_g, fat_g, fiber_g, reference_note, url,
+                                      details->'presets' AS presets
                                FROM health.foods WHERE %s = '' OR name ILIKE '%%' || %s || '%%' ORDER BY name LIMIT 200""", (q, q))
         return jsonify([plain(r) for r in rows])
 
 
-FOOD = [F("name", required=True, max_length=200), F("unit", max_length=60), F("calories", "number", low=0, high=10000),
+FOOD = [F("name", required=True, max_length=200), F("category", choices=CATEGORIES, default="Other"), F("unit", max_length=60), F("calories", "number", low=0, high=10000),
         F("protein_g", "number", low=0, high=1000), F("carbs_g", "number", low=0, high=1000), F("fat_g", "number", low=0, high=1000),
         F("fiber_g", "number", low=0, high=1000), F("reference_note", max_length=500), F("url", max_length=500)]
 
@@ -648,18 +679,98 @@ def food_v1(food_id):
         return jsonify(plain(conn.execute("SELECT * FROM health.foods WHERE food_id = %s", (food_id,)).fetchone()))
 
 
-@bp.route("/api/v1/health/recipes")
+# Nutrition is per portion (the batch ÷ its portions), without the optional extras;
+# batch_calories is the whole batch.
+RECIPES = """
+    SELECT r.recipe_id, r.name, r.source, r.portions,
+           jsonb_agg(jsonb_build_object('food_id', f.food_id, 'name', f.name, 'quantity', i.quantity, 'unit', f.unit,
+                                        'optional', i.optional)
+                     ORDER BY i.position) AS ingredients,
+           ROUND(SUM(f.calories * i.quantity) FILTER (WHERE NOT i.optional) / r.portions, 0) AS calories,
+           ROUND(SUM(f.protein_g * i.quantity) FILTER (WHERE NOT i.optional) / r.portions, 1) AS protein_g,
+           ROUND(SUM(f.carbs_g * i.quantity) FILTER (WHERE NOT i.optional) / r.portions, 1) AS carbs_g,
+           ROUND(SUM(f.fat_g * i.quantity) FILTER (WHERE NOT i.optional) / r.portions, 1) AS fat_g,
+           ROUND(SUM(f.fiber_g * i.quantity) FILTER (WHERE NOT i.optional) / r.portions, 1) AS fiber_g,
+           ROUND(SUM(f.calories * i.quantity) FILTER (WHERE NOT i.optional), 0) AS batch_calories
+    FROM health.recipes r JOIN health.recipe_ingredients i USING (recipe_id) JOIN health.foods f USING (food_id)
+    {where} GROUP BY r.recipe_id, r.name, r.source, r.portions ORDER BY r.name"""
+
+
+def _recipe_body(conn):
+    """A go-to meal from a JSON body: a name, how many portions the batch makes, and 1–40 saved
+    foods, each with servings for the batch (per portion when optional) and an optional flag."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise records.Invalid("Expected a JSON object")
+    name = str(data.get("name") or "").strip()
+    if not name or len(name) > 200:
+        raise records.Invalid("name is required (up to 200 characters)")
+    portions = number(data.get("portions", 1))
+    if portions is None or not 0 < portions <= 100:
+        raise records.Invalid("portions must be above 0 and at most 100")
+    parts = data.get("ingredients")
+    if not isinstance(parts, list) or not 1 <= len(parts) <= 40:
+        raise records.Invalid("A go-to meal needs 1 to 40 foods")
+    out, seen = [], set()
+    for i, part in enumerate(parts):
+        if not isinstance(part, dict) or not part.get("food_id"):
+            raise records.Invalid(f"Food {i + 1} needs a food")
+        food = _food(conn, str(part["food_id"]))
+        qty = number(part.get("quantity", 1))
+        if qty is None or not 0 < qty <= 100:
+            raise records.Invalid(f"{food['name']}: servings must be above 0 and at most 100")
+        if food["food_id"] in seen:
+            raise records.Invalid(f"{food['name']} is listed twice")
+        seen.add(food["food_id"])
+        out.append((food["food_id"], qty, part.get("optional") is True))
+    return name, portions, out
+
+
+def _save_recipe(conn, recipe_id, parts):
+    conn.execute("DELETE FROM health.recipe_ingredients WHERE recipe_id = %s", (recipe_id,))
+    for position, (food_id, qty, optional) in enumerate(parts):
+        conn.execute("""INSERT INTO health.recipe_ingredients (recipe_id, position, food_id, quantity, optional)
+                        VALUES (%s, %s, %s, %s, %s)""", (recipe_id, position, food_id, qty, optional))
+    return plain(conn.execute(RECIPES.format(where="WHERE r.recipe_id = %s"), (recipe_id,)).fetchone())
+
+
+@bp.route("/api/v1/health/recipes", methods=["GET", "POST"])
 @admin_required
 def recipes_v1():
+    """Go-to meals: a named set of saved foods that starts a meal log."""
     with db.tx() as conn:
-        rows = conn.execute("""
-            SELECT r.recipe_id, r.name,
-                   jsonb_agg(jsonb_build_object('food_id', f.food_id, 'name', f.name, 'quantity', i.quantity, 'unit', f.unit)
-                             ORDER BY i.position) AS ingredients,
-                   ROUND(SUM(f.calories * i.quantity), 0) AS calories, ROUND(SUM(f.protein_g * i.quantity), 1) AS protein_g
-            FROM health.recipes r JOIN health.recipe_ingredients i USING (recipe_id) JOIN health.foods f USING (food_id)
-            GROUP BY r.recipe_id, r.name ORDER BY r.name""")
-        return jsonify([plain(r) for r in rows])
+        if request.method == "POST":
+            try:
+                name, portions, parts = _recipe_body(conn)
+            except records.Invalid as e:
+                return jsonify({"error": str(e)}), 400
+            row = conn.execute("""INSERT INTO health.recipes (name, portions, source) VALUES (%s, %s, 'manual')
+                                  ON CONFLICT (name) DO NOTHING RETURNING recipe_id""", (name, portions)).fetchone()
+            if not row:
+                return jsonify({"error": f"There is already a go-to meal named {name}"}), 409
+            return jsonify(_save_recipe(conn, row["recipe_id"], parts)), 201
+        return jsonify([plain(r) for r in conn.execute(RECIPES.format(where=""))])
+
+
+@bp.route("/api/v1/health/recipes/<int:recipe_id>", methods=["PUT", "DELETE"])
+@admin_required
+def recipe_v1(recipe_id):
+    with db.tx() as conn:
+        if request.method == "DELETE":
+            if not conn.execute("DELETE FROM health.recipes WHERE recipe_id = %s", (recipe_id,)).rowcount:
+                return jsonify({"error": "Not found"}), 404
+            return jsonify({"ok": True})
+        try:
+            name, portions, parts = _recipe_body(conn)
+        except records.Invalid as e:
+            return jsonify({"error": str(e)}), 400
+        if conn.execute("SELECT 1 FROM health.recipes WHERE name = %s AND recipe_id <> %s", (name, recipe_id)).fetchone():
+            return jsonify({"error": f"There is already a go-to meal named {name}"}), 409
+        # Edited here, it is no longer the tracker's copy.
+        if not conn.execute("UPDATE health.recipes SET name = %s, portions = %s, source = 'manual' WHERE recipe_id = %s",
+                            (name, portions, recipe_id)).rowcount:
+            return jsonify({"error": "Not found"}), 404
+        return jsonify(_save_recipe(conn, recipe_id, parts))
 
 
 @bp.route("/api/v1/health/shopping")

@@ -1,6 +1,6 @@
 """The journal: one entry per calendar date, with tags, habits and meals.
 
-The journal page's API shape is unchanged (camelCase, meals as {B, L, D},
+The journal page's API shape is unchanged (camelCase, meals as {B, L, D, S},
 accounts as [{institution, name, balance}]). An entry's account list is kept
 as finance.balance_snapshots on the entry's date.
 """
@@ -16,7 +16,7 @@ from .auth import journal_required
 from .util import in_calendar, iso_z, number, parse_date, timestamp
 
 bp = Blueprint("journal", __name__)
-SLOTS = {"B": "breakfast", "L": "lunch", "D": "dinner"}
+SLOTS = {"B": "breakfast", "L": "lunch", "D": "dinner", "S": "snack"}   # S: snacks and dessert, after dinner
 
 
 class DateTaken(Exception):
@@ -256,7 +256,8 @@ def ocr_route():
                     "Transcribe this handwritten journal page. "
                     "Return ONLY a valid JSON object — no markdown fences — with these fields: "
                     "date (YYYY-MM-DD or empty string), quote (string), quoteAuthor (string), "
-                    "meals (object with keys B, L, D — each a string), freeWrite (string). "
+                    "meals (object with keys B, L, D, S — breakfast, lunch, dinner, and snacks or dessert — each a string), "
+                    "freeWrite (string). "
                     "Use empty string for any field not present.")},
             ]}])
         raw = msg.content[0].text.strip()

@@ -1,6 +1,6 @@
-// Today: one day on one screen — journal, habits, activity, food, weight, money.
+// Today: one day on one screen — meals (B | L | D | S), journal, habits, activity, weight, money.
 import { h, api, fmt, card, stat, pageHead, isoToday, addDays, empty, toast } from '../lib.js';
-import { quickAdd, recordRow } from '../forms.js';
+import { quickAdd, recordRow, mealColumns } from '../forms.js';
 import { balanceList, balanceTotals, spendStrip, spendSummary } from '../moneyparts.js';
 
 export async function render(view, { params, navigate }) {
@@ -34,6 +34,9 @@ export async function render(view, { params, navigate }) {
       stat(isToday ? 'Spent today' : 'Spent this day', fmt.money(data.money.spend.day),
            `${fmt.money(data.money.spend.week)} this week · ` + (data.money.through ? `bank data through ${fmt.day(data.money.through)}` : 'no bank data yet'))),
   );
+
+  // Meals, B | L | D | S, as on the journal page
+  view.append(h('div', { class: 'ws-today-meals' }, mealColumns(date, data.meals, reload)));
 
   // Journal and habits
   const entry = data.entry;
@@ -87,8 +90,8 @@ export async function render(view, { params, navigate }) {
 }
 
 function logged(data, reload) {
-  const groups = [['workouts', 'Workouts', data.workouts], ['meals', 'Meals', data.meals],
-                  ['weigh-ins', 'Weigh-ins', data.weighIns], ['drinks', 'Drinks', data.drinks]];
+  // Meals have their own columns above.
+  const groups = [['workouts', 'Workouts', data.workouts], ['weigh-ins', 'Weigh-ins', data.weighIns], ['drinks', 'Drinks', data.drinks]];
   const any = groups.some(([, , rows]) => rows.length);
   if (!any) return empty('Nothing logged yet. Use the buttons above.');
   return h('div', {}, groups.filter(([, , rows]) => rows.length).map(([kind, label, rows]) => h('div', {},
