@@ -45,8 +45,9 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .ws-nav { display: flex; flex-direction: column; gap: 2px; }
 .ws-nav-item {
   display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; border: 0;
-  background: none; color: #E4DCC5; text-decoration: none; font-size: 14px; font-weight: 500; cursor: pointer; text-align: left;
+  background: none; color: #E4DCC5; text-decoration: none; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; text-align: left;
 }
+.ws-nav-caret { margin-left: auto; font-size: 11px; opacity: .7; }
 .ws-nav-item:hover { background: rgba(255, 255, 255, .06); color: #fff; }
 .ws-nav-item.on { background: rgba(227, 176, 64, .16); color: #fff; box-shadow: inset 3px 0 0 var(--brand-gold); }
 .ws-nav-icon { width: 20px; text-align: center; font-size: 15px; opacity: .9; }
