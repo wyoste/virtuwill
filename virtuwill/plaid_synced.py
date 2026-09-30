@@ -37,7 +37,7 @@ class SyncedTablesUnavailable(Exception):
 
 
 # The synced copies of prod.bronze.raw_plaid_balances / raw_plaid_transactions, in Lakebase's bronze schema.
-TABLES = {"balances": ("bronze", "raw_plaid_balances"), "transactions": ("bronze", "raw_plaid_transactions")}
+TABLES = {"balances": ("bronze", "plaid_balance"), "transactions": ("bronze", "plaid_transaction")}
 
 
 def _columns(conn):

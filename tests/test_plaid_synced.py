@@ -15,12 +15,12 @@ from virtuwill.importers import plaid, plaid_load
 SYNCED = """
 DROP SCHEMA IF EXISTS bronze CASCADE;
 CREATE SCHEMA bronze;
-CREATE TABLE bronze.raw_plaid_balances (
+CREATE TABLE bronze.plaid_balance (
     _pulled_at TEXT, item_id TEXT, item_label TEXT, institution_id TEXT, account_id TEXT, account_name TEXT,
     official_name TEXT, mask TEXT, type TEXT, subtype TEXT, current DOUBLE PRECISION, available DOUBLE PRECISION,
     limit_amt DOUBLE PRECISION, iso_currency_code TEXT, _rescued_data TEXT, _source_file TEXT,
     _ingested_at TIMESTAMPTZ, _pull_batch TEXT, PRIMARY KEY (account_id, _pulled_at));
-CREATE TABLE bronze.raw_plaid_transactions (
+CREATE TABLE bronze.plaid_transaction (
     _pulled_at TEXT, _sync_op TEXT, item_label TEXT, transaction_id TEXT, account_id TEXT, date TEXT, authorized_date TEXT,
     name TEXT, merchant_name TEXT, amount DOUBLE PRECISION, iso_currency_code TEXT, category TEXT, pending BOOLEAN,
     _rescued_data TEXT, _source_file TEXT, _ingested_at TIMESTAMPTZ, _pull_batch TEXT,
@@ -91,10 +91,10 @@ class SyncTests(unittest.TestCase):
         self.drop()
         status, reply = self.sync()
         self.assertEqual(status, 409)
-        self.assertIn("bronze.raw_plaid_balances", reply["error"])
+        self.assertIn("bronze.plaid_balance", reply["error"])
         self.assertFalse(self.owner.get("/api/v1/money/plaid-sync").json["available"])
         diag = self.owner.get("/api/admin/diagnostics").json
-        self.assertIn("raw_plaid_balances", next(s for s in diag["syncs"] if s["source"] == "plaid_bronze")["error"])
+        self.assertIn("plaid_balance", next(s for s in diag["syncs"] if s["source"] == "plaid_bronze")["error"])
 
     def test_card_payments_interest_and_account_names_as_plaid_sends_them(self):
         card = {**self.balance("card", "7237", "credit", "credit card", 625.89, bank="Chase"), "account_name": "CREDIT CARD",
@@ -102,8 +102,8 @@ class SyncTests(unittest.TestCase):
         k401 = {**self.balance("k", "2047", "investment", "401k", 30791.22, bank="Fidelity"),
                 "account_name": "GREYSTAR 401(K) PLAN", "official_name": "Investment"}
         hysa = self.balance("hysa", "8154", "depository", "savings", 21060.18, 21060.18, bank="Amex")
-        self.land("raw_plaid_balances", [card, k401, hysa], DAY1)
-        self.land("raw_plaid_transactions", [self.txn("pay", "card", -800, "LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT"),
+        self.land("plaid_balance", [card, k401, hysa], DAY1)
+        self.land("plaid_transaction", [self.txn("pay", "card", -800, "LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT"),
                                              self.txn("int", "hysa", -12.5, "INCOME_INTEREST_EARNED"),
                                              self.txn("sal", "hysa", -2000, "INCOME_SALARY")], DAY1)
         self.sync()
@@ -116,15 +116,15 @@ class SyncTests(unittest.TestCase):
 
     def test_a_posted_charge_that_names_its_pending_one_keeps_the_row(self):
         with psycopg.connect(PG, autocommit=True) as conn:
-            conn.execute("ALTER TABLE bronze.raw_plaid_transactions ADD COLUMN pending_transaction_id TEXT")
-        self.land("raw_plaid_balances", [self.balance("card", "2222", "credit", "credit card", 80)], DAY1)
-        self.land("raw_plaid_transactions", [self.txn("p1", "card", 30, "GENERAL_MERCHANDISE_OTHER", pending=True)], DAY1)
+            conn.execute("ALTER TABLE bronze.plaid_transaction ADD COLUMN pending_transaction_id TEXT")
+        self.land("plaid_balance", [self.balance("card", "2222", "credit", "credit card", 80)], DAY1)
+        self.land("plaid_transaction", [self.txn("p1", "card", 30, "GENERAL_MERCHANDISE_OTHER", pending=True)], DAY1)
         self.sync()
         with db.tx() as conn:
             conn.execute("INSERT INTO finance.categories (category) VALUES ('Gifts') ON CONFLICT DO NOTHING")
             conn.execute("UPDATE finance.transactions SET category = 'Gifts' WHERE external_id = 'p1'")
         day2 = DAY1 + timedelta(days=1)
-        self.land("raw_plaid_transactions", [{**self.txn("s1", "card", 32.5, "GENERAL_MERCHANDISE_OTHER", day="2026-03-03"),
+        self.land("plaid_transaction", [{**self.txn("s1", "card", 32.5, "GENERAL_MERCHANDISE_OTHER", day="2026-03-03"),
                                               "pending_transaction_id": "p1"},
                                              {"_sync_op": "removed", "transaction_id": "p1", "account_id": "card",
                                               "item_label": "Test Bank", "date": "None", "authorized_date": "None",
@@ -136,11 +136,11 @@ class SyncTests(unittest.TestCase):
         self.assertEqual((float(rows["p1"]["amount"]), rows["p1"]["is_pending"], rows["p1"]["category"]), (32.5, False, "Gifts"))
 
     def test_loads_what_landed_then_only_what_is_new(self):
-        self.land("raw_plaid_balances", [self.balance("chk", "1111", "depository", "checking", 500, 480),
+        self.land("plaid_balance", [self.balance("chk", "1111", "depository", "checking", 500, 480),
                                          self.balance("card", "2222", "credit", "credit card", 120.5, bank="Amex"),
                                          self.balance("roth", "3333", "investment", "roth", 9000, bank="Fidelity"),
                                          self.balance("nomask", None, "depository", "savings", 10, 10)], DAY1)
-        self.land("raw_plaid_transactions", [self.txn("t1", "card", 12.5, "FOOD_AND_DRINK_COFFEE"),
+        self.land("plaid_transaction", [self.txn("t1", "card", 12.5, "FOOD_AND_DRINK_COFFEE"),
                                              self.txn("t2", "chk", -2000, "INCOME_WAGES"),
                                              self.txn("p1", "card", 30, "GENERAL_MERCHANDISE_OTHER", pending=True),
                                              self.txn("t9", "nomask", 5, "BANK_FEES")], DAY1)
@@ -163,8 +163,8 @@ class SyncTests(unittest.TestCase):
 
         # The next day's pull: the pending charge settles under a new id and Plaid removes the pending one.
         day2 = DAY1 + timedelta(days=1)
-        self.land("raw_plaid_balances", [self.balance("card", "2222", "credit", "credit card", 153, bank="Amex")], day2)
-        self.land("raw_plaid_transactions", [self.txn("s1", "card", 32.5, "GENERAL_MERCHANDISE_OTHER", day="2026-03-03"),
+        self.land("plaid_balance", [self.balance("card", "2222", "credit", "credit card", 153, bank="Amex")], day2)
+        self.land("plaid_transaction", [self.txn("s1", "card", 32.5, "GENERAL_MERCHANDISE_OTHER", day="2026-03-03"),
                                              {"_sync_op": "removed", "transaction_id": "p1", "account_id": "card",
                                               "item_label": "Test Bank", "date": "None", "authorized_date": "None",
                                               "pending": False}], day2)
@@ -183,8 +183,8 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(set(self.rows()), {"t1", "t2", "s1"})
 
     def test_the_background_load_is_the_same_load(self):
-        self.land("raw_plaid_balances", [self.balance("chk", "1111", "depository", "checking", 5, 5)], DAY1)
-        self.land("raw_plaid_transactions", [self.txn("t1", "chk", 1, "BANK_FEES")], DAY1)
+        self.land("plaid_balance", [self.balance("chk", "1111", "depository", "checking", 5, 5)], DAY1)
+        self.land("plaid_transaction", [self.txn("t1", "chk", 1, "BANK_FEES")], DAY1)
         report, error = plaid_synced.run_once()
         self.assertIsNone(error)
         self.assertEqual(report["transactions"], 1)

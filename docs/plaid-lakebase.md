@@ -21,9 +21,9 @@ API token and no secrets. It already signs in to Lakebase as its own service pri
 
 | Synced table | VirtuWill |
 |---|---|
-| `raw_plaid_balances`: each account's latest pull | `finance.accounts`: matched by the last four digits (`mask`), created on first sight, institution = `item_label` |
-| `raw_plaid_balances`: pulls since the last load | `finance.balance_snapshots`: the current balance, plus the available balance for bank accounts, one reading per account and day (America/Chicago). A card's balance is what's owed. |
-| `raw_plaid_transactions`: each transaction touched since the last load, at its latest sync | `finance.transactions`: matched on Plaid's `transaction_id`, so a re-sent or modified one updates in place |
+| `bronze.plaid_balance`: each account's latest pull | `finance.accounts`: matched by the last four digits (`mask`), created on first sight, institution = `item_label` |
+| `bronze.plaid_balance`: pulls since the last load | `finance.balance_snapshots`: the current balance, plus the available balance for bank accounts, one reading per account and day (America/Chicago). A card's balance is what's owed. |
+| `bronze.plaid_transaction`: each transaction touched since the last load, at its latest sync | `finance.transactions`: matched on Plaid's `transaction_id`, so a re-sent or modified one updates in place |
 | … whose latest `_sync_op` is `removed` | deleted from `finance.transactions` (unless a receipt points at it) |
 
 - **"Since the last load"** is judged by Auto Loader's `_ingested_at` (or `_pulled_at` if that
@@ -44,11 +44,13 @@ API token and no secrets. It already signs in to Lakebase as its own service pri
 
 ## Setting it up
 
-1. **The synced tables.** The app reads `bronze.raw_plaid_balances` and
-   `bronze.raw_plaid_transactions`. These are the synced copies of the two bronze tables, in
-   the **same Lakebase database** as the app (`databricks_postgres` by default). The names
+1. **The synced tables.** The app reads `bronze.plaid_balance` and
+   `bronze.plaid_transaction`. These are the synced copies of the two bronze tables, in
+   the **same Lakebase database** as the app's own tables: `virtuwill` (project virtuwill ·
+   branch production). A query can't reach across databases. The names
    are fixed in `TABLES` at the top of `virtuwill/plaid_synced.py`.
-2. **Let the app read them.** In the Lakebase SQL editor (database `databricks_postgres`),
+2. **Let the app read them.** In the Lakebase SQL editor, connected to the `virtuwill` database
+   (the database button at the top right; the editor may start on `databricks_postgres`),
    signed in as the synced tables' owner (you), run
    [`db/lakebase/grant_plaid_synced_tables.sql`](../db/lakebase/grant_plaid_synced_tables.sql).
    It checks that both tables are there, grants the app's service principal `USAGE` on
