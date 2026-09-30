@@ -38,9 +38,7 @@ def today():
             "week": plain(conn.execute("SELECT * FROM health.weekly_workout_progress WHERE week_start = %s",
                                        (week_start,)).fetchone() or {"week_start": week_start}),
             "goals": _rows(conn, "SELECT * FROM health.goal_progress ORDER BY metric"),
-            "workouts": _rows(conn, """SELECT w.*, NOT t.counts_toward_goal AS is_dog_walk FROM journal.workouts w
-                                       JOIN journal.workout_types t USING (workout_type) WHERE workout_date = %s
-                                       ORDER BY workout_id""", day),
+            "workouts": _rows(conn, f"SELECT * FROM ({health.WORKOUTS}) w WHERE workout_date = %s ORDER BY workout_id", day),
             "meals": _rows(conn, f"""SELECT * FROM ({health.MEALS_WITH_ITEMS}) m WHERE meal_date = %s
                                      ORDER BY array_position(ARRAY['breakfast','lunch','dinner','snack','meal'], slot), meal_id""", day),
             "weighIns": _rows(conn, """SELECT * FROM health.body_measurements WHERE measured_on = %s

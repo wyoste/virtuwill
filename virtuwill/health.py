@@ -373,7 +373,8 @@ def set_goal_route(metric):
 # The embedded tracker is retired, so rows it once produced are edited here
 # like any other; nothing projects over them any more.
 
-WORKOUT_TYPES = {"Strength", "Cardio", "Mobility / recovery", "Dog walk", "Other"}
+WORKOUT_TYPES = {"Strength", "Cardio", "HIIT", "Mobility / recovery", "Dog walk", "Other"}
+DISTANCE_TYPES = {"Cardio", "Dog walk"}          # the only workouts with a distance or a route
 SLOTS_V1 = {"breakfast", "lunch", "dinner", "snack", "meal"}
 
 
@@ -464,16 +465,106 @@ MEALS_WITH_ITEMS = """
            FROM journal.meal_items i WHERE i.meal_id = m.meal_id), '[]') AS items
     FROM journal.meals m"""
 
+CIRCUIT = (("rounds", 1, 100), ("exercises_per_round", 1, 50), ("work_seconds", 1, 3600),
+           ("exercise_rest_seconds", 0, 3600), ("round_rest_seconds", 0, 3600))
+
+
+def _lifts(conn, value):
+    """[{lift, sets}] from a body's lifts: known lifts keep their catalogue spelling, new ones are added."""
+    if not isinstance(value, list) or len(value) > 40:
+        raise records.Invalid("lifts must be a list of up to 40 {lift, sets}")
+    known = {r["lift"].lower(): r["lift"] for r in conn.execute("SELECT lift FROM journal.lifts")}
+    out, seen = [], set()
+    for item in value:
+        name = " ".join(_text(item.get("lift") if isinstance(item, dict) else item).split())
+        sets = number(item.get("sets")) if isinstance(item, dict) else None
+        if not name or len(name) > 60:
+            raise records.Invalid("Each lift needs a name of up to 60 characters")
+        if sets is None or sets != int(sets) or not 1 <= sets <= 50:
+            raise records.Invalid(f"{name}: sets must be a whole number from 1 to 50")
+        name = known.get(name.lower(), name)
+        if name.lower() in seen:
+            raise records.Invalid(f"{name} is listed twice")
+        seen.add(name.lower())
+        out.append({"lift": name, "sets": int(sets)})
+    return out
+
+
+def _circuit(value):
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise records.Invalid("circuit must be an object")
+    out = {}
+    for key, low, high in CIRCUIT:
+        n = number(value.get(key)) if value.get(key) not in (None, "") else (0 if low == 0 else None)
+        if n is None or n != int(n) or not low <= n <= high:
+            raise records.Invalid(f"{key.replace('_', ' ')} must be a whole number from {low} to {high}")
+        out[key] = int(n)
+    return out
+
+
+def _workout_parts(conn, values, body):
+    """Lifts belong to strength workouts, a circuit to HIIT, distance and routes to cardio and dog walks."""
+    lifts = _lifts(conn, body["lifts"]) if "lifts" in body else None
+    circuit = _circuit(body["circuit"]) if "circuit" in body else None
+
+    def write(conn, workout_id):
+        w = conn.execute("SELECT workout_type, minutes FROM journal.workouts WHERE workout_id = %s", (workout_id,)).fetchone()
+        kind = w["workout_type"]
+        if kind != "Strength" or lifts is not None:
+            conn.execute("DELETE FROM journal.workout_lifts WHERE workout_id = %s", (workout_id,))
+        if kind == "Strength" and lifts:
+            for position, x in enumerate(lifts):
+                conn.execute("INSERT INTO journal.lifts (lift) VALUES (%s) ON CONFLICT (lift) DO NOTHING", (x["lift"],))
+                conn.execute("INSERT INTO journal.workout_lifts (workout_id, position, lift, sets) VALUES (%s, %s, %s, %s)",
+                             (workout_id, position, x["lift"], x["sets"]))
+        if kind != "HIIT" or ("circuit" in body and circuit is None):
+            conn.execute("DELETE FROM journal.workout_circuits WHERE workout_id = %s", (workout_id,))
+        elif circuit:
+            conn.execute("""INSERT INTO journal.workout_circuits (workout_id, rounds, exercises_per_round, work_seconds,
+                                                                  exercise_rest_seconds, round_rest_seconds)
+                            VALUES (%(id)s, %(rounds)s, %(exercises_per_round)s, %(work_seconds)s,
+                                    %(exercise_rest_seconds)s, %(round_rest_seconds)s)
+                            ON CONFLICT (workout_id) DO UPDATE SET rounds = EXCLUDED.rounds,
+                                exercises_per_round = EXCLUDED.exercises_per_round, work_seconds = EXCLUDED.work_seconds,
+                                exercise_rest_seconds = EXCLUDED.exercise_rest_seconds,
+                                round_rest_seconds = EXCLUDED.round_rest_seconds""", circuit | {"id": workout_id})
+            if w["minutes"] is None:          # a blank time is the circuit's length
+                conn.execute("""UPDATE journal.workouts w SET minutes = round(c.total_seconds / 60.0, 1)
+                                FROM journal.workout_circuits c WHERE c.workout_id = w.workout_id AND w.workout_id = %s""",
+                             (workout_id,))
+        if kind not in DISTANCE_TYPES:
+            conn.execute("UPDATE journal.workouts SET distance = NULL WHERE workout_id = %s AND distance IS NOT NULL", (workout_id,))
+            conn.execute("DELETE FROM journal.workout_routes WHERE workout_id = %s", (workout_id,))
+    return values, write
+
+
+# Every workout with what its editor needs: its route, lifts and circuit (Health and Today share it).
+WORKOUTS = """
+    SELECT w.*, NOT t.counts_toward_goal AS is_dog_walk, r.workout_id IS NOT NULL AS has_route,
+           r.elevation_gain_m, r.started_at AS route_started_at,
+           COALESCE((SELECT jsonb_agg(jsonb_build_object('lift', l.lift, 'sets', l.sets) ORDER BY l.position)
+                     FROM journal.workout_lifts l WHERE l.workout_id = w.workout_id), '[]') AS lifts,
+           (SELECT to_jsonb(c) - 'workout_id' FROM journal.workout_circuits c WHERE c.workout_id = w.workout_id) AS circuit
+    FROM journal.workouts w JOIN journal.workout_types t USING (workout_type)
+    LEFT JOIN journal.workout_routes r USING (workout_id)"""
+
 F = records.Field
 records.Resource(bp, "/api/v1/health/workouts", "journal.workouts", "workout_id", [
     F("workout_date", "date", required=True), F("workout_type", choices=WORKOUT_TYPES, default="Other"),
     F("activity", max_length=100), F("minutes", "number", low=0, high=1440), F("note", max_length=2000),
     F("distance", "number", low=0, high=1000), F("distance_unit", choices={"mi", "km"}, default="mi")],
-    date_column="workout_date", defaults={"source": "manual"},
-    select="""SELECT w.*, NOT t.counts_toward_goal AS is_dog_walk, r.workout_id IS NOT NULL AS has_route,
-                     r.elevation_gain_m, r.started_at AS route_started_at
-              FROM journal.workouts w JOIN journal.workout_types t USING (workout_type)
-              LEFT JOIN journal.workout_routes r USING (workout_id)""")
+    date_column="workout_date", defaults={"source": "manual"}, prepare=_workout_parts, select=WORKOUTS)
+
+
+@bp.route("/api/v1/health/lifts")
+@admin_required
+def lifts_v1():
+    """The lifts to pick from, grouped for the picker; lifts added by hand come last."""
+    with db.tx() as conn:
+        return jsonify([plain(r) for r in conn.execute(
+            "SELECT lift, muscle_group FROM journal.lifts ORDER BY muscle_group = '', muscle_group, position, lift")])
 
 
 # ── Routes: a GPX or TCX file for a run, ride or walk ────────────────────────
@@ -492,6 +583,8 @@ def workout_route_v1(workout_id):
         if request.method == "DELETE":
             conn.execute("DELETE FROM journal.workout_routes WHERE workout_id = %s", (workout_id,))
             return jsonify({"ok": True})
+        if workout["workout_type"] not in DISTANCE_TYPES:
+            return jsonify({"error": "Only cardio workouts and dog walks carry a route"}), 400
         f = request.files.get("file")
         content = f.read(routes.MAX_BYTES + 1) if f else b""
         if not content:
