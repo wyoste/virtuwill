@@ -1,19 +1,29 @@
-"""RunKeeper, from the Lakebase synced table into the workouts — automatically.
+"""RunKeeper, from the Lakebase synced tables into the workouts — automatically.
 
-prod.bronze.raw_runkeeper_activities (jobs/runkeeper_to_bronze.py lands the
-RunKeeper export there) is mirrored into this database's bronze schema by a
-Lakebase synced table, read-only (TABLE). Every RUNKEEPER_SYNC_MINUTES the app
-reads the activities written since its last load and loads each one into
-journal.workouts (source 'runkeeper', source_ref = RunKeeper's Activity Id) on
-the date it started, with its GPX track in journal.workout_routes. Today,
-Health and the journal then show it on that date like any other workout.
+Two notebooks land the RunKeeper export in the lakehouse:
+jobs/runkeeper_activities_to_bronze.ipynb writes the activity log to
+prod.bronze.raw_runkeeper_activities, and jobs/runkeeper_gpx_to_bronze.ipynb writes
+the GPS tracks to prod.bronze.raw_runkeeper_gpx. Lakebase synced tables mirror both
+into this database's bronze schema, read-only (TABLES).
 
-A reloaded activity updates its numbers (time, distance, the RunKeeper details)
-and its route, but keeps the type, name, note and date you gave it in the app.
+Every RUNKEEPER_SYNC_MINUTES the app reads what was written to them since its last load:
+
+- each activity becomes a workout in journal.workouts (source 'runkeeper',
+  source_ref = RunKeeper's Activity Id) on the date it started, with its track
+  in journal.workout_routes if the track has landed;
+- each track that lands later is added to its activity's workout.
+
+A track belongs to the activity whose GPX File column names it, else to the one whose
+start time is in its file name. Today, Health and the journal show the workouts on
+their dates like any other.
+
+When an activity is loaded again, the app updates its numbers (time, distance and the
+RunKeeper details) and its route. It keeps the type, name, note and date you gave it in
+the app. The track table is optional: until it can be read, workouts load without routes.
 
     RUNKEEPER_SYNC_MINUTES      how often to check (0, the default, turns the loop off)
 
-    GET  /api/v1/health/runkeeper-sync   what the synced table holds, how far it's been loaded
+    GET  /api/v1/health/runkeeper-sync   what the synced tables hold, how far they've been loaded
     POST /api/v1/health/runkeeper-sync   load now ({"dry_run": true} to preview, {"reload": true} to read it all again)
 """
 import logging
@@ -34,8 +44,10 @@ log = logging.getLogger(__name__)
 bp = Blueprint("runkeeper_synced", __name__)
 
 SOURCE = "runkeeper_bronze"               # its row in virtuwill.sync_reports (Settings › Diagnostics)
-TABLE = ("bronze", "runkeeper_activity")  # the synced copy of prod.bronze.raw_runkeeper_activities
-BATCH = 200                               # activities per transaction; each carries its whole GPX file
+# The synced copies of prod.bronze.raw_runkeeper_activities and raw_runkeeper_gpx, and each one's key.
+TABLES = {"activities": ("bronze", "runkeeper_activity"), "gpx": ("bronze", "runkeeper_gpx")}
+KEYS = {"activities": "activity_id", "gpx": "gpx_file"}
+BATCH = 200                               # rows per transaction; a track carries its whole GPX file
 NUMBERS = ("calories_burned", "average_heart_rate_bpm", "climb", "average_speed")
 DISTANCE_TYPES = {"Cardio", "Dog walk"}   # as health.DISTANCE_TYPES: the only workouts with a distance or a route
 
@@ -49,7 +61,7 @@ TYPES = {
 
 
 class SyncedTableUnavailable(Exception):
-    """The synced table is missing, or this app can't read it."""
+    """The activities' synced table is missing, or this app can't read it."""
 
 
 # ── RunKeeper's text → the workout model ─────────────────────────────────────
@@ -115,36 +127,98 @@ def route(row):
         return None
 
 
-# ── Reading the synced table ─────────────────────────────────────────────────
+# ── Reading the synced tables ────────────────────────────────────────────────
 
-def _check(conn):
-    schema, name = TABLE
+def _readable(conn, kind):
+    """None if the synced table can be read, else why not."""
+    schema, name = TABLES[kind]
     qualified = sql.Identifier(schema, name).as_string(conn)
     if not conn.execute("SELECT to_regclass(%s) IS NOT NULL AS ok", (qualified,)).fetchone()["ok"]:
-        raise SyncedTableUnavailable(f"{schema}.{name} isn't in this database: check the synced table's name "
-                                     "(docs/runkeeper-lakebase.md).")
+        return f"{schema}.{name} isn't in this database: check the synced table's name (docs/runkeeper-lakebase.md)."
     if not conn.execute("SELECT has_table_privilege(%s, 'SELECT') AS ok", (qualified,)).fetchone()["ok"]:
-        raise SyncedTableUnavailable(f"The app can't read {schema}.{name}: grant its role SELECT (docs/runkeeper-lakebase.md).")
+        return f"The app can't read {schema}.{name}: grant its role SELECT (docs/runkeeper-lakebase.md)."
+    return None
+
+
+def _check(conn):
+    """Raises if the activities can't be read; returns why the tracks can't be (None when they can)."""
+    problem = _readable(conn, "activities")
+    if problem:
+        raise SyncedTableUnavailable(problem)
+    return _readable(conn, "gpx")
 
 
 def state(conn):
-    return conn.execute("SELECT through_at, through_id FROM journal.runkeeper_bronze_load").fetchone() or \
-        {"through_at": None, "through_id": None}
+    row = conn.execute("SELECT * FROM journal.runkeeper_bronze_load").fetchone() or {}
+    return {"activities": {"at": row.get("through_at"), "id": row.get("through_id")},
+            "gpx": {"at": row.get("gpx_through_at"), "id": row.get("gpx_through_id")}}
 
 
-def read(conn, after, limit=BATCH):
-    """The next activities written after (at, id), in the order they were written."""
-    return conn.execute(sql.SQL("""SELECT * FROM {t}
-                                   WHERE (_ingested_at::timestamptz, activity_id)
-                                         > (COALESCE(%s::timestamptz, '-infinity'), COALESCE(%s, ''))
-                                   ORDER BY _ingested_at::timestamptz, activity_id LIMIT %s""").format(t=sql.Identifier(*TABLE)),
-                        (after["through_at"], after["through_id"] if after["through_at"] else None, limit)).fetchall()
+# A track belongs to the activity whose GPX File names it, else to the one that started when its file name says.
+_MATCH = "(lower(g.gpx_file) = lower(a.gpx_file) OR g.activity_start = a.activity_date)"
+_FIRST = "ORDER BY lower(g.gpx_file) = lower(a.gpx_file) DESC NULLS LAST"
+_AFTER = "({t}._ingested_at::timestamptz, {t}.{k}) > (COALESCE(%(at)s::timestamptz, '-infinity'), COALESCE(%(id)s, ''))"
+
+
+def _after(after):
+    return {"at": after["at"], "id": after["id"] if after["at"] else None}
+
+
+def read_activities(conn, after, limit, with_gpx=True):
+    """The next activities written after the cursor, each with its track if it has landed (gpx, track_file)."""
+    a, g = (sql.Identifier(*TABLES[k]) for k in ("activities", "gpx"))
+    track = sql.SQL(f"""LEFT JOIN LATERAL (SELECT g.gpx, g.gpx_file AS track_file FROM {{g}} g WHERE {_MATCH}
+                                           {_FIRST} LIMIT 1) g ON true""").format(g=g) if with_gpx else \
+        sql.SQL("CROSS JOIN (SELECT NULL::text AS gpx, NULL::text AS track_file) g")
+    return conn.execute(sql.SQL("SELECT a.*, g.gpx, g.track_file FROM {a} a {track} WHERE " + _AFTER.format(t="a", k="activity_id")
+                                + " ORDER BY a._ingested_at::timestamptz, a.activity_id LIMIT %(limit)s")
+                        .format(a=a, track=track), _after(after) | {"limit": limit}).fetchall()
+
+
+def read_tracks(conn, after, limit):
+    """The next tracks written after the cursor, each with its activity's workout (None until it's loaded), and
+    whether that workout's route was already drawn from this track since it landed (drawn)."""
+    a, g = (sql.Identifier(*TABLES[k]) for k in ("activities", "gpx"))
+    return conn.execute(sql.SQL(f"""
+        SELECT g.gpx_file, g.gpx, g._ingested_at, a.activity_id, w.workout_id, w.workout_type, w.distance, w.distance_unit,
+               r.file_name = g.gpx_file AND r.created_at >= g._ingested_at::timestamptz AS drawn
+        FROM {{g}} g
+        LEFT JOIN LATERAL (SELECT a.activity_id, a.gpx_file FROM {{a}} a WHERE {_MATCH} {_FIRST} LIMIT 1) a ON true
+        LEFT JOIN journal.workouts w ON w.source = 'runkeeper' AND w.source_ref = a.activity_id
+        LEFT JOIN journal.workout_routes r ON r.workout_id = w.workout_id
+        WHERE {_AFTER.format(t="g", k="gpx_file")}
+        ORDER BY g._ingested_at::timestamptz, g.gpx_file LIMIT %(limit)s""").format(a=a, g=g),
+                        _after(after) | {"limit": limit}).fetchall()
 
 
 # ── Loading ──────────────────────────────────────────────────────────────────
 
+def attach(conn, workout_id, kind, distance, unit, gpx, file_name):
+    """Draw a workout's route from its track. Returns 1 if stored, 0 if not (no usable track, not cardio, or a
+    route you uploaded yourself, which is never replaced). A blank distance is filled from the track."""
+    if kind not in DISTANCE_TYPES:
+        return 0
+    r = route({"gpx": gpx})
+    if not r:
+        return 0
+    stored = conn.execute("""
+        INSERT INTO journal.workout_routes (workout_id, points, distance_km, elevation_gain_m, started_at, ended_at, file_name)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (workout_id) DO UPDATE SET points = EXCLUDED.points, distance_km = EXCLUDED.distance_km,
+            elevation_gain_m = EXCLUDED.elevation_gain_m, started_at = EXCLUDED.started_at, ended_at = EXCLUDED.ended_at,
+            file_name = EXCLUDED.file_name, created_at = now()
+        WHERE journal.workout_routes.file_asset_id IS NULL""",
+                          (workout_id, db.jsonb(r["points"]), r["distance_km"], r["elevation_gain_m"],
+                           r["started_at"], r["ended_at"], (file_name or "")[:200])).rowcount
+    if stored and distance is None and r["distance_km"]:
+        km = r["distance_km"]
+        conn.execute("UPDATE journal.workouts SET distance = %s WHERE workout_id = %s",
+                     (round(km / 1.609344 if unit == "mi" else km, 2), workout_id))
+    return stored
+
+
 def apply(conn, rows):
-    """Load one batch of synced rows into the workouts. Returns counts."""
+    """Load a batch of activities (with their tracks, where landed) into the workouts. Returns counts."""
     out = {"workouts_added": 0, "workouts_updated": 0, "routes": 0, "skipped": []}
     for row in rows:
         w = workout(row)
@@ -161,37 +235,33 @@ def apply(conn, rows):
                     distance = CASE WHEN journal.workouts.workout_type IN ('Cardio', 'Dog walk')
                                     THEN EXCLUDED.distance ELSE journal.workouts.distance END,
                     details = journal.workouts.details || EXCLUDED.details
-            RETURNING workout_id, workout_type, distance, (xmax = 0) AS added""",
+            RETURNING workout_id, workout_type, distance, distance_unit, (xmax = 0) AS added""",
                              {**w, "details": Jsonb(w["details"])}).fetchone()
         out["workouts_added" if saved["added"] else "workouts_updated"] += 1
-        if saved["workout_type"] not in DISTANCE_TYPES:
-            continue
-        r = route(row)
-        if not r:
-            continue
-        # A route you uploaded in the app (kept as a media asset) is never replaced.
-        stored = conn.execute("""
-            INSERT INTO journal.workout_routes (workout_id, points, distance_km, elevation_gain_m, started_at, ended_at, file_name)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (workout_id) DO UPDATE SET points = EXCLUDED.points, distance_km = EXCLUDED.distance_km,
-                elevation_gain_m = EXCLUDED.elevation_gain_m, started_at = EXCLUDED.started_at, ended_at = EXCLUDED.ended_at,
-                file_name = EXCLUDED.file_name, created_at = now()
-            WHERE journal.workout_routes.file_asset_id IS NULL""",
-                              (saved["workout_id"], db.jsonb(r["points"]), r["distance_km"], r["elevation_gain_m"],
-                               r["started_at"], r["ended_at"], (row.get("gpx_file") or "")[:200])).rowcount
-        out["routes"] += stored
-        if stored and saved["distance"] is None and r["distance_km"]:
-            km = r["distance_km"]
-            conn.execute("UPDATE journal.workouts SET distance = %s WHERE workout_id = %s",
-                         (round(km / 1.609344 if w["distance_unit"] == "mi" else km, 2), saved["workout_id"]))
+        if row.get("gpx"):
+            out["routes"] += attach(conn, saved["workout_id"], saved["workout_type"], saved["distance"],
+                                    saved["distance_unit"], row["gpx"], row.get("track_file"))
     return out
 
 
-def _save_state(conn, last):
-    conn.execute("""INSERT INTO journal.runkeeper_bronze_load (id, through_at, through_id) VALUES (true, %s, %s)
-                    ON CONFLICT (id) DO UPDATE SET through_at = EXCLUDED.through_at, through_id = EXCLUDED.through_id,
-                                                   updated_at = now()""",
-                 (last["_ingested_at"], last["activity_id"]))
+def apply_tracks(conn, rows):
+    """Add a batch of newly landed tracks to their activities' workouts. Returns counts."""
+    out = {"routes": 0, "tracks_without_activity": 0}
+    for row in rows:
+        if row["activity_id"] is None:
+            out["tracks_without_activity"] += 1
+        # Not loaded yet: the activity brings its track when it loads. Already drawn: its activity just brought it.
+        elif row["workout_id"] is not None and not row["drawn"]:
+            out["routes"] += attach(conn, row["workout_id"], row["workout_type"], row["distance"], row["distance_unit"],
+                                    row["gpx"], row["gpx_file"])
+    return out
+
+
+def _save_state(conn, kind, at, key):
+    columns = ("through_at", "through_id") if kind == "activities" else ("gpx_through_at", "gpx_through_id")
+    conn.execute(sql.SQL("""INSERT INTO journal.runkeeper_bronze_load (id, {at}, {key}) VALUES (true, %s, %s)
+                            ON CONFLICT (id) DO UPDATE SET {at} = EXCLUDED.{at}, {key} = EXCLUDED.{key}, updated_at = now()""")
+                 .format(at=sql.Identifier(columns[0]), key=sql.Identifier(columns[1])), (at, key))
 
 
 def record(conn, report):
@@ -207,30 +277,37 @@ def _add(total, part):
 
 
 def sync(dry_run=False, reload=False, batch=BATCH):
-    """Load everything written since the last load, a batch per transaction, so a long first load keeps its
-    progress. A dry run reads and maps the first batch, then rolls it back. Returns a report."""
-    total = {"workouts_added": 0, "workouts_updated": 0, "routes": 0, "skipped": [], "batches": 0}
-    after = None
-    while True:
-        with db.tx() as conn:
-            if not conn.execute("SELECT pg_try_advisory_xact_lock(hashtext('virtuwill_runkeeper_bronze')) AS ok").fetchone()["ok"]:
-                return {"skipped": "Another load is running."}
-            _check(conn)
-            if after is None:
-                after = {"through_at": None, "through_id": None} if reload else state(conn)
-            rows = read(conn, after, batch)
-            if not rows:
-                break
-            _add(total, apply(conn, rows))
-            total["batches"] += 1
-            last = rows[-1]
-            after = {"through_at": last["_ingested_at"], "through_id": last["activity_id"]}
-            if dry_run:
-                conn.rollback()
-                return total | {"dry_run": True, "more": len(rows) == batch}
-            _save_state(conn, last)
-            if len(rows) < batch:
-                break
+    """Load the activities, then the tracks, written since the last load: a batch per transaction, so a long first
+    load keeps its progress. A dry run reads and maps the first batch, then rolls it back. Returns a report."""
+    total = {"workouts_added": 0, "workouts_updated": 0, "routes": 0, "tracks_without_activity": 0, "skipped": [],
+             "batches": 0}
+    for kind in ("activities", "gpx"):
+        after = None
+        while True:
+            with db.tx() as conn:
+                if not conn.execute("SELECT pg_try_advisory_xact_lock(hashtext('virtuwill_runkeeper_bronze')) AS ok").fetchone()["ok"]:
+                    return {"skipped": "Another load is running."}
+                gpx_problem = _check(conn)
+                if gpx_problem:
+                    total["gpx"] = gpx_problem
+                    if kind == "gpx":
+                        break
+                if after is None:
+                    after = {"at": None, "id": None} if reload else state(conn)[kind]
+                rows = (read_activities(conn, after, batch, with_gpx=not gpx_problem) if kind == "activities"
+                        else read_tracks(conn, after, batch))
+                if not rows:
+                    break
+                _add(total, apply(conn, rows) if kind == "activities" else apply_tracks(conn, rows))
+                total["batches"] += 1
+                last = rows[-1]
+                after = {"at": last["_ingested_at"], "id": last[KEYS[kind]]}
+                if dry_run:
+                    conn.rollback()
+                    return total | {"dry_run": True, "previewed": kind, "more": len(rows) == batch}
+                _save_state(conn, kind, after["at"], after["id"])
+                if len(rows) < batch:
+                    break
     if dry_run:
         return total | {"dry_run": True, "nothing_new": True}
     if not total["batches"]:
@@ -243,23 +320,29 @@ def sync(dry_run=False, reload=False, batch=BATCH):
 
 def status(conn):
     loaded = state(conn)
-    out = {"table": ".".join(TABLE), "every_minutes": _minutes(),
-           "loaded_through": loaded["through_at"].isoformat() if loaded["through_at"] else None}
+    out = {"tables": {k: ".".join(v) for k, v in TABLES.items()}, "every_minutes": _minutes(),
+           "loaded_through": {k: v["at"].isoformat() if v["at"] else None for k, v in loaded.items()}}
     try:
-        _check(conn)
+        gpx_problem = _check(conn)
     except SyncedTableUnavailable as e:
         return out | {"available": False, "error": str(e)}
-    row = conn.execute(sql.SQL("""SELECT COUNT(*) AS rows, COUNT(gpx) AS with_gpx, MAX(_ingested_at::timestamptz) AS newest,
-                                         COUNT(*) FILTER (WHERE (_ingested_at::timestamptz, activity_id)
-                                             > (COALESCE(%s::timestamptz, '-infinity'), COALESCE(%s, ''))) AS not_loaded
-                                  FROM {t}""").format(t=sql.Identifier(*TABLE)),
-                       (loaded["through_at"], loaded["through_id"] if loaded["through_at"] else None)).fetchone()
-    workouts = conn.execute("SELECT COUNT(*) AS n, MIN(workout_date) AS first, MAX(workout_date) AS last "
-                            "FROM journal.workouts WHERE source = 'runkeeper'").fetchone()
+    for kind in ("activities",) if gpx_problem else ("activities", "gpx"):
+        t = sql.Identifier(*TABLES[kind])
+        row = conn.execute(sql.SQL("SELECT COUNT(*) AS rows, MAX(_ingested_at::timestamptz) AS newest, "
+                                   "COUNT(*) FILTER (WHERE " + _AFTER.format(t="x", k=KEYS[kind]) + ") AS not_loaded "
+                                   "FROM {t} x").format(t=t), _after(loaded[kind])).fetchone()
+        out[kind] = {"rows": row["rows"], "newest": row["newest"].isoformat() if row["newest"] else None,
+                     "not_loaded": row["not_loaded"]}
+    if gpx_problem:
+        out["gpx"] = {"available": False, "error": gpx_problem}
+    workouts = conn.execute("""SELECT COUNT(*) AS n, COUNT(r.workout_id) AS routes, MIN(workout_date) AS first,
+                                      MAX(workout_date) AS last
+                               FROM journal.workouts w LEFT JOIN journal.workout_routes r USING (workout_id)
+                               WHERE w.source = 'runkeeper'""").fetchone()
     last = conn.execute("SELECT report, synced_at FROM virtuwill.sync_reports WHERE source = %s", (SOURCE,)).fetchone()
-    return out | {"available": True, "rows": row["rows"], "with_gpx": row["with_gpx"], "not_loaded": row["not_loaded"],
-                  "newest": row["newest"].isoformat() if row["newest"] else None,
-                  "workouts": {"count": workouts["n"], "first": workouts["first"] and workouts["first"].isoformat(),
+    return out | {"available": True,
+                  "workouts": {"count": workouts["n"], "with_route": workouts["routes"],
+                               "first": workouts["first"] and workouts["first"].isoformat(),
                                "last": workouts["last"] and workouts["last"].isoformat()},
                   "last_load": {"at": last["synced_at"].isoformat(), **last["report"]} if last else None}
 
@@ -274,7 +357,6 @@ def run_once(dry_run=False, reload=False):
         with db.tx() as conn:
             record(conn, {"error": failure})
     return None, failure
-
 
 # ── Automatic: a background loop in each worker (the advisory lock lets one load at a time) ──
 

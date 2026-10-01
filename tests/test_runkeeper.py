@@ -1,11 +1,13 @@
-"""RunKeeper: the bronze job's reading of the export, and the app's load from the Lakebase synced table.
-The synced table is stood in for by a plain table shaped like the bronze one; the activities are made up."""
-import importlib.util
+"""RunKeeper: the two bronze notebooks' reading of the export, and the app's load from the Lakebase synced tables.
+The notebooks' code cells run here without Spark (the cell tagged "run" is skipped). The synced tables are stood in for
+by plain tables shaped like the bronze ones; the activities and tracks are made up."""
+import json
 import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import psycopg
@@ -16,9 +18,20 @@ from app import app
 from virtuwill import runkeeper_synced as rk
 
 ROOT = Path(__file__).resolve().parent.parent
-_spec = importlib.util.spec_from_file_location("runkeeper_job", ROOT / "jobs" / "runkeeper_to_bronze.py")
-job = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(job)
+
+
+def notebook(name):
+    """A notebook's code cells, run as a module, all but the one that runs it."""
+    cells = json.loads((ROOT / "jobs" / name).read_text())["cells"]
+    namespace = {"__name__": name}
+    for cell in cells:
+        if cell["cell_type"] == "code" and "run" not in cell["metadata"].get("tags", []):
+            exec(compile("".join(cell["source"]), name, "exec"), namespace)
+    return SimpleNamespace(**namespace)
+
+
+activities_nb = notebook("runkeeper_activities_to_bronze.ipynb")
+gpx_nb = notebook("runkeeper_gpx_to_bronze.ipynb")
 
 HEADER = ("Activity Id,Date,Type,Route Name,Distance (mi),Duration,Average Pace,Average Speed (mph),Calories Burned,"
           "Climb (ft),Average Heart Rate (bpm),Friend's Tagged,Notes,GPX File\n")
@@ -28,51 +41,66 @@ CSV = HEADER + (
     "a3,2019-05-07 18:00:00,Cycling,,20.5,1:05:12,3:10,18.9,900,800,,,,\n")
 
 
-class JobTests(unittest.TestCase):
+class NotebookTests(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
-        (self.dir / "activities" / "2026-09").mkdir(parents=True)
-        (self.dir / "gpx").mkdir()
-        (self.dir / "activities" / "2026-09" / "cardioActivities.csv").write_text(CSV)
-        (self.dir / "activities" / "measurements.csv").write_text("Date,Weight\n2019-05-04,180\n")
-        (self.dir / "gpx" / "2019-05-04-163509.gpx").write_bytes(gpx(TRACK))
-        (self.dir / "gpx" / "2019-05-07-180000.gpx").write_bytes(gpx(TRACK))     # a3 names none: matched by its start
-        (self.dir / "gpx" / "2018-01-01-000000.gpx").write_bytes(gpx(TRACK))     # no activity
+        (self.dir / "activity_logs" / "2026-09").mkdir(parents=True)
+        (self.dir / "gpx_maps").mkdir()
+        (self.dir / "activity_logs" / "2026-09" / "cardioActivities.csv").write_text(CSV)
+        (self.dir / "activity_logs" / "measurements.csv").write_text("Date,Weight\n2019-05-04,180\n")
+        (self.dir / "gpx_maps" / "2019-05-04-163509.gpx").write_bytes(gpx(TRACK))
+        (self.dir / "gpx_maps" / "route.gpx").write_bytes(gpx(TRACK))           # no start time in its name
+
+    def test_the_run_cell_is_the_only_one_tagged(self):
+        for name in ("runkeeper_activities_to_bronze.ipynb", "runkeeper_gpx_to_bronze.ipynb"):
+            cells = json.loads((ROOT / "jobs" / name).read_text())["cells"]
+            run = [c for c in cells if "run" in c["metadata"].get("tags", [])]
+            self.assertEqual(len(run), 1, name)
+            self.assertIn("run(spark", "".join(run[0]["source"]))
 
     def test_headers_and_units(self):
-        self.assertEqual(job.column("Distance (km)"), ("distance", "km"))
-        self.assertEqual(job.column("Average Heart Rate (bpm)"), ("average_heart_rate_bpm", None))
-        self.assertEqual(job.column("Friend's Tagged"), ("friends_tagged", None))
-        self.assertEqual(job.column("Something New"), (None, None))
-        self.assertEqual(job.gpx_name_for("2019-05-04 16:35:09"), "2019-05-04-163509.gpx")
+        self.assertEqual(activities_nb.column("Distance (km)"), ("distance", "km"))
+        self.assertEqual(activities_nb.column("Average Heart Rate (bpm)"), ("average_heart_rate_bpm", None))
+        self.assertEqual(activities_nb.column("Friend's Tagged"), ("friends_tagged", None))
+        self.assertEqual(activities_nb.column("Something New"), (None, None))
 
-    def test_reads_the_export_and_finds_each_track(self):
-        activities, files = job.read_activities(str(self.dir / "activities"))
+    def test_reads_the_activity_log(self):
+        activities, files = activities_nb.read_activities(str(self.dir / "activity_logs"))
         self.assertEqual(len(files), 1)                                       # measurements.csv isn't read
         by_id = {a["activity_id"]: a for a in activities}
         self.assertEqual(by_id["a1"]["notes"], 'Easy, with "strides"')
         self.assertEqual((by_id["a1"]["distance_unit"], by_id["a1"]["speed_unit"], by_id["a1"]["climb_unit"]), ("mi", "mph", "ft"))
-        self.assertIsNone(by_id["a2"]["gpx_file"])
-        rows, summary = job.plan(activities, job.gpx_index(str(self.dir / "gpx")), {})
-        self.assertEqual({r["activity_id"]: bool(r["_gpx_path"]) for r in rows}, {"a1": True, "a2": False, "a3": True})
-        self.assertEqual((summary["with_gpx"], summary["gpx_files_without_activity"]), (2, 1))
-        written = job.with_gpx_text(next(r for r in rows if r["activity_id"] == "a1"))
-        self.assertIn("<trkpt", written["gpx"])
-        self.assertEqual(set(written), set(job.COLUMNS) - {"_ingested_at"})
+        self.assertEqual((by_id["a1"]["gpx_file"], by_id["a2"]["gpx_file"]), ("2019-05-04-163509.gpx", None))
+        rows, summary = activities_nb.plan(activities, {})
+        self.assertEqual((summary["activities"], summary["with_gpx_file"], summary["new_or_changed"]), (3, 1, 3))
+        self.assertEqual(set(rows[0]) - set(activities_nb.COLUMNS), set())
 
     def test_unchanged_activities_are_not_written_again_and_the_newest_export_wins(self):
-        activities, _ = job.read_activities(str(self.dir / "activities"))
-        index = job.gpx_index(str(self.dir / "gpx"))
-        rows, _ = job.plan(activities, index, {})
+        activities, _ = activities_nb.read_activities(str(self.dir / "activity_logs"))
+        rows, _ = activities_nb.plan(activities, {})
         existing = {r["activity_id"]: r["_row_hash"] for r in rows}
-        self.assertEqual(job.plan(activities, index, existing)[1]["new_or_changed"], 0)
-        newer = self.dir / "activities" / "CardioActivities (1).csv"     # any case
+        self.assertEqual(activities_nb.plan(activities, existing)[1]["new_or_changed"], 0)
+        newer = self.dir / "activity_logs" / "CardioActivities (1).csv"     # any case
         newer.write_text(CSV.replace("28:30", "29:00"))
         os.utime(newer, (2e9, 2e9))
-        activities, _ = job.read_activities(str(self.dir / "activities"))
-        rows, summary = job.plan(activities, index, existing)
+        activities, _ = activities_nb.read_activities(str(self.dir / "activity_logs"))
+        rows, summary = activities_nb.plan(activities, existing)
         self.assertEqual(([r["activity_id"] for r in rows], summary["activities"]), (["a1"], 3))
         self.assertEqual(rows[0]["duration"], "29:00")
+
+    def test_reads_the_tracks(self):
+        self.assertEqual(gpx_nb.activity_start("2026-09-28-200444.gpx"), "2026-09-28 20:04:44")
+        self.assertIsNone(gpx_nb.activity_start("2026-13-28-200444.gpx"))
+        files = gpx_nb.read_files(str(self.dir / "gpx_maps"))
+        rows, summary = gpx_nb.plan(files, {})
+        self.assertEqual((summary["gpx_files"], summary["without_start_in_name"], summary["new_or_changed"]), (2, 1, 2))
+        track = gpx_nb.with_track(next(r for r in rows if r["gpx_file"] == "2019-05-04-163509.gpx"))
+        self.assertEqual((track["activity_start"], track["points"], track["track_started_at"]),
+                         ("2019-05-04 16:35:09", 5, "2026-03-01T07:00:00Z"))
+        self.assertIn("<trkpt", track["gpx"])
+        self.assertEqual(set(track) - set(gpx_nb.COLUMNS), set())
+        existing = {r["gpx_file"]: r["_row_hash"] for r in rows}
+        self.assertEqual(gpx_nb.plan(files, existing)[1]["new_or_changed"], 0)
 
 
 class MappingTests(unittest.TestCase):
@@ -89,6 +117,8 @@ class MappingTests(unittest.TestCase):
                                "distance": "0.00", "duration": "45:00"})
         self.assertIsNone(strength["distance"])
         self.assertIsNone(rk.workout({"activity_id": "x", "activity_date": "not a date"}))
+        # A stopwatch left running: the time is left blank, not 25 hours.
+        self.assertIsNone(rk.workout({"activity_id": "x", "activity_date": "2026-06-23 07:41:18", "duration": "25:51:49"})["minutes"])
 
     def test_the_loop_only_starts_when_asked(self):
         with mock.patch.dict(os.environ, {"RUNKEEPER_SYNC_MINUTES": "0"}), mock.patch.object(rk.threading, "Thread") as thread:
@@ -96,13 +126,16 @@ class MappingTests(unittest.TestCase):
         thread.assert_not_called()
 
 
-SYNCED = """
-DROP SCHEMA IF EXISTS bronze CASCADE;
-CREATE SCHEMA bronze;
+ACTIVITY_TABLE = """
 CREATE TABLE bronze.runkeeper_activity (
     activity_id TEXT PRIMARY KEY, activity_date TEXT, type TEXT, route_name TEXT, distance TEXT, distance_unit TEXT,
     duration TEXT, average_pace TEXT, average_speed TEXT, speed_unit TEXT, calories_burned TEXT, climb TEXT, climb_unit TEXT,
-    average_heart_rate_bpm TEXT, friends_tagged TEXT, notes TEXT, gpx_file TEXT, gpx TEXT, gpx_bytes BIGINT, _extra TEXT,
+    average_heart_rate_bpm TEXT, friends_tagged TEXT, notes TEXT, gpx_file TEXT, _extra TEXT,
+    _source_file TEXT, _file_modified_at TIMESTAMPTZ, _row_hash TEXT, _ingested_at TIMESTAMPTZ);
+"""
+GPX_TABLE = """
+CREATE TABLE bronze.runkeeper_gpx (
+    gpx_file TEXT PRIMARY KEY, activity_start TEXT, track_started_at TEXT, points BIGINT, gpx TEXT, gpx_bytes BIGINT,
     _source_file TEXT, _file_modified_at TIMESTAMPTZ, _row_hash TEXT, _ingested_at TIMESTAMPTZ);
 """
 RUN1 = datetime(2026, 9, 30, 12, tzinfo=timezone.utc)
@@ -112,79 +145,111 @@ RUN1 = datetime(2026, 9, 30, 12, tzinfo=timezone.utc)
 class SyncTests(unittest.TestCase):
     def setUp(self):
         fresh_database()
-        with psycopg.connect(PG, autocommit=True) as conn:
-            conn.execute(SYNCED)
-        self.addCleanup(self.drop)
+        self.sql("DROP SCHEMA IF EXISTS bronze CASCADE; CREATE SCHEMA bronze;" + ACTIVITY_TABLE + GPX_TABLE)
+        self.addCleanup(self.sql, "DROP SCHEMA IF EXISTS bronze CASCADE")
         self.owner = admin_client(app)
 
-    def drop(self):
+    def sql(self, text):
         with psycopg.connect(PG, autocommit=True) as conn:
-            conn.execute("DROP SCHEMA IF EXISTS bronze CASCADE")
+            conn.execute(text)
 
-    def land(self, rows, at):
-        """Rows as the job MERGEs them: every row of one run stamped with the same _ingested_at."""
+    def land(self, table, key, rows, at):
+        """Rows as a notebook MERGEs them: every row of one run stamped with the same _ingested_at."""
         with psycopg.connect(PG, autocommit=True) as conn:
             for r in rows:
                 r = {**r, "_ingested_at": at}
-                conn.execute(f"""INSERT INTO bronze.runkeeper_activity ({', '.join(r)}) VALUES ({', '.join(['%s'] * len(r))})
-                                 ON CONFLICT (activity_id) DO UPDATE SET {', '.join(f'{k} = EXCLUDED.{k}' for k in r)}""",
+                conn.execute(f"""INSERT INTO bronze.{table} ({', '.join(r)}) VALUES ({', '.join(['%s'] * len(r))})
+                                 ON CONFLICT ({key}) DO UPDATE SET {', '.join(f'{k} = EXCLUDED.{k}' for k in r)}""",
                              list(r.values()))
 
-    def activity(self, aid, when, kind="Running", distance="3.10", duration="28:30", track=True, notes=None):
+    def activities(self, rows, at):
+        self.land("runkeeper_activity", "activity_id", rows, at)
+
+    def tracks(self, names, at):
+        self.land("runkeeper_gpx", "gpx_file", [{"gpx_file": n, "activity_start": gpx_nb.activity_start(n),
+                                                 "gpx": gpx(TRACK).decode()} for n in names], at)
+
+    def activity(self, aid, when, kind="Running", distance="3.10", duration="28:30", gpx_file=None, notes=None):
         return {"activity_id": aid, "activity_date": when, "type": kind, "distance": distance, "distance_unit": "mi",
-                "duration": duration, "notes": notes, "gpx_file": f"{aid}.gpx" if track else None,
-                "gpx": gpx(TRACK).decode() if track else None}
+                "duration": duration, "notes": notes, "gpx_file": gpx_file}
 
     def sync(self, **body):
         r = self.owner.post("/api/v1/health/runkeeper-sync", json=body)
         self.assertEqual(r.status_code, 200, r.get_json())
         return r.get_json()
 
-    def test_without_the_synced_table_it_says_why(self):
-        self.drop()
+    def day(self, when):
+        return self.owner.get(f"/api/v1/today?date={when}").get_json()["workouts"]
+
+    def test_without_the_activities_table_it_says_why(self):
+        self.sql("DROP TABLE bronze.runkeeper_activity")
         r = self.owner.post("/api/v1/health/runkeeper-sync", json={})
         self.assertEqual(r.status_code, 409)
         self.assertIn("bronze.runkeeper_activity", r.get_json()["error"])
         self.assertFalse(self.owner.get("/api/v1/health/runkeeper-sync").get_json()["available"])
 
-    def test_activities_land_on_their_dates_with_routes(self):
-        self.land([self.activity("a1", "2019-05-04 16:35:09", notes="Easy"),
-                   self.activity("a2", "2019-05-06 06:10:00", "Strength Training", "0.00", "45:00", track=False),
-                   self.activity("a3", "2019-05-07 18:00:00", "Cycling", distance="", duration="1:05:12")], RUN1)
+    def test_activities_land_on_their_dates_with_their_tracks(self):
+        self.tracks(["2019-05-04-163509.gpx", "2019-05-07-180000.gpx", "2018-01-01-000000.gpx"], RUN1)
+        self.activities([self.activity("a1", "2019-05-04 16:35:09", gpx_file="2019-05-04-163509.gpx", notes="Easy"),
+                         self.activity("a2", "2019-05-06 06:10:00", "Strength Training", "0.00", "45:00"),
+                         # names no file: its track is the one named for its start
+                         self.activity("a3", "2019-05-07 18:00:00", "Cycling", distance="", duration="1:05:12")], RUN1)
         preview = self.sync(dry_run=True)
-        self.assertEqual((preview["workouts_added"], preview["dry_run"]), (3, True))
-        self.assertEqual(self.owner.get("/api/v1/health/runkeeper-sync").get_json()["not_loaded"], 3)
+        self.assertEqual((preview["workouts_added"], preview["previewed"]), (3, "activities"))
+        status = self.owner.get("/api/v1/health/runkeeper-sync").get_json()
+        self.assertEqual((status["activities"]["not_loaded"], status["gpx"]["not_loaded"]), (3, 3))
 
         report = self.sync()
-        self.assertEqual((report["workouts_added"], report["routes"]), (3, 2))
-        day = self.owner.get("/api/v1/today?date=2019-05-04").get_json()
-        [run] = day["workouts"]
+        self.assertEqual((report["workouts_added"], report["routes"], report["tracks_without_activity"]), (3, 2, 1))
+        [run] = self.day("2019-05-04")
         self.assertEqual((run["activity"], run["workout_type"], float(run["distance"]), float(run["minutes"]), run["note"],
                           run["has_route"], run["source"]), ("Running", "Cardio", 3.1, 28.5, "Easy", True, "runkeeper"))
         route = self.owner.get(f"/api/v1/health/workouts/{run['workout_id']}/route").get_json()
-        self.assertEqual(len(route["points"]), 5)
-        [lift] = self.owner.get("/api/v1/today?date=2019-05-06").get_json()["workouts"]
+        self.assertEqual((len(route["points"]), route["file_name"]), (5, "2019-05-04-163509.gpx"))
+        [lift] = self.day("2019-05-06")
         self.assertEqual((lift["workout_type"], lift["distance"], lift["has_route"]), ("Strength", None, False))
-        [ride] = self.owner.get("/api/v1/today?date=2019-05-07").get_json()["workouts"]
+        [ride] = self.day("2019-05-07")
         self.assertAlmostEqual(float(ride["distance"]), 1.0, delta=0.02)                # from the track: 1.6 km
 
         self.assertTrue(self.sync()["nothing_new"])
         status = self.owner.get("/api/v1/health/runkeeper-sync").get_json()
-        self.assertEqual((status["not_loaded"], status["workouts"]["count"]), (0, 3))
+        self.assertEqual((status["activities"]["not_loaded"], status["gpx"]["not_loaded"], status["workouts"]["count"],
+                          status["workouts"]["with_route"]), (0, 0, 3, 2))
+
+    def test_a_track_that_lands_after_its_activity_is_added_to_the_workout(self):
+        self.activities([self.activity("a1", "2019-05-04 16:35:09", gpx_file="2019-05-04-163509.gpx")], RUN1)
+        self.assertEqual(self.sync()["routes"], 0)
+        self.assertFalse(self.day("2019-05-04")[0]["has_route"])
+        self.tracks(["2019-05-04-163509.gpx"], RUN1 + timedelta(hours=1))
+        report = self.sync()
+        self.assertEqual((report["routes"], report["workouts_added"], report["workouts_updated"]), (1, 0, 0))
+        self.assertTrue(self.day("2019-05-04")[0]["has_route"])
+
+    def test_without_the_track_table_workouts_still_load(self):
+        self.sql("DROP TABLE bronze.runkeeper_gpx")
+        self.activities([self.activity("a1", "2019-05-04 16:35:09", gpx_file="2019-05-04-163509.gpx")], RUN1)
+        report = self.sync()
+        self.assertEqual(report["workouts_added"], 1)
+        self.assertIn("bronze.runkeeper_gpx", report["gpx"])
+        self.assertFalse(self.owner.get("/api/v1/health/runkeeper-sync").get_json()["gpx"]["available"])
+        # Once it's synced, the tracks are read from the start.
+        self.sql("CREATE SCHEMA IF NOT EXISTS bronze;" + GPX_TABLE)
+        self.tracks(["2019-05-04-163509.gpx"], RUN1)
+        self.assertEqual(self.sync()["routes"], 1)
 
     def test_a_changed_activity_updates_its_numbers_but_keeps_what_was_edited(self):
-        self.land([self.activity("a1", "2019-05-04 16:35:09")], RUN1)
+        self.activities([self.activity("a1", "2019-05-04 16:35:09")], RUN1)
         self.sync()
-        [run] = self.owner.get("/api/v1/today?date=2019-05-04").get_json()["workouts"]
+        [run] = self.day("2019-05-04")
         r = self.owner.put(f"/api/v1/health/workouts/{run['workout_id']}", json={"activity": "Long run", "note": "Felt great"})
         self.assertEqual(r.status_code, 200, r.get_json())
-        self.land([self.activity("a1", "2019-05-04 16:35:09", duration="30:00")], RUN1 + timedelta(days=1))
+        self.activities([self.activity("a1", "2019-05-04 16:35:09", duration="30:00")], RUN1 + timedelta(days=1))
         self.assertEqual(self.sync()["workouts_updated"], 1)
-        [run] = self.owner.get("/api/v1/today?date=2019-05-04").get_json()["workouts"]
+        [run] = self.day("2019-05-04")
         self.assertEqual((run["activity"], run["note"], float(run["minutes"])), ("Long run", "Felt great", 30.0))
 
     def test_a_long_history_loads_in_batches_and_reload_reads_it_again(self):
-        self.land([self.activity(f"a{i:03}", f"2018-01-{i % 28 + 1:02} 07:00:00", track=False) for i in range(7)], RUN1)
+        self.activities([self.activity(f"a{i:03}", f"2018-01-{i % 28 + 1:02} 07:00:00") for i in range(7)], RUN1)
         report = rk.sync(batch=3)
         self.assertEqual((report["workouts_added"], report["batches"]), (7, 3))
         again = self.sync(reload=True)
