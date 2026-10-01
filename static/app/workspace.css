@@ -235,6 +235,7 @@ button.ws-chip[aria-pressed="true"] { background: var(--blue); color: #fff; bord
   .ws-meal-col:nth-child(n+3) { border-top: 1px solid var(--border); }
 }
 .ws-daynav { display: flex; align-items: center; gap: 6px; }
+.ws-daynav .ws-daypick { width: auto; min-height: 32px; padding: 4px 8px; font-size: 13px; -webkit-appearance: none; appearance: none; cursor: pointer; }
 .ws-writing { font-family: Georgia, 'Times New Roman', serif; font-size: 16px; line-height: 1.7; min-height: 240px; }
 .ws-entry-body { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ws-planner { height: calc(100vh - 170px); min-height: 520px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; }
