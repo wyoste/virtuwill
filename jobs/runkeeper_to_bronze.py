@@ -3,12 +3,12 @@
 
 The export sits in the stage volume:
 
-    /Volumes/prod/bronze/stage/runkeeper/activities/   CardioActivities.csv (the full history; more than one
-                                                       export may be dropped here, in subfolders or not)
-    /Volumes/prod/bronze/stage/runkeeper/gpx_maps/     2019-05-04-163509.gpx … one track per activity, named
-                                                       for when it started
+    /Volumes/prod/bronze/stage/runkeeper/activity_logs/ cardioActivities.csv (the full history; more than one
+                                                        export may be dropped here, in subfolders or not)
+    /Volumes/prod/bronze/stage/runkeeper/gpx_maps/      2019-05-04-163509.gpx … one track per activity, named
+                                                        for when it started
 
-Each run reads every CardioActivities CSV, keeps one row per Activity Id (the newest file wins), finds the
+Each run reads every cardioActivities CSV (any case), keeps one row per Activity Id (the newest file wins), finds the
 activity's GPX file (the CSV's "GPX File" column, else the file named for the activity's start), and MERGEs
 the result into the bronze table on activity_id. Only new or changed activities are written, and each
 written row gets a fresh _ingested_at, so the app (virtuwill/runkeeper_synced.py, reading the Lakebase
@@ -23,7 +23,7 @@ any column this job doesn't know is kept in _extra (JSON).
 
 Settings (job parameters or environment variables):
 
-    RUNKEEPER_ACTIVITIES_DIR   default /Volumes/prod/bronze/stage/runkeeper/activities
+    RUNKEEPER_ACTIVITIES_DIR   default /Volumes/prod/bronze/stage/runkeeper/activity_logs
     RUNKEEPER_GPX_DIR          default /Volumes/prod/bronze/stage/runkeeper/gpx_maps
     RUNKEEPER_TABLE            default prod.bronze.raw_runkeeper_activities
 
@@ -41,7 +41,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-ACTIVITIES_DIR = "/Volumes/prod/bronze/stage/runkeeper/activities"
+ACTIVITIES_DIR = "/Volumes/prod/bronze/stage/runkeeper/activity_logs"
 GPX_DIR = "/Volumes/prod/bronze/stage/runkeeper/gpx_maps"
 TABLE = "prod.bronze.raw_runkeeper_activities"
 
@@ -70,7 +70,7 @@ DDL = f"""CREATE TABLE IF NOT EXISTS {{table}} (
     _ingested_at TIMESTAMP COMMENT 'When this row was last written',
     CONSTRAINT raw_runkeeper_activities_pk PRIMARY KEY (activity_id)
 ) USING DELTA
-COMMENT 'RunKeeper activities (CardioActivities.csv) with their GPX tracks; landed by jobs/runkeeper_to_bronze.py'
+COMMENT 'RunKeeper activities (cardioActivities.csv) with their GPX tracks; landed by jobs/runkeeper_to_bronze.py'
 TBLPROPERTIES (delta.enableChangeDataFeed = true)"""
 
 
@@ -87,7 +87,7 @@ def column(header):
 
 
 def read_csv(text, source_file, modified_at):
-    """One CardioActivities CSV's rows as bronze dicts (without the GPX)."""
+    """One cardioActivities CSV's rows as bronze dicts (without the GPX)."""
     reader = csv.reader(io.StringIO(text.lstrip("﻿")))
     headers = next(reader, None) or []
     mapped = [column(h) for h in headers]
@@ -129,7 +129,7 @@ def _files(folder, suffix):
 
 
 def read_activities(folder):
-    """Every activity in the CardioActivities CSVs under folder: one per activity_id, the newest file winning."""
+    """Every activity in the cardioActivities CSVs under folder: one per activity_id, the newest file winning."""
     found = [f for f in _files(folder, ".csv") if "cardioactivities" in os.path.basename(f[0]).lower()]
     latest = {}
     for path, _size, modified_at in sorted(found, key=lambda f: (f[2], f[0])):
@@ -249,7 +249,7 @@ def run(dry_run=False, spark=None):
     table = _setting("RUNKEEPER_TABLE", TABLE, dbutils)
     activities, files = read_activities(activities_dir)
     if not files:
-        sys.exit(f"No CardioActivities CSV under {activities_dir}")
+        sys.exit(f"No cardioActivities CSV under {activities_dir}")
     spark = spark or _spark()
     rows, summary = plan(activities, gpx_index(gpx_dir), existing_hashes(spark, table, create=not dry_run))
     if not dry_run and rows:

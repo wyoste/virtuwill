@@ -33,7 +33,7 @@ class JobTests(unittest.TestCase):
         self.dir = Path(tempfile.mkdtemp())
         (self.dir / "activities" / "2026-09").mkdir(parents=True)
         (self.dir / "gpx").mkdir()
-        (self.dir / "activities" / "2026-09" / "CardioActivities.csv").write_text(CSV)
+        (self.dir / "activities" / "2026-09" / "cardioActivities.csv").write_text(CSV)
         (self.dir / "activities" / "measurements.csv").write_text("Date,Weight\n2019-05-04,180\n")
         (self.dir / "gpx" / "2019-05-04-163509.gpx").write_bytes(gpx(TRACK))
         (self.dir / "gpx" / "2019-05-07-180000.gpx").write_bytes(gpx(TRACK))     # a3 names none: matched by its start
@@ -66,7 +66,7 @@ class JobTests(unittest.TestCase):
         rows, _ = job.plan(activities, index, {})
         existing = {r["activity_id"]: r["_row_hash"] for r in rows}
         self.assertEqual(job.plan(activities, index, existing)[1]["new_or_changed"], 0)
-        newer = self.dir / "activities" / "CardioActivities (1).csv"
+        newer = self.dir / "activities" / "CardioActivities (1).csv"     # any case
         newer.write_text(CSV.replace("28:30", "29:00"))
         os.utime(newer, (2e9, 2e9))
         activities, _ = job.read_activities(str(self.dir / "activities"))

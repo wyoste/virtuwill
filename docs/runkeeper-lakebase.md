@@ -18,8 +18,8 @@ stage volume ─▶ prod.bronze.raw_runkeeper_activities ─▶ Lakebase synced 
 ## The export
 
 ```
-/Volumes/prod/bronze/stage/runkeeper/activities/cardioActivities.csv   the full history
-/Volumes/prod/bronze/stage/runkeeper/gpx_maps/2026-09-28-200444.gpx    one track per activity, named for its start
+/Volumes/prod/bronze/stage/runkeeper/activity_logs/cardioActivities.csv   the full history
+/Volumes/prod/bronze/stage/runkeeper/gpx_maps/2026-09-28-200444.gpx      one track per activity, named for its start
 ```
 
 - The job reads every CSV whose name contains `cardioActivities`, in any case and in any
@@ -70,7 +70,7 @@ edit it.
    changed, unchanged, and GPX files with no activity.
 
    The history doesn't change, so run the job once, then again whenever you drop a new export.
-   You can also schedule it daily, or trigger it on file arrival on the `activities` folder.
+   You can also schedule it daily, or trigger it on file arrival on the `activity_logs` folder.
 2. **Create the synced table.** Do this the same way as for Plaid. In Catalog Explorer, open
    `prod.bronze.raw_runkeeper_activities` and choose **Create → Synced table**. Pick the
    database instance and the `virtuwill` database, name it `bronze.runkeeper_activity`, and use
