@@ -103,6 +103,17 @@ class SyncTests(unittest.TestCase):
         self.assertIn("bronze.runkeeper_activities", r.get_json()["error"])
         self.assertFalse(self.owner.get("/api/v1/health/runkeeper-sync").get_json()["available"])
 
+    def test_a_table_without_the_columns_the_load_reads_says_which(self):
+        self.sql("ALTER TABLE bronze.runkeeper_gpx DROP COLUMN activity_start")
+        self.activities([self.activity("a1", "2019-05-04 16:35:09")], RUN1)
+        report = self.sync()
+        self.assertEqual(report["workouts_added"], 1)                  # the tracks wait; the activities load
+        self.assertIn("has no activity_start", report["gpx"])
+        self.sql("ALTER TABLE bronze.runkeeper_activities DROP COLUMN _ingested_at")
+        r = self.owner.post("/api/v1/health/runkeeper-sync", json={})
+        self.assertEqual(r.status_code, 409)
+        self.assertIn("bronze.runkeeper_activities has no _ingested_at", r.get_json()["error"])
+
     def test_activities_land_on_their_dates_with_their_tracks(self):
         self.tracks(["2019-05-04-163509.gpx", "2019-05-07-180000.gpx", "2018-01-01-000000.gpx"], RUN1)
         self.activities([self.activity("a1", "2019-05-04 16:35:09", gpx_file="2019-05-04-163509.gpx", notes="Easy"),

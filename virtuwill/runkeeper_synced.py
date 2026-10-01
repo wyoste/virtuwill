@@ -47,6 +47,9 @@ SOURCE = "runkeeper_bronze"               # its row in virtuwill.sync_reports (S
 # The synced copies of prod.bronze.raw_runkeeper_activities and raw_runkeeper_gpx, and each one's key.
 TABLES = {"activities": ("bronze", "runkeeper_activities"), "gpx": ("bronze", "runkeeper_gpx")}
 KEYS = {"activities": "activity_id", "gpx": "gpx_file"}
+# The columns the load reads by name: the notebooks write them (and more).
+COLUMNS = {"activities": {"activity_id", "activity_date", "gpx_file", "_ingested_at"},
+           "gpx": {"gpx_file", "activity_start", "gpx", "_ingested_at"}}
 BATCH = 200                               # rows per transaction; a track carries its whole GPX file
 NUMBERS = ("calories_burned", "average_heart_rate_bpm", "climb", "average_speed")
 DISTANCE_TYPES = {"Cardio", "Dog walk"}   # as health.DISTANCE_TYPES: the only workouts with a distance or a route
@@ -137,6 +140,12 @@ def _readable(conn, kind):
         return f"{schema}.{name} isn't in this database: check the synced table's name (docs/runkeeper-lakebase.md)."
     if not conn.execute("SELECT has_table_privilege(%s, 'SELECT') AS ok", (qualified,)).fetchone()["ok"]:
         return f"The app can't read {schema}.{name}: grant its role SELECT (docs/runkeeper-lakebase.md)."
+    have = {r["column_name"] for r in conn.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = %s", (schema, name))}
+    missing = sorted(COLUMNS[kind] - have)
+    if missing:
+        return (f"{schema}.{name} has no {', '.join(missing)}: sync every column of the bronze table "
+                "(docs/runkeeper-lakebase.md).")
     return None
 
 
@@ -282,7 +291,7 @@ def sync(dry_run=False, reload=False, batch=BATCH):
     total = {"workouts_added": 0, "workouts_updated": 0, "routes": 0, "tracks_without_activity": 0, "skipped": [],
              "batches": 0}
     for kind in ("activities", "gpx"):
-        after = None
+        start = reload
         while True:
             with db.tx() as conn:
                 if not conn.execute("SELECT pg_try_advisory_xact_lock(hashtext('virtuwill_runkeeper_bronze')) AS ok").fetchone()["ok"]:
@@ -292,20 +301,19 @@ def sync(dry_run=False, reload=False, batch=BATCH):
                     total["gpx"] = gpx_problem
                     if kind == "gpx":
                         break
-                if after is None:
-                    after = {"at": None, "id": None} if reload else state(conn)[kind]
+                # Where to read from, under the lock: another worker may have loaded a batch since this one's last.
+                after = {"at": None, "id": None} if start else state(conn)[kind]
+                start = False
                 rows = (read_activities(conn, after, batch, with_gpx=not gpx_problem) if kind == "activities"
                         else read_tracks(conn, after, batch))
                 if not rows:
                     break
                 _add(total, apply(conn, rows) if kind == "activities" else apply_tracks(conn, rows))
                 total["batches"] += 1
-                last = rows[-1]
-                after = {"at": last["_ingested_at"], "id": last[KEYS[kind]]}
                 if dry_run:
                     conn.rollback()
                     return total | {"dry_run": True, "previewed": kind, "more": len(rows) == batch}
-                _save_state(conn, kind, after["at"], after["id"])
+                _save_state(conn, kind, rows[-1]["_ingested_at"], rows[-1][KEYS[kind]])
                 if len(rows) < batch:
                     break
     if dry_run:
