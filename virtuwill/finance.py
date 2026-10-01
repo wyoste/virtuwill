@@ -49,7 +49,7 @@ def account_for(conn, text, hint=None):
     text = re.sub(r"\s+\$[\d,.]+$", "", str(text or "")).strip()
     if not text:
         return None
-    row = conn.execute("SELECT account_id FROM finance.account_aliases WHERE alias = %s", (text,)).fetchone()
+    row = conn.execute("SELECT account_id FROM finance.account_aliases WHERE kind = 'name' AND alias = %s", (text,)).fetchone()
     if row:
         return row["account_id"]
     masks = re.findall(r"(?<!\d)(\d{4})(?!\d)", text)
@@ -66,7 +66,7 @@ def account_for(conn, text, hint=None):
         conn.execute("""INSERT INTO finance.accounts (account_id, institution, name, account_type, retirement_type, purpose)
                         VALUES (%s, '', %s, %s, %s, %s) ON CONFLICT (account_id) DO NOTHING""",
                      (account_id, text, _guess_type(text, hint), retirement, "Retirement" if retirement else ""))
-    conn.execute("INSERT INTO finance.account_aliases VALUES (%s, %s) ON CONFLICT DO NOTHING", (text, account_id))
+    conn.execute("INSERT INTO finance.account_aliases (kind, alias, account_id) VALUES ('name', %s, %s) ON CONFLICT DO NOTHING", (text, account_id))
     return account_id
 
 

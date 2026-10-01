@@ -43,10 +43,13 @@ def _retirement_type(info):
 
 
 def account_id_for(conn, mask, info=None, create=False):
-    """The account with these last four digits; created (when asked) from what the file says about it."""
-    row = conn.execute("""SELECT account_id, account_type, institution, name FROM finance.accounts
-                          WHERE mask = %s OR account_id = %s ORDER BY (account_id = %s) DESC LIMIT 1""",
-                       (mask, "acct-" + mask, "acct-" + mask)).fetchone()
+    """The account with these last four digits (its own, or a merged record's, kept as an alias);
+    created (when asked) from what the file says about it."""
+    row = conn.execute("""SELECT a.account_id, a.account_type, a.institution, a.name FROM finance.accounts a
+                          LEFT JOIN finance.account_aliases x ON x.kind = 'mask' AND x.alias = %(mask)s
+                          WHERE x.account_id = a.account_id OR a.mask = %(mask)s OR a.account_id = %(id)s
+                          ORDER BY (x.account_id = a.account_id) DESC NULLS LAST, (a.account_id = %(id)s) DESC LIMIT 1""",
+                       {"mask": mask, "id": "acct-" + mask}).fetchone()
     info = info or {}
     if row:
         if create:

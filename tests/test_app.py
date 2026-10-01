@@ -47,7 +47,7 @@ class SchemaTests(unittest.TestCase):
             self.assertEqual(db.schema_status(conn)["edited"], ["20_health.sql"])
             # One-time moves and seeds, each recorded once (the food seeds come from health.FOOD_SEEDS).
             self.assertEqual([r["name"] for r in conn.execute("SELECT name FROM virtuwill.migrations ORDER BY name")],
-                             sorted(["career_seed_v1", "relational_v1", *(name for name, _ in health.FOOD_SEEDS)]))
+                             sorted(["account_cleanup_v1", "career_seed_v1", "relational_v1", *(name for name, _ in health.FOOD_SEEDS)]))
 
     def test_calendar_accepts_historical_dates(self):
         self.assertTrue(db.one("SELECT 1 AS ok FROM core.calendar WHERE day = '1999-05-01'"))
