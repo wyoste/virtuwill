@@ -12,7 +12,7 @@ committed under data/. Nothing it reads is deleted.
 import json
 import logging
 
-from . import career, content, finance, garden, health, journal, media, music, travel
+from . import accounts, career, content, finance, garden, health, journal, media, music, travel
 
 log = logging.getLogger(__name__)
 DATA_DIR = media.db.ROOT / "data"
@@ -47,6 +47,20 @@ def run_pending(conn):
         move_to_relational(conn)
     travel.fill_codes(conn)
     garden.assign_spots(conn)       # rows and seats for plants saved before spots existed
+    _account_cleanup(conn)
+
+
+def _account_cleanup(conn):
+    """Once: merge account records that are certainly one account (an import without digits and a later
+    pull with them). In its own savepoint, so a problem is logged and retried next start, never blocks it."""
+    if conn.execute("SELECT 1 FROM virtuwill.migrations WHERE name = 'account_cleanup_v1'").fetchone():
+        return
+    try:
+        with conn.transaction():
+            accounts.cleanup(conn)
+            conn.execute("INSERT INTO virtuwill.migrations (name) VALUES ('account_cleanup_v1')")
+    except Exception:
+        log.exception("Account cleanup failed; it will be tried again on the next start")
 
 
 # ── The one-time move ────────────────────────────────────────────────────────

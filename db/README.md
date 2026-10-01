@@ -49,6 +49,14 @@ module per schema. `virtuwill/migrate.py` moved the earlier Lakebase layout in o
   trackers are retired, so the rows they once projected are edited like any other:
   Money edits budgets, bills, other income, set-asides, paycheck deposits, pay and the
   retirement plan (`/api/v1/money/plan/<kind>`) and savings goals (`/api/v1/money/goals`).
+- **One account, many names** (109): `account_aliases` maps every name and set of last four
+  digits a source uses to one account (`kind` name|mask, `origin` import|merge|manual), and the
+  loader checks it before creating an account. Merging two records for one account
+  (Money › Accounts) moves everything to the kept record, turns the other's name and digits into
+  aliases, and logs it in `account_merges`. A one-time cleanup (`account_cleanup_v1`) merged the
+  records that were certainly one account: an import without digits and a later pull with them,
+  same kind, same sponsor by name or initials, not naming different plans, one-to-one, and
+  balances within 10% where both are known. Anything less certain is offered for review.
 - **Savings goals** (108) have a dollar target and get their progress from a linked
   cash or savings account (`savings_goals.account_id`, its current balance) or, when
   not linked, the latest saved amount recorded for the goal (`balance_snapshots.goal_id`);

@@ -281,9 +281,21 @@ async function receipts(view, { params, navigate }) {
 }
 
 // ── Accounts ─────────────────────────────────────────────────────────────────
-async function accounts(view) {
-  const d = await api('/api/v1/money/accounts');
-  view.append(card(null, h('div', { class: 'ws-table-wrap' }, h('table', { class: 'ws-table' },
+async function accounts(view, { navigate }) {
+  const [d, m] = await Promise.all([api('/api/v1/money/accounts'), api('/api/v1/money/account-merges')]);
+  const redraw = () => navigate(location.pathname + location.search, { replace: true });
+  const merge = async (from, into, text) => {
+    if (!(await dialog('Merge these accounts?', h('p', {}, text), [['Cancel', null], ['Merge', true]]))) return;
+    await run(null, async () => { await api(`/api/v1/money/accounts/${encodeURIComponent(from)}/merge`, { method: 'POST', body: { into } }); toast('Merged'); redraw(); });
+  };
+  // Records that look like one account (an import without digits, a later pull with them).
+  if (m.suggestions.length) view.append(card('Possible duplicates', h('ul', { class: 'ws-list' }, m.suggestions.map(x => h('li', { class: 'ws-row' },
+    h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, `${x.merge_name}${x.merge_mask ? ' ••' + x.merge_mask : ''} → ${x.into_name}`),
+      h('div', { class: 'ws-row-meta' }, x.why)),
+    h('button', { class: 'btn small', onclick: () => merge(x.merge, x.into,
+      `Everything recorded for “${x.merge_name}” moves to “${x.into_name}”, which keeps its name and takes the last four digits. Later loads with those digits land on it.`) }, 'Merge'))))));
+  view.append(card(h('span', {}, 'Accounts', h('button', { class: 'btn small', onclick: () => mergeAny(d.accounts, merge) }, 'Merge two accounts…')),
+    h('div', { class: 'ws-table-wrap' }, h('table', { class: 'ws-table' },
     h('thead', {}, h('tr', {}, h('th', {}, 'Account'), h('th', { class: 'wide-only' }, 'Type'), h('th', {}, 'As of'), h('th', { class: 'num' }, 'Balance'), h('th', { class: 'wide-only' }, 'History'))),
     h('tbody', {}, d.accounts.map(a => h('tr', { style: a.is_active ? null : { opacity: .55 } },
       h('td', {}, h('strong', {}, a.name), h('div', { class: 'ws-note' }, [a.institution !== a.name ? a.institution : null, a.mask ? '••' + a.mask : null].filter(Boolean).join(' ')),
@@ -292,11 +304,50 @@ async function accounts(view) {
       h('td', { class: 'nowrap' }, a.as_of ? shortDay(a.as_of) : '—'),
       h('td', { class: 'num' }, fmt.money(a.balance)),
       h('td', { class: 'wide-only' }, a.history.length > 1 ? spark(a.history.map(p => p.balance)) : h('span', { class: 'ws-note' }, `${a.history.length} reading${a.history.length === 1 ? '' : 's'}`)))))))),
+    aliasCard(d.accounts, m, redraw),
     d.statements.length ? card('Statements reconciled', h('div', { class: 'ws-table-wrap' }, h('table', { class: 'ws-table' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Statement'), h('th', {}, 'Period'), h('th', { class: 'num' }, 'Closing'), h('th', { class: 'num' }, 'Off by'))),
       h('tbody', {}, d.statements.map(s => h('tr', {}, h('td', { class: 'ws-clip', title: s.original_filename || s.statement_id }, s.original_filename || s.statement_id),
         h('td', { class: 'nowrap' }, `${shortDay(s.period_start)} – ${shortDay(s.period_end)}`), h('td', { class: 'num' }, fmt.money(s.closing_balance)),
         h('td', { class: 'num' }, s.difference ? h('span', { class: 'bad' }, fmt.money(s.difference)) : '✓'))))))) : null);
+}
+
+// Pick any two records to merge.
+async function mergeAny(list, merge) {
+  const opts = list.map(a => [a.account_id, `${a.name}${a.mask ? ' ••' + a.mask : ''}`]);
+  const form = h('form', { class: 'ws-form stack', onsubmit: e => e.preventDefault() },
+    field('Merge this record', 'from', { kind: 'select', options: opts }),
+    field('into this one (it keeps its name)', 'into', { kind: 'select', options: opts, value: opts[1]?.[0] }));
+  if (!(await dialog('Merge two accounts', form, [['Cancel', null], ['Next', true]]))) return;
+  const v = values(form), name = id => opts.find(o => o[0] === id)?.[1];
+  if (v.from === v.into) return toast('Pick two different accounts.', 'error');
+  merge(v.from, v.into, `Everything recorded for “${name(v.from)}” moves to “${name(v.into)}”, and its name and digits become aliases of it. This can’t be undone.`);
+}
+
+// How sources name each account: kept in the database, added by merges or by hand.
+function aliasCard(list, m, redraw) {
+  const add = async () => {
+    const form = h('form', { class: 'ws-form stack', onsubmit: e => e.preventDefault() },
+      field('Account', 'account_id', { kind: 'select', options: list.map(a => [a.account_id, `${a.name}${a.mask ? ' ••' + a.mask : ''}`]) }),
+      field('Kind', 'kind', { kind: 'select', options: [['mask', 'Last four digits (e.g. a replaced card)'], ['name', 'A name a file uses']] }),
+      field('Alias', 'alias', { required: true }));
+    if (!(await dialog('Add an alias', form, [['Cancel', null], ['Save', true]]))) return;
+    await run(null, async () => { await api('/api/v1/money/account-aliases', { method: 'POST', body: values(form) }); toast('Alias added'); redraw(); });
+  };
+  const remove = x => run(null, async () => {
+    await api('/api/v1/money/account-aliases', { method: 'DELETE', body: { kind: x.kind, alias: x.alias } }); toast('Alias removed'); redraw();
+  });
+  return card(h('span', {}, 'Other names for accounts', h('button', { class: 'btn small', onclick: add }, '+ Alias')),
+    h('p', { class: 'ws-note' }, 'Loads that name an account this way land on it. Merges add these; you can add or remove them.'),
+    m.aliases.length ? h('ul', { class: 'ws-list' }, m.aliases.map(x => h('li', { class: 'ws-row' },
+      h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, x.kind === 'mask' ? '••' + x.alias : x.alias),
+        h('div', { class: 'ws-row-meta' }, `→ ${x.account_name} · ${x.origin}`)),
+      h('button', { class: 'btn small link', 'aria-label': 'Remove alias ' + x.alias, onclick: () => remove(x) }, 'Remove'))))
+      : empty('No other names yet.'),
+    m.merges.length ? h('details', { style: { marginTop: '10px' } }, h('summary', {}, `Merged records (${m.merges.length})`),
+      h('ul', { class: 'ws-list' }, m.merges.map(x => h('li', { class: 'ws-row' }, h('div', { class: 'ws-row-main' },
+        h('div', { class: 'ws-row-title' }, `${x.merged_name}${x.merged_mask ? ' ••' + x.merged_mask : ''} → ${x.into_name}`),
+        h('div', { class: 'ws-row-meta' }, `${x.merged_by === 'cleanup' ? 'cleanup' : 'by you'} · ${new Date(x.merged_at).toLocaleDateString()}${x.reason ? ' · ' + x.reason : ''}`)))))) : null);
 }
 
 // "Sep 18" (no weekday) for table cells.
