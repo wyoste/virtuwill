@@ -29,7 +29,9 @@ KINDS = {"finance": "yoste-finance-spa-v1", "health": "yoste-health-v1"}
 # readable (and exportable), but saves are refused so nothing overwrites the
 # records being edited natively.
 RETIRED = {"health": "The Health tracker is retired: Health in the workspace now owns these records. "
-                     "Your tracker data is kept; use Export in the tracker for a copy."}
+                     "Your tracker data is kept; use Export in the tracker for a copy.",
+           "finance": "The Finance tracker is retired: Money in the workspace now owns these records. "
+                      "Your tracker data is kept; use Export in the tracker for a copy."}
 MAX_BYTES = 5 * 1024 * 1024
 
 

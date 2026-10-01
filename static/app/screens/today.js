@@ -1,7 +1,7 @@
 // Today: one day on one screen — meals (B | L | D | S), journal, habits, activity, weight, money.
 import { h, api, fmt, card, stat, pageHead, isoToday, addDays, empty, toast } from '../lib.js';
 import { quickAdd, recordRow, mealColumns } from '../forms.js';
-import { balanceList, balanceTotals, spendStrip, spendSummary } from '../moneyparts.js';
+import { dayMoney } from '../moneyparts.js';
 
 export async function render(view, { params, navigate }) {
   const date = params.get('date') || isoToday();
@@ -70,26 +70,8 @@ export async function render(view, { params, navigate }) {
       h('p', { class: 'ws-note', style: { marginTop: '8px' } }, 'Run, lift and drink tick themselves from what you log; anything you set yourself wins.')),
     card('Logged', logged(data, reload))));
 
-  // Money: where the accounts stand, what was spent, and this day's transactions
-  const money = data.money;
-  const totals = balanceTotals(money.balances);
-  const days = new Date(date.slice(0, 4), Number(date.slice(5, 7)), 0).getDate();
-  view.append(h('div', { class: 'ws-grid two' },
-    card(h('span', {}, 'Balances', h('span', { class: 'ws-note' }, `net ${fmt.money(totals.net)}`)),
-      balanceList(money.balances, reload)),
-    card(h('span', {}, 'Spending', h('a', { class: 'btn small', href: '/app/money' }, 'Money')),
-      spendSummary(money.spend),
-      spendStrip(money.spend.days, { selected: date, budgetPerDay: money.spend.month_budget ? money.spend.month_budget / days : 0 }))));
-
-  const tx = money.transactions;
-  view.append(card(h('span', {}, 'Money on this day', h('a', { class: 'btn small', href: '/app/money/transactions?month=' + date.slice(0, 7) }, 'All transactions')),
-    tx.length ? h('ul', { class: 'ws-list' }, tx.map(t => h('li', { class: 'ws-row' },
-      h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, t.merchant || '—'),
-        h('div', { class: 'ws-row-meta' }, [t.category, t.account_name, t.kind === 'movement' ? 'transfer' : null, t.has_receipt ? 'receipt matched' : null].filter(Boolean).join(' · '))),
-      h('span', { class: 'ws-amount' + (t.amount < 0 ? ' in' : '') }, (t.amount < 0 ? '+' : '') + fmt.money(Math.abs(t.amount))))))
-      : empty(money.through && date > money.through
-          ? `Bank data runs through ${fmt.day(money.through)}; this day isn’t loaded yet.`
-          : 'No bank transactions on this day.')));
+  // Money: where the accounts stood, what was spent, and this day's transactions
+  view.append(dayMoney(data.money, date, { onChange: reload }));
 }
 
 function logged(data, reload) {

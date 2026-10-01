@@ -84,8 +84,10 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .ws-error { background: var(--surface); border-radius: var(--radius); padding: 24px; border: 1px solid var(--red-lt); }
 .ws-note { font-size: 12.5px; color: var(--text3); margin: 0; }
 .ws-note.warn { color: var(--amber); }
-.ws-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.ws-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; }
 .ws-grid.two { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+/* A wide table or chart scrolls inside its card instead of stretching the column past its share. */
+.ws-grid > * { min-width: 0; }
 @media (max-width: 520px) { .ws-grid.two { grid-template-columns: 1fr; } }
 
 .ws-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); min-width: 0; }
@@ -121,6 +123,7 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .ws-form.stack { flex-direction: column; align-items: stretch; }
 .ws-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text2); min-width: 120px; flex: 1 1 140px; }
 .ws-field.wide { flex-basis: 100%; }
+.ws-form [hidden], .ws-field[hidden] { display: none !important; }   /* a field shown only for some choices */
 .ws-field input, .ws-field select, .ws-field textarea, .ws-input {
   padding: 8px 10px; border: 1px solid var(--border-dk); border-radius: 8px; background: var(--surface); font-weight: 400; font-size: 14px; min-width: 0; width: 100%;
 }
@@ -148,6 +151,18 @@ h1, h2, h3 { margin: 0; line-height: 1.25; }
 .ws-table th { text-align: left; font-size: 12px; color: var(--text3); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .ws-table td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .ws-table td.num, .ws-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* A table marked .stack becomes one block per row when its box is narrow (a phone, or a
+   half-width card on a desktop): the first cell as a heading, then the rest as labelled
+   values in a row, so no column hides off the edge. */
+.ws-table-wrap { container-type: inline-size; }
+@container (max-width: 520px) {
+  .ws-table.stack thead { display: none; }
+  .ws-table.stack tr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .ws-table.stack td { border: 0; padding: 0; text-align: left; }
+  .ws-table.stack td:first-child { grid-column: 1 / -1; font-weight: 600; margin-bottom: 2px; }
+  .ws-table.stack td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 600; color: var(--text3); white-space: normal; }
+  .ws-table.stack td.num { text-align: left; white-space: nowrap; }
+}
 .ws-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 550; background: var(--surface2); border: 1px solid var(--border); color: var(--text2); white-space: nowrap; }
 .ws-chip.good { background: var(--green-lt); border-color: transparent; color: var(--green); }
 .ws-chip.warn { background: var(--amber-lt); border-color: transparent; color: var(--amber); }
@@ -299,8 +314,11 @@ audio { width: 100%; height: 36px; }
 .ws-seg button { border: 0; background: var(--surface); padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 550; color: var(--text2); cursor: pointer; }
 .ws-seg button + button { border-left: 1px solid var(--border-dk); }
 .ws-seg button[aria-pressed="true"] { background: var(--blue); color: #fff; }
-.ws-hbars { display: flex; flex-direction: column; gap: 7px; }
-.ws-hbar { display: grid; grid-template-columns: minmax(90px, 38%) 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+/* One grid for the whole list, so every bar's track starts and ends at the same place
+   whatever the width of its label or amount. Each row's cells sit directly in it. */
+.ws-hbars { display: grid; grid-template-columns: minmax(80px, 38%) minmax(40px, 1fr) max-content; gap: 7px 10px; align-items: center; font-size: 13px; }
+.ws-hbar { display: contents; }
+.ws-hbar > .ws-amount { text-align: right; font-variant-numeric: tabular-nums; }
 .ws-hbar > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-hbar .ws-bar { height: 10px; }
 .ws-kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 13.5px; }
@@ -430,3 +448,10 @@ button.ws-chip[aria-pressed="true"], .ws-seg button[aria-pressed="true"], .ws-ha
 .ws-lift-row > span { flex: 1; min-width: 0; }
 .ws-lift-row label { display: flex; align-items: center; gap: 6px; font-weight: 400; }
 .ws-lift-row input { width: 70px; }
+
+/* ── Savings goals: thermometer cards ──────────────────────────────────────── */
+finance-healthmeter { --meter-fill: var(--brand-green); --meter-track: var(--surface2); --meter-text: var(--text); --meter-muted: var(--text3); }
+.ws-goals { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+.ws-goal { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
+.ws-goal > .ws-note { margin: 0; }
+.ws-goal-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 6px; }

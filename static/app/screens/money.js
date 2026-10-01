@@ -1,13 +1,15 @@
-// Money: Overview · Transactions · Receipts · Accounts · Budgets · Goals ·
-// Imports, plus the Finance tracker, which still edits budgets, goals and the
-// pay plan. Bank activity, receipts and pay statements load through Imports.
-import { h, api, fmt, card, stat, pageHead, tabs, empty, run, toast } from '../lib.js';
-import { setDirty } from '../main.js';
+// Money: Overview · Transactions · Receipts · Accounts · Budgets · Goals · Imports.
+// Every record lives in the finance tables and is edited here: bank activity,
+// receipts and pay statements load through Imports; budgets, bills, goals and the
+// pay plan are edited on their own tabs. The old Finance tracker is retired.
+import { h, api, fmt, card, stat, pageHead, tabs, empty, run, toast, dialog, field, values, confirmDelete } from '../lib.js';
+import '../thermometer.js';
+import { planButton, editPlanById } from '../planedit.js';
 import { balanceList, balanceTotals, spendStrip, spendSummary } from '../moneyparts.js';
 
 const TABS = [['/app/money', 'Overview'], ['/app/money/transactions', 'Transactions'], ['/app/money/receipts', 'Receipts'],
               ['/app/money/accounts', 'Accounts & balances'], ['/app/money/budgets', 'Budgets & bills'],
-              ['/app/money/goals', 'Goals & retirement'], ['/app/money/imports', 'Imports'], ['/app/money/editor', 'Finance tracker']];
+              ['/app/money/goals', 'Goals & retirement'], ['/app/money/imports', 'Imports']];
 
 export async function render(view, ctx) {
   const tab = ctx.path.split('/')[3] || 'overview';
@@ -15,9 +17,7 @@ export async function render(view, ctx) {
     overview: 'Balances, spending, pay and goals', imports: 'Load statements, pay stubs and receipt exports', transactions: 'Bank activity with receipt lines and sources',
     receipts: 'Receipts and the bank charge each one explains', accounts: 'Every account and its balance over time',
     budgets: 'Budgets against spending, and recurring bills', goals: 'Savings goals, retirement and the pay plan',
-    editor: 'Where these records are edited for now' }[tab]), tabs(TABS, ctx.path));
-  if (['budgets', 'goals'].includes(tab)) view.append(h('p', { class: 'ws-note' },
-    'Budgets, goals and the pay plan are edited in the ', h('a', { href: '/app/money/editor' }, 'Finance tracker'), '.'));
+    editor: 'The Finance tracker is retired' }[tab]), tabs(TABS, ctx.path));
   const screens = { overview, transactions, receipts, accounts, budgets, goals, imports, editor };
   return (screens[tab] || overview)(view, ctx);
 }
@@ -81,13 +81,14 @@ async function overview(view, ctx) {
         hbars(d.topMerchants.map(m => [m.merchant || '—', m.amount, `${m.transactions} transactions`])) || empty('No spending in the last 90 days.'))),
     h('div', { class: 'ws-grid two' },
       card('Pay', payCard(d)),
-      card('Cash flow by pay period', d.cashFlow.length ? h('div', { class: 'ws-table-wrap' }, h('table', { class: 'ws-table' },
+      card('Cash flow by pay period', d.cashFlow.length ? h('div', { class: 'ws-table-wrap' }, h('table', { class: 'ws-table stack' },
         h('thead', {}, h('tr', {}, h('th', {}, 'Period'), h('th', { class: 'num' }, 'In'), h('th', { class: 'num' }, 'Spent'), h('th', { class: 'num' }, 'Card payments'), h('th', { class: 'num' }, 'Left'))),
         h('tbody', {}, d.cashFlow.map(c => {
           const left = (c.income_received || 0) - (c.spending || 0);
           return h('tr', {}, h('td', { class: 'nowrap' }, `${shortDay(c.period_start)} – ${shortDay(c.period_end)}`),
-            h('td', { class: 'num' }, fmt.money(c.income_received)), h('td', { class: 'num' }, fmt.money(c.spending)),
-            h('td', { class: 'num' }, fmt.money(c.card_payments)), h('td', { class: 'num' }, h('span', { class: left < 0 ? 'bad' : '' }, fmt.money(left))));
+            h('td', { class: 'num', 'data-label': 'In' }, fmt.money(c.income_received)), h('td', { class: 'num', 'data-label': 'Spent' }, fmt.money(c.spending)),
+            h('td', { class: 'num', 'data-label': 'To cards' }, fmt.money(c.card_payments)),
+            h('td', { class: 'num', 'data-label': 'Left' }, h('span', { class: left < 0 ? 'bad' : '' }, fmt.money(left))));
         })))) : empty('No pay periods yet.'))),
     h('div', { class: 'ws-grid two' },
       card(h('span', {}, 'Groceries by item category', h('span', { class: 'ws-note' }, 'last 6 months, from receipt lines')),
@@ -103,8 +104,81 @@ function goalsView(view, d) {
     h('div', { class: 'ws-stats' },
       stat('Saved toward goals', fmt.money(saved), (target ? `of ${fmt.money(target)} · ` : '') + `${d.goals.length} goals`),
       stat('Per paycheck', fmt.money(d.goals.reduce((s, g) => s + (g.contribution_per_check || 0), 0)), 'set aside for goals')),
-    card('Savings goals', goalList(d.goals)),
+    card(h('span', {}, 'Savings goals', h('a', { class: 'btn small', href: '/app/money/goals' }, 'Edit goals')), goalMeters(d)),
     retirementStats(d.retirement));
+}
+
+// ── Savings goals as thermometers ───────────────────────────────────────────
+function goalMeters(d, onChange) {
+  if (!d.goals.length) return empty('No savings goals yet. Add one with a target amount.');
+  return h('div', { class: 'ws-goals' }, d.goals.map(g => {
+    const meter = document.createElement('finance-healthmeter');
+    meter.setAttribute('label', g.name);
+    meter.setAttribute('current', String(g.balance ?? 0));
+    if (g.target) meter.setAttribute('goal', String(g.target));
+    if (g.due_on) meter.setAttribute('due', 'by ' + fmt.day(g.due_on));
+    const source = g.account_id
+      ? `follows ${g.account_name || 'an account'}${g.account_mask ? ' ••' + g.account_mask : ''}${g.as_of ? ' · ' + fmt.day(g.as_of) : ''}`
+      : g.as_of ? `saved amount as of ${fmt.day(g.as_of)}` : 'nothing recorded yet';
+    return h('section', { class: 'ws-goal' }, meter,
+      h('p', { class: 'ws-note' }, [source, g.contribution_per_check ? fmt.money(g.contribution_per_check) + ' per paycheck' : null].filter(Boolean).join(' · ')),
+      onChange ? h('div', { class: 'ws-goal-actions' },
+        g.account_id ? null : h('button', { class: 'btn small', onclick: () => updateSaved(g, onChange) }, 'Update saved'),
+        h('button', { class: 'btn small', onclick: () => editGoal(d, g, onChange) }, 'Edit')) : null);
+  }));
+}
+
+// Add or edit a goal: a target amount, and where its progress comes from.
+async function editGoal(d, g, onChange) {
+  const accounts = [['', 'No account: I’ll record what’s saved'], ...d.goalAccounts.map(a => [a.account_id, `${a.name}${a.mask ? ' ••' + a.mask : ''}`])];
+  const form = h('form', { class: 'ws-form', onsubmit: e => e.preventDefault() },
+    field('Goal', 'name', { value: g?.name || '', placeholder: 'e.g. Emergency fund', required: true }),
+    field('Target ($)', 'target', { kind: 'number', min: 1, step: '0.01', value: g?.target ?? '', required: true }),
+    field('Progress comes from', 'account_id', { kind: 'select', options: accounts, value: g?.account_id || '', wide: true }),
+    g ? null : field('Already saved ($, optional)', 'saved', { kind: 'number', step: '0.01', placeholder: 'e.g. 1500' }),
+    field('Target date (optional)', 'due_on', { kind: 'date', value: g?.due_on || '' }),
+    field('Per paycheck (optional)', 'contribution_per_check', { kind: 'number', min: 0, step: '0.01', value: g?.contribution_per_check || '' }),
+    field('Note', 'note', { value: g?.note || '', wide: true }));
+  const saved = form.querySelector('[name=saved]')?.closest('label');
+  const account = form.querySelector('[name=account_id]');
+  const sync = () => { if (saved) saved.hidden = !!account.value; };
+  account.addEventListener('change', sync); sync();
+  const error = h('p', { class: 'ws-note warn', role: 'alert' });
+  const buttons = [['Cancel', null], ...(g ? [['Delete', 'delete']] : []), ['Save', 'save']];
+  for (;;) {
+    const choice = await dialog(g ? 'Edit goal' : 'Add a savings goal', h('div', {}, form, error), buttons);
+    if (!choice) return;
+    try {
+      if (choice === 'delete') {
+        if (!(await confirmDelete(g.name))) continue;
+        await api(`/api/v1/money/goals/${encodeURIComponent(g.goal_id)}`, { method: 'DELETE' });
+        toast('Goal deleted');
+      } else {
+        const body = values(form);
+        if (body.account_id) delete body.saved;
+        await api(g ? `/api/v1/money/goals/${encodeURIComponent(g.goal_id)}` : '/api/v1/money/goals',
+                  { method: g ? 'PUT' : 'POST', body: { ...body, account_id: body.account_id || null }, quiet: true });
+        toast(g ? 'Goal saved' : 'Goal added');
+      }
+      return onChange();
+    } catch (e) { error.textContent = e.message; }
+  }
+}
+
+// What's put aside for a goal that doesn't follow an account.
+async function updateSaved(g, onChange) {
+  const form = h('form', { class: 'ws-form', onsubmit: e => e.preventDefault() },
+    field('Saved so far ($)', 'amount', { kind: 'number', step: '0.01', value: g.balance ?? '', required: true }),
+    field('As of', 'as_of', { kind: 'date', value: new Date().toLocaleDateString('en-CA') }));
+  const error = h('p', { class: 'ws-note warn', role: 'alert' });
+  for (;;) {
+    if (!(await dialog(`Saved toward ${g.name}`, h('div', {}, form, error), [['Cancel', null], ['Save', true]]))) return;
+    try {
+      await api(`/api/v1/money/goals/${encodeURIComponent(g.goal_id)}/saved`, { method: 'POST', body: values(form), quiet: true });
+      toast('Saved amount recorded');
+      return onChange();
+    } catch (e) { error.textContent = e.message; }
+  }
 }
 
 function goalList(goals) {
@@ -148,8 +222,8 @@ function payCard(d) {
 function hbars(rows) {
   if (!rows.length) return null;
   const max = Math.max(...rows.map(r => r[1] || 0));
-  return h('div', { class: 'ws-hbars' }, rows.map(([label, value, title]) => h('div', { class: 'ws-hbar', title: title || null },
-    h('span', {}, label), bar(value || 0, max), h('span', { class: 'ws-amount' }, fmt.money(value)))));
+  return h('div', { class: 'ws-hbars' }, rows.map(([label, value, title]) => h('div', { class: 'ws-hbar' },
+    h('span', { title: title || label }, label), bar(value || 0, max), h('span', { class: 'ws-amount', title: title || null }, fmt.money(value)))));
 }
 
 // ── Transactions ─────────────────────────────────────────────────────────────
@@ -246,20 +320,22 @@ async function budgets(view, { params, navigate }) {
   const months = await api('/api/v1/money/months');
   const d = await api('/api/v1/money/budgets' + (params.get('month') ? '?month=' + params.get('month') : ''));
   const month = d.month.slice(0, 7);
+  const redraw = () => navigate(location.pathname + location.search, { replace: true });
+  const editLink = (kind, id, text) => h('button', { class: 'btn link', type: 'button', onclick: () => editPlanById(kind, id, redraw) }, text);
   view.append(
     h('div', { class: 'ws-filters' }, h('label', { class: 'ws-field' }, h('span', {}, 'Month'),
       h('select', { onchange: e => navigate('/app/money/budgets?month=' + e.target.value) },
         months.map(m => h('option', { value: m, selected: m === month }, fmt.month(m + '-01')))))),
     h('div', { class: 'ws-grid two' },
-      card('Budgets', h('table', { class: 'ws-table' },
+      card(h('span', {}, 'Budgets', planButton('+ Budget', 'budgets', null, redraw)), d.budgets.length ? h('div', { class: 'ws-table-wrap' }, h('table', { class: 'ws-table' },
         h('thead', {}, h('tr', {}, h('th', {}, 'Budget'), h('th', { class: 'num' }, 'Monthly'), h('th', { class: 'num' }, 'Spent'), h('th', { class: 'num' }, 'Left'))),
-        h('tbody', {}, d.budgets.map(b => h('tr', {}, h('td', {}, b.name, b.note ? h('div', { class: 'ws-note' }, b.note) : null),
+        h('tbody', {}, d.budgets.map(b => h('tr', {}, h('td', {}, editLink('budgets', b.budget_id, b.name), b.note ? h('div', { class: 'ws-note' }, b.note) : null),
           h('td', { class: 'num' }, fmt.money(b.monthly_amount)), h('td', { class: 'num' }, fmt.money(b.actual ?? 0)),
-          h('td', { class: 'num' }, h('span', { class: b.over_budget ? 'bad' : '' }, fmt.money(b.remaining ?? b.monthly_amount)))))))),
-      card('Recurring bills', h('ul', { class: 'ws-list' }, d.bills.map(b => h('li', { class: 'ws-row' },
-        h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, b.name),
+          h('td', { class: 'num' }, h('span', { class: b.over_budget ? 'bad' : '' }, fmt.money(b.remaining ?? b.monthly_amount)))))))) : empty('No budgets yet.')),
+      card(h('span', {}, 'Recurring bills', planButton('+ Bill', 'bills', null, redraw)), d.bills.length ? h('ul', { class: 'ws-list' }, d.bills.map(b => h('li', { class: 'ws-row' },
+        h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, editLink('bills', b.expense_id, b.name)),
           h('div', { class: 'ws-row-meta' }, [b.frequency, b.due_day ? 'due day ' + b.due_day : null, b.category, b.is_current ? null : 'ended'].filter(Boolean).join(' · '))),
-        h('span', { class: 'ws-amount' }, fmt.money(b.monthly_amount) + '/mo')))))),
+        h('span', { class: 'ws-amount' }, fmt.money(b.monthly_amount) + '/mo')))) : empty('No recurring bills yet.'))),
     card('Spending by category', h('table', { class: 'ws-table' }, h('tbody', {}, d.spending.map(s => h('tr', {},
       h('td', {}, s.category), h('td', { class: 'ws-note' }, `${s.transactions} transactions`), h('td', { class: 'num' }, fmt.money(s.amount))))))));
 }
@@ -267,25 +343,51 @@ async function budgets(view, { params, navigate }) {
 // ── Goals & retirement ───────────────────────────────────────────────────────
 async function goals(view) {
   const d = await api('/api/v1/money/goals');
+  const redraw = () => goals(view.replaceChildren(...[...view.children].slice(0, 2)) || view);
   const r = d.retirement || {};
   view.append(
     h('div', { class: 'ws-stats' },
       stat('Retirement balance', fmt.money(r.total_balance), r.balances_as_of ? 'as of ' + fmt.day(r.balances_as_of) : ''),
       stat('401(k) room left this year', fmt.money(r.deferral_room), `limit ${fmt.money(r.deferral_limit)} · projected ${fmt.money(r.projected_remaining_deferrals)} more`),
       stat('IRA', fmt.money(r.ira_actual), `of ${fmt.money(r.ira_limit)} · ${fmt.money(r.ira_per_check)} per check`)),
+    card(h('span', {}, 'Savings goals', h('button', { class: 'btn small primary', onclick: () => editGoal(d, null, redraw) }, '+ Goal')),
+      goalMeters(d, redraw)),
     h('div', { class: 'ws-grid two' },
-      card('Savings goals', goalList(d.goals)),
       card('Retirement accounts', h('ul', { class: 'ws-list' }, d.retirementAccounts.map(a => h('li', { class: 'ws-row' },
         h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, a.name), h('div', { class: 'ws-row-meta' }, a.as_of ? 'as of ' + fmt.day(a.as_of) : '')),
         h('span', { class: 'ws-amount' }, fmt.money(a.balance))))))),
-    card('Pay plan', h('div', { class: 'ws-grid' },
-      h('div', {}, h('div', { class: 'ws-note', style: { fontWeight: 600 } }, 'Each paycheck goes to'),
-        h('ul', { class: 'ws-list' }, d.deposits.map(x => h('li', { class: 'ws-row' }, h('div', { class: 'ws-row-main' }, x.name || (x.account_id ? 'Account ••' + x.account_id.replace(/^acct-/, '') : 'Deposit')),
-          h('span', { class: 'ws-amount' }, fmt.money(x.amount)))))),
-      h('div', {}, h('div', { class: 'ws-note', style: { fontWeight: 600 } }, 'Set aside each paycheck'),
-        h('ul', { class: 'ws-list' }, d.allocations.map(x => h('li', { class: 'ws-row' },
-          h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, x.name), h('div', { class: 'ws-row-meta' }, x.cadence || '')),
-          h('span', { class: 'ws-amount' }, fmt.money(x.amount)))))))));
+    planCards(d, redraw));
+}
+
+// The pay plan and retirement plan, each editable in place.
+function planCards(d, redraw) {
+  const list = (rows, kind, title, meta, empty_) => rows.length
+    ? h('ul', { class: 'ws-list' }, rows.map(x => h('li', { class: 'ws-row' },
+        h('div', { class: 'ws-row-main' }, h('div', { class: 'ws-row-title' }, title(x)), meta ? h('div', { class: 'ws-row-meta' }, meta(x)) : null),
+        h('div', { class: 'ws-row-end' }, h('span', { class: 'ws-amount' }, fmt.money(x.amount)), planButton('Edit', kind, x, redraw, 'btn small link')))))
+    : empty(empty_);
+  const pay = d.pay[0], plan = d.retirementPlan || {};
+  const kv = pairs => h('div', { class: 'ws-kv' }, pairs.filter(([, v]) => v != null && v !== '').flatMap(([k, v]) => [h('span', {}, k), h('span', {}, v)]));
+  return h('div', {},
+    h('div', { class: 'ws-grid two' },
+      card(h('span', {}, 'Each paycheck goes to', planButton('+ Deposit', 'deposits', null, redraw)),
+        list(d.deposits, 'deposits', x => x.destination_text || 'Deposit', null, 'No paycheck deposits yet.')),
+      card(h('span', {}, 'Set aside each paycheck', planButton('+ Set-aside', 'allocations', null, redraw)),
+        list(d.allocations, 'allocations', x => x.name, x => x.cadence, 'Nothing set aside yet.'))),
+    h('div', { class: 'ws-grid two' },
+      card(h('span', {}, 'Pay', planButton(pay ? 'New pay as of…' : '+ Pay', 'pay', pay ? { ...pay, as_of: '' } : null, redraw)),
+        pay ? h('div', {}, kv([['As of', fmt.day(pay.as_of)], ['Net per check', fmt.money(pay.net_pay)], ['Gross per check', fmt.money(pay.gross_pay)],
+                               ['Checks a year', pay.checks_per_year], ['Gross this year', pay.gross_ytd != null ? fmt.money(pay.gross_ytd) : null]]),
+                    h('div', { style: { marginTop: '8px' } }, planButton('Edit', 'pay', pay, redraw)))
+            : empty('No pay recorded yet.')),
+      card(h('span', {}, 'Other income', planButton('+ Income', 'incomes', null, redraw)),
+        list(d.incomes, 'incomes', x => x.name, x => x.frequency, 'No other income.'))),
+    card(h('span', {}, 'Retirement plan', planButton(plan.as_of ? 'New plan as of…' : '+ Plan', 'retirement-plan', plan.as_of ? { ...plan, as_of: '' } : null, redraw)),
+      plan.as_of ? h('div', {}, kv([['As of', fmt.day(plan.as_of)], ['401(k): you per check', fmt.money(plan.employee_per_check)],
+          ['401(k): employer per check', fmt.money(plan.employer_per_check)], ['401(k) limit', fmt.money(plan.deferral_limit)],
+          ['Paychecks left', plan.remaining_checks], ['IRA per check', fmt.money(plan.ira_per_check)], ['IRA limit', fmt.money(plan.ira_limit)]]),
+        h('div', { style: { marginTop: '8px' } }, planButton('Edit', 'retirement-plan', plan, redraw)))
+        : empty('No retirement plan yet.')));
 }
 
 // ── Imports ──────────────────────────────────────────────────────────────────
@@ -410,12 +512,10 @@ function samples(s) {
       h('td', { class: 'ws-note' }, kind), h('td', { class: 'num' }, amount(t.amount))))));
 }
 
-// ── The Finance tracker ──────────────────────────────────────────────────────
+// ── The retired Finance tracker (an old link lands here) ────────────────────
 function editor(view) {
-  view.append(
-    h('p', { class: 'ws-note' }, 'Your original Finance tracker, running privately. Its saves update every Money screen. Bank activity, receipts and pay statements now load through Imports; rows loaded there replace the tracker’s copies.'),
-    h('div', { class: 'ws-tracker', id: 'adm-tracker-finance' }));
-  window.VW.Trackers.open('finance');
-  setDirty(() => window.VW.Trackers.isDirty());   // a save in flight must finish before leaving
-  return () => window.VW.Trackers.clear();
+  view.append(card('The Finance tracker is retired', h('p', {}, 'Its records live in the finance tables and are edited here: ',
+    h('a', { href: '/app/money/budgets' }, 'Budgets & bills'), ', ', h('a', { href: '/app/money/goals' }, 'Goals & retirement'),
+    ' (savings goals, the pay plan, retirement) and ', h('a', { href: '/app/money/imports' }, 'Imports'),
+    '. Its last document is kept in the database; Settings › Retired trackers explains how to export it.')));
 }
