@@ -26,3 +26,7 @@ env:
   # (virtuwill/plaid_synced.py).
   - name: PLAID_SYNC_MINUTES
     value: "15"
+  # Load the RunKeeper synced table (bronze.raw_runkeeper_activities) into the workouts every
+  # hour (virtuwill/runkeeper_synced.py).
+  - name: RUNKEEPER_SYNC_MINUTES
+    value: "60"

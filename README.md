@@ -58,6 +58,18 @@ synced tables mirror them into the app's database. Every `PLAID_SYNC_MINUTES` (1
 same matching as Money › Imports ([`virtuwill/plaid_synced.py`](virtuwill/plaid_synced.py)).
 Setup, the one grant it needs, and checking it: [docs/plaid-lakebase.md](docs/plaid-lakebase.md).
 
+## RunKeeper from the lakehouse
+
+The RunKeeper export sits in the stage volume. Two notebooks land it:
+[`runkeeper_activities_to_bronze`](jobs/runkeeper_activities_to_bronze.ipynb) writes the activity log
+(cardioActivities.csv) to `prod.bronze.raw_runkeeper_activities`, and
+[`runkeeper_gpx_to_bronze`](jobs/runkeeper_gpx_to_bronze.ipynb) writes the GPX tracks to
+`prod.bronze.raw_runkeeper_gpx`. Lakebase synced tables mirror both into the app's database.
+Every `RUNKEEPER_SYNC_MINUTES` (60 in `app.yaml`) the app loads new or changed activities as
+workouts on the date each one happened, with its route
+([`virtuwill/runkeeper_synced.py`](virtuwill/runkeeper_synced.py)). Setup:
+[docs/runkeeper-lakebase.md](docs/runkeeper-lakebase.md).
+
 ## Brand
 
 The WY mark (a W growing toward a sun) sets the look of the public site and the
@@ -250,8 +262,9 @@ virtuwill/
 │   ├── importers/         Portal exports → structured finance data (chase, payroll, kroger, plaid, plaid_load, canonical, load)
 │   ├── money_imports.py   Money › Imports: upload, preview, commit, download
 │   ├── plaid_synced.py    Plaid from the Lakebase synced tables into finance, every few minutes
+│   ├── runkeeper_synced.py RunKeeper from the Lakebase synced tables into the workouts
 │   └── journal.py, health.py, finance.py, music.py, content.py, career.py, garden.py, travel.py, site.py, trackers.py
-├── jobs/                  The older Plaid → ingest API job
+├── jobs/                  The RunKeeper → bronze notebooks; the older Plaid → ingest API job
 ├── db/schema/             The data model, applied in name order, once each (see db/README.md)
 ├── templates/
 │   ├── index.html         Public site shell; pages/ holds each page's markup
