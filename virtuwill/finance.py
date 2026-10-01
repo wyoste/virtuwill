@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
 
-from . import db
+from . import db, records
 from .auth import admin_required
 from .importers import retirement_type as _retirement_type
 from .util import in_calendar, number, parse_date, plain, slug
@@ -609,6 +609,135 @@ def money_budgets():
         })
 
 
+# ── Savings goals: owned by Money now the tracker is retired ─────────────────
+
+def _goal_values(conn, body, partial=False):
+    """Validated columns for a goal; raises ValueError with a readable message."""
+    if not isinstance(body, dict):
+        raise ValueError("Expected a JSON object")
+    out = {}
+    if "name" in body or not partial:
+        name = " ".join(str(body.get("name") or "").split())
+        if not name or len(name) > 80:
+            raise ValueError("A goal needs a name of up to 80 characters")
+        out["name"] = name
+    if "target" in body or not partial:
+        target = number(body.get("target"))
+        if target is None or not 0 < target <= 100_000_000:
+            raise ValueError("The target must be a dollar amount above zero")
+        out["target"] = round(target, 2)
+    if "contribution_per_check" in body:
+        n = number(body.get("contribution_per_check")) if body.get("contribution_per_check") not in (None, "") else 0
+        if n is None or not 0 <= n <= 1_000_000:
+            raise ValueError("The amount per paycheck must be zero or more")
+        out["contribution_per_check"] = round(n, 2)
+    if "due_on" in body:
+        day = parse_date(body.get("due_on")) if body.get("due_on") else None
+        if body.get("due_on") and not in_calendar(day):
+            raise ValueError("The target date must be a date (YYYY-MM-DD)")
+        out["due_on"] = day
+    if "account_id" in body:
+        account = body.get("account_id") or None
+        if account:
+            row = conn.execute("""SELECT t.is_liability FROM finance.accounts a JOIN finance.account_types t USING (account_type)
+                                  WHERE a.account_id = %s""", (account,)).fetchone()
+            if not row:
+                raise ValueError("That account doesn't exist")
+            if row["is_liability"]:
+                raise ValueError("A goal can follow a cash or savings account, not a card or loan")
+        out["account_id"] = account
+    if "note" in body:
+        out["note"] = str(body.get("note") or "").strip()[:500]
+    return out
+
+
+def _saved_amount(body):
+    amount = number(body.get("amount"))
+    day = parse_date(body.get("as_of")) if body.get("as_of") else datetime.now().date()
+    if amount is None or not -100_000_000 < amount < 100_000_000:
+        raise ValueError("The saved amount must be a dollar amount")
+    if not in_calendar(day):
+        raise ValueError("as_of must be a date (YYYY-MM-DD)")
+    return round(amount, 2), day
+
+
+def _record_saved(conn, goal_id, amount, day):
+    conn.execute("""INSERT INTO finance.balance_snapshots (as_of, goal_id, balance, balance_kind, source)
+                    VALUES (%s, %s, %s, 'reported', 'manual')""", (day, goal_id, amount))
+
+
+def _goal(conn, goal_id):
+    row = conn.execute("SELECT * FROM finance.goal_progress WHERE goal_id = %s", (goal_id,)).fetchone()
+    return plain(row) if row else None
+
+
+@bp.route("/api/v1/money/goals", methods=["POST"])
+@admin_required
+def goal_create():
+    """Add a goal: name, target, and optionally account_id, due_on, contribution_per_check, note,
+    and saved (an amount already put aside, recorded as of today)."""
+    body = request.get_json(silent=True) or {}
+    with db.tx() as conn:
+        try:
+            values = _goal_values(conn, body)
+            saved = _saved_amount({"amount": body["saved"]}) if body.get("saved") not in (None, "") else None
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        if conn.execute("SELECT 1 FROM finance.savings_goals WHERE lower(name) = lower(%s)", (values["name"],)).fetchone():
+            return jsonify({"error": f"There is already a goal called {values['name']}"}), 409
+        base = slug(values["name"]) or "goal"
+        goal_id, n = base, 1
+        while conn.execute("SELECT 1 FROM finance.savings_goals WHERE goal_id = %s", (goal_id,)).fetchone():
+            n += 1
+            goal_id = f"{base}-{n}"
+        cols = ["goal_id", *values]
+        conn.execute(f"INSERT INTO finance.savings_goals ({', '.join(cols)}) VALUES ({', '.join(['%s'] * len(cols))})",
+                     [goal_id, *values.values()])
+        if saved:
+            _record_saved(conn, goal_id, *saved)
+        return jsonify(_goal(conn, goal_id)), 201
+
+
+@bp.route("/api/v1/money/goals/<goal_id>", methods=["PUT", "DELETE"])
+@admin_required
+def goal_update(goal_id):
+    with db.tx() as conn:
+        if not conn.execute("SELECT 1 FROM finance.savings_goals WHERE goal_id = %s", (goal_id,)).fetchone():
+            return jsonify({"error": "Not found"}), 404
+        if request.method == "DELETE":
+            conn.execute("DELETE FROM finance.savings_goals WHERE goal_id = %s", (goal_id,))   # its saved amounts go with it
+            return jsonify({"ok": True})
+        body = request.get_json(silent=True) or {}
+        try:
+            values = _goal_values(conn, body, partial=True)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        if "name" in values and conn.execute("SELECT 1 FROM finance.savings_goals WHERE lower(name) = lower(%s) AND goal_id <> %s",
+                                             (values["name"], goal_id)).fetchone():
+            return jsonify({"error": f"There is already a goal called {values['name']}"}), 409
+        if values:
+            conn.execute(f"UPDATE finance.savings_goals SET {', '.join(f'{c} = %s' for c in values)} WHERE goal_id = %s",
+                         [*values.values(), goal_id])
+        return jsonify(_goal(conn, goal_id))
+
+
+@bp.route("/api/v1/money/goals/<goal_id>/saved", methods=["POST"])
+@admin_required
+def goal_saved(goal_id):
+    """Record how much is saved toward a goal that doesn't follow an account: amount, as_of (default today)."""
+    with db.tx() as conn:
+        goal = conn.execute("SELECT account_id FROM finance.savings_goals WHERE goal_id = %s", (goal_id,)).fetchone()
+        if not goal:
+            return jsonify({"error": "Not found"}), 404
+        if goal["account_id"]:
+            return jsonify({"error": "This goal follows its account's balance; record the account's balance instead"}), 409
+        try:
+            _record_saved(conn, goal_id, *_saved_amount(request.get_json(silent=True) or {}))
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        return jsonify(_goal(conn, goal_id)), 201
+
+
 @bp.route("/api/v1/money/goals")
 @admin_required
 def money_goals():
@@ -618,7 +747,190 @@ def money_goals():
             "retirement": plain(conn.execute("SELECT * FROM finance.retirement_summary").fetchone() or {}),
             "retirementAccounts": _rows(conn, """SELECT l.* FROM finance.latest_balances l JOIN finance.accounts a USING (account_id)
                                                  WHERE a.retirement_type IS NOT NULL ORDER BY l.name"""),
-            "pay": _rows(conn, "SELECT * FROM finance.pay_profile"),
-            "deposits": _rows(conn, "SELECT * FROM finance.paycheck_deposits"),
-            "allocations": _rows(conn, "SELECT * FROM finance.allocations"),
+            "pay": _rows(conn, "SELECT * FROM finance.pay_profile ORDER BY as_of DESC"),
+            "deposits": _rows(conn, "SELECT * FROM finance.paycheck_deposits ORDER BY position"),
+            "allocations": _rows(conn, "SELECT * FROM finance.allocations ORDER BY name"),
+            "incomes": _rows(conn, "SELECT * FROM finance.other_incomes ORDER BY name"),
+            "retirementPlan": plain(conn.execute("SELECT * FROM finance.retirement_plan ORDER BY as_of DESC LIMIT 1").fetchone() or {}),
+            # Cash and savings accounts a goal can follow.
+            "goalAccounts": _rows(conn, """SELECT a.account_id, a.name, a.mask, a.institution FROM finance.accounts a
+                                           JOIN finance.account_types t USING (account_type)
+                                           WHERE a.is_active AND NOT t.is_liability AND a.retirement_type IS NULL ORDER BY a.name"""),
+        })
+
+
+# ── The plan: budgets, bills, pay and retirement, edited in Money ────────────
+# The Finance tracker is retired; these tables are edited here. One spec per kind
+# drives validation, ids and the routes:
+#   GET  /api/v1/money/plan/<kind>        every record, as stored (budgets carry their categories)
+#   POST /api/v1/money/plan/<kind>        add one
+#   PUT/DELETE /api/v1/money/plan/<kind>/<id>
+# Ids are text slugs of the name, a position, or the as-of date, as the table keys them.
+
+F = records.Field
+STATUSES = {"Active", "Unconfirmed", "Canceled", "Expiring"}
+MONEY = dict(low=0, high=100_000_000)
+PLAN = {
+    "budgets": {"table": "finance.budgets", "pk": "budget_id", "id": "slug", "order": "name", "fields": [
+        F("name", required=True, max_length=80),
+        F("basis", choices={"fixed", "per_paycheck", "recurring_expenses", "unset"}, default="fixed"),
+        F("amount_monthly", "number", **MONEY), F("per_paycheck", "number", **MONEY),
+        F("paychecks_per_year", "int", low=1, high=60), F("note", max_length=500)]},
+    "bills": {"table": "finance.recurring_expenses", "pk": "expense_id", "id": "slug", "order": "name", "fields": [
+        F("name", required=True, max_length=120), F("amount", "number", **MONEY),
+        F("frequency", choices=FREQUENCIES, default="Monthly"), F("due_day", "int", low=1, high=31),
+        F("status", choices=STATUSES, default="Active"), F("category", required=True, max_length=80),
+        F("account_id", nullable=True, max_length=120), F("note", max_length=500)]},
+    "incomes": {"table": "finance.other_incomes", "pk": "income_id", "id": "slug", "order": "name", "fields": [
+        F("name", required=True, max_length=120), F("amount", "number", required=True, **MONEY),
+        F("frequency", choices=FREQUENCIES, default="Monthly"), F("note", max_length=500)]},
+    "allocations": {"table": "finance.allocations", "pk": "allocation_id", "id": "slug", "order": "name", "fields": [
+        F("name", required=True, max_length=80), F("amount", "number", required=True, **MONEY),
+        F("cadence", choices=FREQUENCIES, default="Biweekly"), F("account_id", nullable=True, max_length=120),
+        F("note", max_length=500)]},
+    "deposits": {"table": "finance.paycheck_deposits", "pk": "position", "id": "position", "order": "position", "fields": [
+        F("destination_text", required=True, max_length=120), F("account_id", nullable=True, max_length=120),
+        F("amount", "number", required=True, **MONEY)]},
+    "pay": {"table": "finance.pay_profile", "pk": "as_of", "id": "as_of", "order": "as_of DESC", "fields": [
+        F("as_of", "date", required=True), F("net_pay", "number", required=True, **MONEY),
+        F("gross_pay", "number", required=True, **MONEY), F("checks_per_year", "int", required=True, low=1, high=60),
+        F("anchor_date", "date", required=True), F("gross_ytd", "number", **MONEY), F("net_ytd", "number", **MONEY),
+        F("bonus_ytd", "number", **MONEY)]},
+    "retirement-plan": {"table": "finance.retirement_plan", "pk": "as_of", "id": "as_of", "order": "as_of DESC", "fields": [
+        F("as_of", "date", required=True), F("employee_per_check", "number", **MONEY), F("employer_per_check", "number", **MONEY),
+        F("employee_ytd", "number", **MONEY), F("employer_ytd", "number", **MONEY), F("deferral_limit", "number", **MONEY),
+        F("other_deferrals", "number", **MONEY), F("remaining_checks", "int", low=0, high=60),
+        F("ira_per_check", "number", **MONEY), F("ira_limit", "number", **MONEY), F("ira_actual", "number", **MONEY)]},
+}
+BUDGET_LIST = """SELECT b.*, COALESCE((SELECT jsonb_agg(c.category ORDER BY c.category) FROM finance.budget_categories c
+                                         WHERE c.budget_id = b.budget_id), '[]') AS categories FROM finance.budgets b"""
+
+
+def _plan_rows(conn, kind, record_id=None):
+    spec = PLAN[kind]
+    sql = BUDGET_LIST if kind == "budgets" else f"SELECT * FROM {spec['table']}"
+    alias = "b." if kind == "budgets" else ""
+    if record_id is not None:
+        row = conn.execute(f"{sql} WHERE {alias}{spec['pk']} = %s", (record_id,)).fetchone()
+        return plain(row) if row else None
+    return _rows(conn, f"{sql} ORDER BY {alias}{spec['order']}")
+
+
+def _plan_check(conn, kind, values, body):
+    """Rules the table can't say on its own, with readable messages; also files new categories."""
+    if kind == "budgets":
+        basis = values.get("basis")
+        if basis == "fixed" and values.get("amount_monthly") is None:
+            raise records.Invalid("A fixed budget needs a monthly amount")
+        if basis == "per_paycheck" and (values.get("per_paycheck") is None or not values.get("paychecks_per_year")):
+            raise records.Invalid("A per-paycheck budget needs the amount per paycheck and paychecks per year")
+        if "categories" in body:
+            cats = body["categories"] if isinstance(body["categories"], list) else str(body["categories"] or "").split(",")
+            cats = list(dict.fromkeys(" ".join(str(c).split()) for c in cats if str(c).strip()))
+            if len(cats) > 40 or any(len(c) > 80 for c in cats):
+                raise records.Invalid("Too many categories, or one is too long")
+            return cats
+    if kind == "bills" and values.get("category"):
+        _category(conn, values["category"])
+    for key in ("account_id",):
+        if values.get(key) and not conn.execute("SELECT 1 FROM finance.accounts WHERE account_id = %s", (values[key],)).fetchone():
+            raise records.Invalid("That account doesn't exist")
+    return None
+
+
+def _write_budget_categories(conn, budget_id, cats):
+    # A category belongs to one budget: moving it here takes it from any other.
+    conn.execute("DELETE FROM finance.budget_categories WHERE budget_id = %s OR category = ANY(%s)", (budget_id, cats))
+    for c in cats:
+        _category(conn, c)
+        conn.execute("INSERT INTO finance.budget_categories (budget_id, category) VALUES (%s, %s)", (budget_id, c))
+
+
+def _plan_error(e):
+    import psycopg
+    if isinstance(e, records.Invalid):
+        return jsonify({"error": str(e)}), 400
+    if isinstance(e, psycopg.errors.UniqueViolation):
+        return jsonify({"error": "There is already one with that name or date"}), 409
+    if isinstance(e, (psycopg.errors.CheckViolation, psycopg.errors.ForeignKeyViolation, psycopg.errors.NotNullViolation)):
+        return jsonify({"error": "Those values don't fit together; check the amounts and dates"}), 400
+    raise e
+
+
+@bp.route("/api/v1/money/plan/<kind>", methods=["GET", "POST"])
+@admin_required
+def plan_list(kind):
+    if kind not in PLAN:
+        return jsonify({"error": "Not found"}), 404
+    spec = PLAN[kind]
+    if request.method == "GET":
+        with db.tx() as conn:
+            return jsonify(_plan_rows(conn, kind))
+    body = request.get_json(silent=True)
+    try:
+        values = records.clean(spec["fields"], body)
+        with db.tx() as conn:
+            cats = _plan_check(conn, kind, values, body)
+            if spec["id"] == "slug":
+                base = slug(values["name"])
+                record_id, n = base, 1
+                while conn.execute(f"SELECT 1 FROM {spec['table']} WHERE {spec['pk']} = %s", (record_id,)).fetchone():
+                    n += 1
+                    record_id = f"{base}-{n}"
+                values = {spec["pk"]: record_id} | values
+            elif spec["id"] == "position":
+                values = {"position": conn.execute("SELECT COALESCE(MAX(position) + 1, 0) AS n FROM finance.paycheck_deposits").fetchone()["n"]} | values
+            cols = list(values)
+            record_id = conn.execute(f"INSERT INTO {spec['table']} ({', '.join(cols)}) VALUES ({', '.join(['%s'] * len(cols))}) "
+                                     f"RETURNING {spec['pk']}", list(values.values())).fetchone()[spec["pk"]]
+            if cats is not None:
+                _write_budget_categories(conn, record_id, cats)
+            return jsonify(_plan_rows(conn, kind, record_id)), 201
+    except Exception as e:      # validation and constraint errors become readable 4xx; anything else is raised
+        return _plan_error(e)
+
+
+@bp.route("/api/v1/money/plan/<kind>/<record_id>", methods=["PUT", "DELETE"])
+@admin_required
+def plan_record(kind, record_id):
+    if kind not in PLAN:
+        return jsonify({"error": "Not found"}), 404
+    spec = PLAN[kind]
+    if spec["id"] == "position":
+        if not record_id.isdigit():
+            return jsonify({"error": "Not found"}), 404
+        record_id = int(record_id)
+    try:
+        with db.tx() as conn:
+            current = _plan_rows(conn, kind, record_id)
+            if not current:
+                return jsonify({"error": "Not found"}), 404
+            if request.method == "DELETE":
+                conn.execute(f"DELETE FROM {spec['table']} WHERE {spec['pk']} = %s", (record_id,))
+                return jsonify({"ok": True})
+            body = request.get_json(silent=True)
+            values = records.clean(spec["fields"], body, partial=True) if body else {}
+            if not isinstance(body, dict) or (not values and "categories" not in body):
+                raise records.Invalid("Nothing to change")
+            cats = _plan_check(conn, kind, {**current, **values}, body)
+            if values:
+                conn.execute(f"UPDATE {spec['table']} SET {', '.join(f'{c} = %s' for c in values)} WHERE {spec['pk']} = %s",
+                             [*values.values(), record_id])
+            new_id = values.get(spec["pk"], record_id)
+            if cats is not None:
+                _write_budget_categories(conn, new_id, cats)
+            return jsonify(_plan_rows(conn, kind, new_id))
+    except Exception as e:
+        return _plan_error(e)
+
+
+@bp.route("/api/v1/money/plan-options")
+@admin_required
+def plan_options():
+    """What the plan editors pick from: categories and accounts."""
+    with db.tx() as conn:
+        return jsonify({
+            "categories": [r["category"] for r in conn.execute("SELECT category FROM finance.categories ORDER BY category")],
+            "accounts": _rows(conn, """SELECT a.account_id, a.name, a.mask, t.is_liability FROM finance.accounts a
+                                       JOIN finance.account_types t USING (account_type) WHERE a.is_active ORDER BY a.name"""),
         })

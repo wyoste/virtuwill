@@ -25,7 +25,7 @@ one sidebar and one screen at a time:
 | Today | one day: stats, habits, quick logging, account balances, daily spending, that day's money | — (links into the others) |
 | Journal | entries by date, editor, habits, balance check-in, photo transcription | `journal.entries`, tags, habit logs, journal balance snapshots |
 | Health | Overview · Activity · Food · Body · Goals | workouts, meals, weigh-ins, drinks, foods, profile, goals |
-| Money | Overview (full analysis, or goals only) · Transactions · Receipts · Accounts & balances · Budgets & bills · Goals & retirement · Imports · Finance tracker | bank activity, statements, paychecks and receipts through Imports; budgets, goals and the pay plan in the Finance tracker |
+| Money | Overview (full analysis, or goals only) · Transactions · Receipts · Accounts & balances · Budgets & bills · Goals & retirement · Imports | bank activity, statements, paychecks and receipts through Imports; budgets, bills, goals, the pay plan and retirement edited on their tabs |
 | Site | Music (songs, their meaning, setup, lyrics and chords by section, line notes, version notes) · Career (profile & ethos, skills & education with school logos, experience, projects, CV upload) · Writing · Garden (photos tagged to beds and plant types, the bed planner, page text) · Travel (add a stop by picking its country, state and a real city from searchable lists, with photos attached in the same step; stops by city; a visited stop marks its country and US state by itself, plus any marked by hand) · Messages | everything the public site shows |
 | Settings | site switches, journal check-in accounts, diagnostics | `core.settings` |
 
@@ -78,16 +78,14 @@ so every component follows the brand. Text colours meet WCAG AA contrast.
 
 ## The Finance and Health trackers
 
-The **Health tracker is retired**: Health in the workspace owns those records. Its
-document and last state stay in the database (and exportable from Settings); saves
-to it are refused so nothing overwrites records edited natively.
-
-The **Finance tracker** still edits budgets, bills, savings goals and the pay plan:
-open it at **Money › Finance tracker**. Every save projects its records into the
-`finance` tables that the Money screens read, and the status bar reports separately
-whether the record saved and whether the screens updated. Bank activity and receipts
-it holds are replaced by imported copies of the same rows (below): once a transaction
-or receipt has been imported, the tracker's copy is not re-created.
+Both embedded trackers are **retired**. Health in the workspace owns the health
+records, and Money owns the finance records: budgets and bills on **Budgets & bills**;
+savings goals, the pay plan and the retirement plan on **Goals & retirement**; bank
+activity, receipts and pay statements through **Imports**. Everything the trackers
+held was already projected into the `health`, `journal` and `finance` tables, so
+nothing moved; the trackers just stopped rewriting those tables. Their documents and
+last states stay in the database, and saves to them are refused, so nothing
+overwrites records edited natively.
 
 ## Finance imports
 

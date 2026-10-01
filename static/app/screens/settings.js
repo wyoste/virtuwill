@@ -33,7 +33,8 @@ export async function render(view) {
     apiAccess(),
     card('Retired trackers', h('p', { class: 'ws-note' },
       'The Health tracker is retired: Health in the workspace owns those records now. Its document and last state are kept in the database. ',
-      'The Finance tracker is still the editor for Money until statement and receipt imports arrive; open it under ', h('a', { href: '/app/money/editor' }, 'Money › Finance tracker'), '.')),
+      'The Finance tracker is retired too: Money owns budgets, bills, goals, the pay plan and retirement, and Imports loads bank activity, receipts and pay statements. ',
+      'Both documents and their last states are kept in the database.')),
     card(h('span', {}, 'Diagnostics', h('button', { class: 'btn small', onclick: () => loadDiagnostics(diag) }, 'Refresh')), diag));
   loadDiagnostics(diag);
 }

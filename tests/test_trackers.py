@@ -75,20 +75,30 @@ class TrackerTests(unittest.TestCase):
         self.assertNotIn('yoste-finance-spa-v1', self.client.get('/').text)
 
     def test_revision_conflict_and_validation(self):
+        # Both trackers are retired, so saving is no longer reachable over HTTP; the save
+        # itself (kept for the one-time move) still checks revisions and validates state.
         token = self.login()
         self.install(token)
         payload = {"revision": 0, "state": finance_state()}
         self.assertEqual(self.client.put('/api/admin/trackers/finance', json=payload).status_code, 403)
-        response = self.save(token, 'finance', payload['state'], 0)
-        self.assertEqual(response.json['revision'], 1)
-        self.assertTrue(response.json['synced'])
+        self.assertIsNotNone(trackers.save('finance', payload['state'], 0))
         stale = finance_state() | {"shopping": [{"name": "stale"}]}
-        self.assertEqual(self.save(token, 'finance', stale, 0).status_code, 409)
+        self.assertIsNone(trackers.save('finance', stale, 0))
         row = trackers.get('finance')
         self.assertEqual(json.loads(row['state'])['shopping'], [])
         self.assertEqual(row['revision'], 1)
-        self.assertEqual(self.save(token, 'finance', {}, 1).status_code, 400)
-        self.assertEqual(self.save(token, 'finance', finance_state() | {"shopping": [{"amount": float('nan')}]}, 1).status_code, 400)
+        for bad in ({}, finance_state() | {"shopping": [{"amount": float('nan')}]}):
+            with self.assertRaises(ValueError):
+                trackers.save('finance', bad, 1)
+
+    def test_finance_tracker_is_retired_but_kept(self):
+        token = self.login()
+        self.install(token)
+        response = self.save(token, 'finance', finance_state(), 0)
+        self.assertEqual(response.status_code, 410)
+        self.assertIn('Money in the workspace', response.json['error'])
+        self.assertIn('retired', self.client.get('/api/admin/trackers/finance').json['retired'])
+        self.assertEqual(self.client.get('/admin/trackers/finance/frame').status_code, 200)   # still readable for export
 
     def test_health_tracker_is_retired_but_kept(self):
         token = self.login()
@@ -118,7 +128,7 @@ class TrackerTests(unittest.TestCase):
         project(health_state(workouts=workouts))
         self.assertEqual(ids(), after)
         self.assertEqual(db.one("SELECT COUNT(*) AS n FROM health.body_measurements")["n"], 2)
-        self.assertEqual(db.one("SELECT name FROM health.recipes")["name"], "Breakfast")
+        self.assertEqual(db.one("SELECT name FROM health.recipes WHERE source = 'health_tracker'")["name"], "Breakfast")   # seeded go-to meals aside
         goals = {g['metric']: g for g in admin_client(app).get('/api/v1/health/goals').json}
         self.assertEqual(goals['weight']['target'], 153.3)      # BMI 22 at 70 in
         self.assertFalse(goals['weight']['editable'])
@@ -127,10 +137,8 @@ class TrackerTests(unittest.TestCase):
         token = self.login()
         self.install(token)
         with mock.patch.object(finance, "project", side_effect=RuntimeError("unexpected record")):
-            response = self.save(token, 'finance', finance_state(), 0)
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json['synced'])
-        self.assertIn('unexpected record', response.json['syncError'])
+            report = trackers.save('finance', finance_state(), 0)
+        self.assertIn('unexpected record', report['error'])
         self.assertEqual(trackers.get('finance')['revision'], 1)
         diagnostics = self.client.get('/api/admin/diagnostics').json
         sync = next(s for s in diagnostics['syncs'] if s['source'] == 'finance_tracker')
@@ -139,7 +147,7 @@ class TrackerTests(unittest.TestCase):
     def test_frame_sandbox_escape_and_logout(self):
         token = self.login()
         self.install(token)
-        self.save(token, 'finance', finance_state() | {"shopping": [{"name": '</script><script>alert(1)</script>'}]}, 0)
+        trackers.save('finance', finance_state() | {"shopping": [{"name": '</script><script>alert(1)</script>'}]}, 0)
         r = self.client.get('/admin/trackers/finance/frame')
         self.assertEqual(r.status_code, 200)
         self.assertIn('no-store', r.headers['Cache-Control'])

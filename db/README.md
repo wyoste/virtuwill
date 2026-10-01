@@ -45,9 +45,14 @@ module per schema. `virtuwill/migrate.py` moved the earlier Lakebase layout in o
 - **Derived habits**: `journal.habits.derived_from` ties run, lift and drink to the day's
   records (`journal.derived_habits`); `journal.day_habits` shows each day's habits, where a
   `habit_logs` row set by the owner wins over the derivation.
-- **One editor per record**: workspace screens write through `/api/v1`. The Health
-  tracker is retired, so its former rows are edited like any other; the Finance
-  tracker still owns the finance rows it projects until Money imports replace it.
+- **One editor per record**: workspace screens write through `/api/v1`. Both embedded
+  trackers are retired, so the rows they once projected are edited like any other:
+  Money edits budgets, bills, other income, set-asides, paycheck deposits, pay and the
+  retirement plan (`/api/v1/money/plan/<kind>`) and savings goals (`/api/v1/money/goals`).
+- **Savings goals** (108) have a dollar target and get their progress from a linked
+  cash or savings account (`savings_goals.account_id`, its current balance) or, when
+  not linked, the latest saved amount recorded for the goal (`balance_snapshots.goal_id`);
+  `finance.goal_progress` shows both.
 
 ## Statements, exports and receipts
 
