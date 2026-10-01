@@ -5,6 +5,7 @@ import { h, api, fmt, card, pageHead, isoToday, addDays, empty, toast, run, clea
 import { setDirty } from '../main.js';
 import { plainText } from './today.js';
 import { mealColumns } from '../forms.js';
+import { dayMoney, balanceNow } from '../moneyparts.js';
 
 export async function render(view, { path, params, navigate }) {
   const date = path.split('/')[3];
@@ -92,8 +93,27 @@ async function editor(view, date, navigate) {
                    'aria-label': 'Balance', oninput: ev => { a.balance = ev.target.value; mark(); } }),
       h('button', { class: 'btn small danger', 'aria-label': 'Remove account', onclick: () => { accounts.splice(i, 1); mark(); drawAccounts(); } }, '✕')))
       : [h('p', { class: 'ws-note' }, 'No balances recorded for this day.')]),
-    h('div', {}, h('button', { class: 'btn small', onclick: () => { accounts.push({ institution: '', name: '', balance: '' }); drawAccounts(); } }, '+ Account')));
+    h('div', { class: 'ws-form' },
+      h('button', { class: 'btn small', onclick: () => { accounts.push({ institution: '', name: '', balance: '' }); drawAccounts(); } }, '+ Account'),
+      // A blank check-in can start from what the bank data shows for this day.
+      bankBalances().length && accounts.every(a => a.balance === '' || a.balance == null)
+        ? h('button', { class: 'btn small', onclick: () => {
+            accounts.splice(0, accounts.length, ...bankBalances());
+            mark(); drawAccounts();
+          } }, 'Fill from bank balances') : null));
+  const bankBalances = () => day.money.balances.map(b => ({ b, now: balanceNow(b) })).filter(({ now }) => now.value != null)
+    .map(({ b, now }) => ({ institution: b.institution || '', name: b.name + (b.mask ? ' ••' + b.mask : ''), balance: String(now.value) }));
   drawAccounts();
+
+  // The day's money from the finance tables: balances as they stood, spending and transactions.
+  // Recording a balance redraws only this part, so unsaved writing is kept.
+  const money = h('div', {});
+  const drawMoney = () => money.replaceChildren(dayMoney(day.money, date, { dayLink: d => '/app/journal/' + d, onChange: async () => {
+    const fresh = await api('/api/v1/today?date=' + date).catch(() => null);
+    if (fresh) Object.assign(day, fresh);
+    drawMoney(); drawAccounts();
+  } }));
+  drawMoney();
 
   const saveBtn = h('button', { class: 'btn primary' }, entry ? 'Saved' : 'Save entry');
   saveBtn.onclick = () => run(saveBtn, async () => {
@@ -167,11 +187,10 @@ async function editor(view, date, navigate) {
       h('section', { class: 'ws-card ws-habit-strip', 'aria-label': 'Habits', title: '“auto” means the day’s records ticked it; click to set it yourself.' },
         h('span', { class: 'ws-strip-label' }, 'Habits'), habitRow),
       card('Journal entry', writing, h('div', { style: { marginTop: '10px' } }, tags)),
-      card(h('span', {}, 'Money', h('a', { class: 'btn small', href: '/app/money/transactions?month=' + date.slice(0, 7) }, 'Transactions')),
-        h('div', { class: 'ws-note', style: { fontWeight: 600, marginBottom: '6px' } }, 'Balance check-in'),
+      money,
+      card('Balance check-in',
         h('p', { class: 'ws-note', style: { marginBottom: '8px' } },
-          'What each account showed today. Kept as that day’s observation, never rewritten by later corrections.'), accountRows,
-        section('Spent this day', day.money.transactions.map(t => `${t.merchant || '—'} · ${fmt.money(t.amount)}`))),
+          'What each account showed that day, as you wrote it down. Kept as that day’s observation, never rewritten by later corrections.'), accountRows),
       card(h('span', {}, 'Also that day', h('a', { class: 'btn small', href: '/app?date=' + date }, 'Open in Today')),
         h('div', { class: 'ws-stats' },
           h('div', {}, h('div', { class: 'ws-stat-value' }, fmt.num(hd.workout_minutes ?? 0)), h('div', { class: 'ws-stat-sub' }, 'workout minutes')),
