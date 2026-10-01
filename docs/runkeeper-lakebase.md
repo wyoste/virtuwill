@@ -1,7 +1,7 @@
 # RunKeeper → Lakebase → VirtuWill's workouts
 
 ```
-activity_logs/ ─▶ runkeeper_activities_to_bronze ─▶ prod.bronze.raw_runkeeper_activities ─▶ bronze.runkeeper_activity ─┐
+activity_logs/ ─▶ runkeeper_activities_to_bronze ─▶ prod.bronze.raw_runkeeper_activities ─▶ bronze.runkeeper_activities ─┐
 gpx_maps/      ─▶ runkeeper_gpx_to_bronze        ─▶ prod.bronze.raw_runkeeper_gpx        ─▶ bronze.runkeeper_gpx      ─┤
                   └─ two notebooks ─┘                                                       └─ synced tables ─┘       │
                                                         journal.workouts + workout_routes ◀─ the app, every hour ────┘
@@ -13,7 +13,7 @@ gpx_maps/      ─▶ runkeeper_gpx_to_bronze        ─▶ prod.bronze.raw_runk
      loads the activity log, one row per activity.
    - [`jobs/runkeeper_gpx_to_bronze.ipynb`](../jobs/runkeeper_gpx_to_bronze.ipynb) loads the GPS
      tracks, one row per file.
-2. **Two synced tables** copy them into the app's Lakebase database as `bronze.runkeeper_activity`
+2. **Two synced tables** copy them into the app's Lakebase database as `bronze.runkeeper_activities`
    and `bronze.runkeeper_gpx`. The app can only read them.
 3. **The app** checks them every `RUNKEEPER_SYNC_MINUTES` (60 in `app.yaml`). It loads each new
    or changed activity as a workout on the date it happened, and draws its route from its track
@@ -115,7 +115,7 @@ edit it.
 
    | Bronze table | Synced table | Primary key |
    |---|---|---|
-   | `prod.bronze.raw_runkeeper_activities` | `bronze.runkeeper_activity` | `activity_id` |
+   | `prod.bronze.raw_runkeeper_activities` | `bronze.runkeeper_activities` | `activity_id` |
    | `prod.bronze.raw_runkeeper_gpx` | `bronze.runkeeper_gpx` | `gpx_file` |
 
    **Triggered** mode is enough. Refresh both after the job runs, or add pipeline-refresh tasks

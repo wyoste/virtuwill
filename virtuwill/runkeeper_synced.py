@@ -45,7 +45,7 @@ bp = Blueprint("runkeeper_synced", __name__)
 
 SOURCE = "runkeeper_bronze"               # its row in virtuwill.sync_reports (Settings › Diagnostics)
 # The synced copies of prod.bronze.raw_runkeeper_activities and raw_runkeeper_gpx, and each one's key.
-TABLES = {"activities": ("bronze", "runkeeper_activity"), "gpx": ("bronze", "runkeeper_gpx")}
+TABLES = {"activities": ("bronze", "runkeeper_activities"), "gpx": ("bronze", "runkeeper_gpx")}
 KEYS = {"activities": "activity_id", "gpx": "gpx_file"}
 BATCH = 200                               # rows per transaction; a track carries its whole GPX file
 NUMBERS = ("calories_burned", "average_heart_rate_bpm", "climb", "average_speed")
