@@ -106,8 +106,8 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual((e1["date"], e1["freeWrite"], e1["tags"], e1["habits"]), ("2026-09-21", "written", ["calm"], {"run": True}))
         self.assertEqual(e1["meals"]["D"], "fish")
         self.assertEqual(e1["accounts"], [{"institution": "USAA", "name": "Checking", "balance": 100.0}])
-        manual = db.all("SELECT workout_type, activity, source FROM journal.workouts")
-        self.assertEqual([(r["workout_type"], r["activity"], r["source"]) for r in manual], [("Other", "Bike", "manual")])
+        manual = db.all("SELECT activity_type, title, source FROM fitness.workouts")
+        self.assertEqual([(r["activity_type"], r["title"], r["source"]) for r in manual], [("bike", "Bike", "manual")])
         self.assertEqual(db.one("SELECT value FROM health.body_measurements")["value"], 172.5)
         self.assertEqual(db.one("SELECT COUNT(*) AS n FROM legacy_journal_v0.entries")["n"], 1)
         self.assertEqual(json.loads(client.get('/api/data/travel_pins').json['data'])[0]["name"], "Oxford")
@@ -144,11 +144,13 @@ class ApiTests(unittest.TestCase):
         self.assertAlmostEqual(day['morning_weight'], (170 + 86 / 0.45359237) / 2, places=0)
 
     def test_manual_workouts_can_be_logged_and_removed(self):
-        created = self.admin.post('/api/health/workouts', json={"date": "2026-09-21", "minutes": 45, "type": "Cardio", "activity": "Bike"})
+        created = self.admin.post('/api/v1/health/workouts', json={"workout_date": "2026-09-21", "minutes": 45, "activity_type": "bike"})
         self.assertEqual(created.status_code, 201)
         dashboard = self.admin.get('/api/health/dashboard').json
-        self.assertEqual(dashboard['workouts'][0]['activity'], 'Bike')
-        self.assertEqual(self.admin.delete(f"/api/health/workouts/{created.json['id']}").status_code, 200)
+        self.assertEqual((dashboard['workouts'][0]['name'], dashboard['workouts'][0]['category']), ('Bike', 'cardio'))
+        self.assertEqual(self.admin.delete(f"/api/v1/health/workouts/{created.json['workout_id']}").status_code, 200)
+        # The old endpoints are gone: every workout goes through /api/v1/health/workouts.
+        self.assertEqual(self.admin.post('/api/health/workouts', json={"date": "2026-09-21", "minutes": 45}).status_code, 405)
         self.assertEqual(self.visitor.get('/api/health/dashboard').status_code, 401)
 
     def test_garden_round_trip_keeps_plant_details_and_logs_health(self):

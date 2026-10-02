@@ -4,7 +4,7 @@
 activity_logs/ ─▶ runkeeper_activities_to_bronze ─▶ prod.bronze.raw_runkeeper_activities ─▶ bronze.runkeeper_activities ─┐
 gpx_maps/      ─▶ runkeeper_gpx_to_bronze        ─▶ prod.bronze.raw_runkeeper_gpx        ─▶ bronze.runkeeper_gpx      ─┤
                   └─ two notebooks ─┘                                                       └─ synced tables ─┘       │
-                                                        journal.workouts + workout_routes ◀─ the app, every hour ────┘
+                                          fitness.workouts + workout_cardio + workout_routes ◀─ the app, every hour ┘
 ```
 
 1. **Two notebooks** read the export from the stage volume. Each MERGEs into its own bronze
@@ -78,24 +78,26 @@ The two tables can land in either order:
 
 ## What goes where
 
-| Bronze | VirtuWill (`journal.workouts`, source `runkeeper`) |
+| Bronze | VirtuWill (`fitness.workouts`, source `runkeeper`) |
 |---|---|
 | `activity_id` | `source_ref`: a reload updates the same workout |
 | `activity_date`, the time where you ran | `workout_date`: the log's local date. The GPX times are UTC, so they aren't used for the date. |
-| `type` | `activity` (Running, Walking, Cycling…), and `workout_type`: Strength Training → Strength, Circuit Training/CrossFit/Bootcamp → HIIT, Yoga/Pilates/Stretching → Mobility / recovery, Other → Other, everything else → Cardio |
+| `type` | `activity_type`, by `fitness.activity_type_for`: Running → run, Walking → walk, Cycling/Mountain Biking/Spinning → bike, Hiking → hike, Swimming → swim, Rowing → row, Strength Training → strength, Circuit Training/CrossFit/Bootcamp → hiit, Yoga → yoga, Pilates/Stretching → mobility, Other → other. Its kind (cardio, lifting …) follows. |
+| `route_name` | `title`, when RunKeeper has one |
 | `duration` (`28:30`, `1:05:12`) | `minutes`. Left blank when it's over 24 hours, e.g. a run whose timer was left going. |
-| `distance`, `distance_unit` | `distance` (cardio only; 0 is left blank). If it's blank and there's a track, the track's length is used. |
+| `distance`, `distance_unit` | `fitness.workout_cardio.distance` (cardio only; 0 is left blank). If it's blank and there's a track, the track's length is used. |
+| `calories_burned`, `average_heart_rate_bpm`, `climb` | `workout_cardio.calories`, `avg_heart_rate`, `elevation_gain_m` (climb in metres) |
 | `notes` | `note` |
-| pace, speed, calories, climb, heart rate, route name, GPX file | `details.runkeeper` |
-| the track's `gpx` | `journal.workout_routes`: the simplified line for the map, distance, climb, start and end |
+| everything above, as RunKeeper wrote it, with pace and speed | `details.runkeeper` |
+| the track's `gpx` | `fitness.workout_routes`: the simplified line for the map, distance, climb, start and end |
 
 **Edits you make in the app are kept.** When an activity changes in bronze, the reload updates
-its minutes, distance, details and route. It keeps the type, name, note and date you set. A
+its minutes, start, cardio facts, details and route. It keeps the activity, name, note and date you set. A
 route you uploaded yourself is never replaced. If you delete a RunKeeper workout in the app, a
 `{"reload": true}` load brings it back.
 
-Walks come in as **Cardio**, so they count toward the workout goal. To mark one as a dog walk,
-edit it.
+Walks come in as **Walk**, which counts toward the workout goal. To mark one as a dog walk
+(which doesn't), change its activity to **Dog walk**: both are cardio, so the distance and route stay.
 
 ## Setting it up
 

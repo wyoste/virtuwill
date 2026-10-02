@@ -263,6 +263,7 @@ virtuwill/
 │   ├── money_imports.py   Money › Imports: upload, preview, commit, download
 │   ├── plaid_synced.py    Plaid from the Lakebase synced tables into finance, every few minutes
 │   ├── runkeeper_synced.py RunKeeper from the Lakebase synced tables into the workouts
+│   ├── fitness.py         Workouts: one base table, a fact table per kind (cardio, lifting, HIIT), the sessions view
 │   └── journal.py, health.py, finance.py, music.py, content.py, career.py, garden.py, travel.py, site.py, trackers.py
 ├── jobs/                  The RunKeeper → bronze notebooks; the older Plaid → ingest API job
 ├── db/schema/             The data model, applied in name order, once each (see db/README.md)

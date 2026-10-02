@@ -13,20 +13,19 @@ calories) are edited in the tracker; the dashboard edits the others.
 import collections
 import hashlib
 import json
-import os
 import re
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
-from . import db, media, records, routes
+from . import db, fitness, records
 from .auth import admin_required
 from .util import in_calendar, moment, number, parse_date, plain, slug
 
 bp = Blueprint("health", __name__)
 SOURCE = "health_tracker"
 LB_PER_KG, M_PER_IN = 0.45359237, 0.0254
-TRACKER_TABLES = ("journal.workouts", "journal.meals", "health.body_measurements", "health.alcohol")
+TRACKER_TABLES = ("fitness.workouts", "journal.meals", "health.body_measurements", "health.alcohol")
 # Starter foods and go-to meals, each file added once (by its migration name) so edits and deletions stick.
 FOOD_SEEDS = (("foods_seed_v1", db.ROOT / "db" / "seed" / "foods.json"),
               ("foods_seed_v2", db.ROOT / "db" / "seed" / "foods_v2.json"))
@@ -99,12 +98,6 @@ def _seed(document):
         return {}
 
 
-def _workout_type(conn, name):
-    name = _text(name).strip() or "Other"
-    known = {r["workout_type"] for r in conn.execute("SELECT workout_type FROM journal.workout_types")}
-    return name if name in known else "Other"
-
-
 def project(conn, state, document=None):
     """Bring the tracker's rows in the shared tables in line with its state; returns a sync report.
 
@@ -130,14 +123,15 @@ def project(conn, state, document=None):
             refs[table].append(_ref(kind, record, seen))
             yield record, day
 
-    for r, day in records("workouts", "journal.workouts"):
-        workout_type = _workout_type(conn, r.get("type"))
+    for r, day in records("workouts", "fitness.workouts"):
+        kind = _text(r.get("type")).strip()
         minutes = number(r.get("minutes"))
-        _upsert(conn, "journal.workouts", {
-            "workout_date": day, "workout_type": workout_type,
-            "activity": "" if workout_type == _text(r.get("type")) else _text(r.get("type")),
+        _upsert(conn, "fitness.workouts", {
+            "workout_date": day,
+            "activity_type": fitness.activity_type_for(conn, kind if kind in fitness.WORKOUT_TYPES else None, kind),
+            "title": "" if kind in fitness.WORKOUT_TYPES else kind[:100],
             "minutes": minutes if minutes is not None and 0 <= minutes <= 1440 else None,
-            "note": _text(r.get("note")), "details": db.jsonb(r)}, refs["journal.workouts"])
+            "note": _text(r.get("note")), "details": db.jsonb(r)}, refs["fitness.workouts"])
         counts["workouts"] += 1
 
     conn.execute("DELETE FROM health.recipes WHERE source = %s", (SOURCE,))
@@ -277,10 +271,7 @@ def dashboard(conn, days=14, weeks=8, weights=60):
         "weeks": q("SELECT * FROM health.weekly_workout_progress ORDER BY week_start DESC LIMIT %s", weeks),
         "days": q("SELECT * FROM health.daily_activity WHERE day > current_date - %s ORDER BY day DESC", days),
         "weights": q("SELECT * FROM health.weight_trend ORDER BY day DESC LIMIT %s", weights),
-        "workouts": q("""SELECT w.workout_id, w.workout_date, COALESCE(NULLIF(w.activity, ''), w.workout_type) AS activity,
-                                w.workout_type, w.minutes, w.note, NOT t.counts_toward_goal AS is_dog_walk, w.source
-                         FROM journal.workouts w JOIN journal.workout_types t USING (workout_type)
-                         ORDER BY w.workout_date DESC, w.workout_id DESC LIMIT 20"""),
+        "workouts": q(fitness.SESSIONS + " ORDER BY workout_date DESC, workout_id DESC LIMIT 20"),
         "weighIns": q("""SELECT measurement_id, measured_on, measured_at, value, unit, is_morning, note, source
                          FROM health.body_measurements WHERE metric = 'weight'
                          ORDER BY measured_on DESC, measured_at DESC NULLS LAST, measurement_id DESC LIMIT 20"""),
@@ -293,34 +284,6 @@ def dashboard(conn, days=14, weeks=8, weights=60):
 def dashboard_route():
     with db.tx() as conn:
         return jsonify(dashboard(conn))
-
-
-@bp.route("/api/health/workouts", methods=["POST"])
-@admin_required
-def add_workout_route():
-    data = request.get_json(silent=True) or {}
-    day = parse_date(data.get("date"))
-    minutes = number(data.get("minutes"))
-    if not in_calendar(day) or minutes is None:
-        return jsonify({"error": "date (YYYY-MM-DD) and minutes are required"}), 400
-    if not 0 <= minutes <= 1440:
-        return jsonify({"error": "minutes must be between 0 and 1440"}), 400
-    with db.tx() as conn:
-        workout_type = "Dog walk" if data.get("dogWalk") else _workout_type(conn, data.get("type"))
-        workout_id = conn.execute(
-            """INSERT INTO journal.workouts (workout_date, workout_type, activity, minutes, note, source)
-               VALUES (%s, %s, %s, %s, %s, 'manual') RETURNING workout_id""",
-            (day, workout_type, _text(data.get("activity"))[:100], minutes, _text(data.get("note"))[:2000])).fetchone()["workout_id"]
-    return jsonify({"ok": True, "id": workout_id}), 201
-
-
-@bp.route("/api/health/workouts/<int:workout_id>", methods=["DELETE"])
-@admin_required
-def delete_workout_route(workout_id):
-    with db.tx() as conn:
-        if not conn.execute("DELETE FROM journal.workouts WHERE workout_id = %s AND source = 'manual'", (workout_id,)).rowcount:
-            return jsonify({"error": "Only workouts logged here can be deleted here"}), 404
-    return jsonify({"ok": True})
 
 
 @bp.route("/api/health/weigh-ins", methods=["POST"])
@@ -373,8 +336,6 @@ def set_goal_route(metric):
 # The embedded tracker is retired, so rows it once produced are edited here
 # like any other; nothing projects over them any more.
 
-WORKOUT_TYPES = {"Strength", "Cardio", "HIIT", "Mobility / recovery", "Dog walk", "Other"}
-DISTANCE_TYPES = {"Cardio", "Dog walk"}          # the only workouts with a distance or a route
 SLOTS_V1 = {"breakfast", "lunch", "dinner", "snack", "meal"}
 
 
@@ -465,159 +426,7 @@ MEALS_WITH_ITEMS = """
            FROM journal.meal_items i WHERE i.meal_id = m.meal_id), '[]') AS items
     FROM journal.meals m"""
 
-CIRCUIT = (("rounds", 1, 100), ("exercises_per_round", 1, 50), ("work_seconds", 1, 3600),
-           ("exercise_rest_seconds", 0, 3600), ("round_rest_seconds", 0, 3600))
-
-
-def _lifts(conn, value):
-    """[{lift, sets}] from a body's lifts: known lifts keep their catalogue spelling, new ones are added."""
-    if not isinstance(value, list) or len(value) > 40:
-        raise records.Invalid("lifts must be a list of up to 40 {lift, sets}")
-    known = {r["lift"].lower(): r["lift"] for r in conn.execute("SELECT lift FROM journal.lifts")}
-    out, seen = [], set()
-    for item in value:
-        name = " ".join(_text(item.get("lift") if isinstance(item, dict) else item).split())
-        sets = number(item.get("sets")) if isinstance(item, dict) else None
-        if not name or len(name) > 60:
-            raise records.Invalid("Each lift needs a name of up to 60 characters")
-        if sets is None or sets != int(sets) or not 1 <= sets <= 50:
-            raise records.Invalid(f"{name}: sets must be a whole number from 1 to 50")
-        name = known.get(name.lower(), name)
-        if name.lower() in seen:
-            raise records.Invalid(f"{name} is listed twice")
-        seen.add(name.lower())
-        out.append({"lift": name, "sets": int(sets)})
-    return out
-
-
-def _circuit(value):
-    if value is None:
-        return None
-    if not isinstance(value, dict):
-        raise records.Invalid("circuit must be an object")
-    out = {}
-    for key, low, high in CIRCUIT:
-        n = number(value.get(key)) if value.get(key) not in (None, "") else (0 if low == 0 else None)
-        if n is None or n != int(n) or not low <= n <= high:
-            raise records.Invalid(f"{key.replace('_', ' ')} must be a whole number from {low} to {high}")
-        out[key] = int(n)
-    return out
-
-
-def _workout_parts(conn, values, body):
-    """Lifts belong to strength workouts, a circuit to HIIT, distance and routes to cardio and dog walks."""
-    lifts = _lifts(conn, body["lifts"]) if "lifts" in body else None
-    circuit = _circuit(body["circuit"]) if "circuit" in body else None
-
-    def write(conn, workout_id):
-        w = conn.execute("SELECT workout_type, minutes FROM journal.workouts WHERE workout_id = %s", (workout_id,)).fetchone()
-        kind = w["workout_type"]
-        if kind != "Strength" or lifts is not None:
-            conn.execute("DELETE FROM journal.workout_lifts WHERE workout_id = %s", (workout_id,))
-        if kind == "Strength" and lifts:
-            for position, x in enumerate(lifts):
-                conn.execute("INSERT INTO journal.lifts (lift) VALUES (%s) ON CONFLICT (lift) DO NOTHING", (x["lift"],))
-                conn.execute("INSERT INTO journal.workout_lifts (workout_id, position, lift, sets) VALUES (%s, %s, %s, %s)",
-                             (workout_id, position, x["lift"], x["sets"]))
-        if kind != "HIIT" or ("circuit" in body and circuit is None):
-            conn.execute("DELETE FROM journal.workout_circuits WHERE workout_id = %s", (workout_id,))
-        elif circuit:
-            conn.execute("""INSERT INTO journal.workout_circuits (workout_id, rounds, exercises_per_round, work_seconds,
-                                                                  exercise_rest_seconds, round_rest_seconds)
-                            VALUES (%(id)s, %(rounds)s, %(exercises_per_round)s, %(work_seconds)s,
-                                    %(exercise_rest_seconds)s, %(round_rest_seconds)s)
-                            ON CONFLICT (workout_id) DO UPDATE SET rounds = EXCLUDED.rounds,
-                                exercises_per_round = EXCLUDED.exercises_per_round, work_seconds = EXCLUDED.work_seconds,
-                                exercise_rest_seconds = EXCLUDED.exercise_rest_seconds,
-                                round_rest_seconds = EXCLUDED.round_rest_seconds""", circuit | {"id": workout_id})
-            if w["minutes"] is None:          # a blank time is the circuit's length
-                conn.execute("""UPDATE journal.workouts w SET minutes = round(c.total_seconds / 60.0, 1)
-                                FROM journal.workout_circuits c WHERE c.workout_id = w.workout_id AND w.workout_id = %s""",
-                             (workout_id,))
-        if kind not in DISTANCE_TYPES:
-            conn.execute("UPDATE journal.workouts SET distance = NULL WHERE workout_id = %s AND distance IS NOT NULL", (workout_id,))
-            conn.execute("DELETE FROM journal.workout_routes WHERE workout_id = %s", (workout_id,))
-    return values, write
-
-
-# Every workout with what its editor needs: its route, lifts and circuit (Health and Today share it).
-WORKOUTS = """
-    SELECT w.*, NOT t.counts_toward_goal AS is_dog_walk, r.workout_id IS NOT NULL AS has_route,
-           r.elevation_gain_m, r.started_at AS route_started_at,
-           COALESCE((SELECT jsonb_agg(jsonb_build_object('lift', l.lift, 'sets', l.sets) ORDER BY l.position)
-                     FROM journal.workout_lifts l WHERE l.workout_id = w.workout_id), '[]') AS lifts,
-           (SELECT to_jsonb(c) - 'workout_id' FROM journal.workout_circuits c WHERE c.workout_id = w.workout_id) AS circuit
-    FROM journal.workouts w JOIN journal.workout_types t USING (workout_type)
-    LEFT JOIN journal.workout_routes r USING (workout_id)"""
-
 F = records.Field
-records.Resource(bp, "/api/v1/health/workouts", "journal.workouts", "workout_id", [
-    F("workout_date", "date", required=True), F("workout_type", choices=WORKOUT_TYPES, default="Other"),
-    F("activity", max_length=100), F("minutes", "number", low=0, high=1440), F("note", max_length=2000),
-    F("distance", "number", low=0, high=1000), F("distance_unit", choices={"mi", "km"}, default="mi")],
-    date_column="workout_date", defaults={"source": "manual"}, prepare=_workout_parts, select=WORKOUTS)
-
-
-@bp.route("/api/v1/health/lifts")
-@admin_required
-def lifts_v1():
-    """The lifts to pick from, grouped for the picker; lifts added by hand come last."""
-    with db.tx() as conn:
-        return jsonify([plain(r) for r in conn.execute(
-            "SELECT lift, muscle_group FROM journal.lifts ORDER BY muscle_group = '', muscle_group, position, lift")])
-
-
-# ── Routes: a GPX or TCX file for a run, ride or walk ────────────────────────
-
-@bp.route("/api/v1/health/workouts/<int:workout_id>/route", methods=["GET", "POST", "DELETE"])
-@admin_required
-def workout_route_v1(workout_id):
-    """GET the route to draw; POST a GPX/TCX file as 'file' (it fills in distance and minutes when they're blank); DELETE it."""
-    with db.tx() as conn:
-        workout = conn.execute("SELECT * FROM journal.workouts WHERE workout_id = %s", (workout_id,)).fetchone()
-        if not workout:
-            return jsonify({"error": "Not found"}), 404
-        if request.method == "GET":
-            row = conn.execute("SELECT * FROM journal.workout_routes WHERE workout_id = %s", (workout_id,)).fetchone()
-            return jsonify(plain(row)) if row else (jsonify({"error": "This workout has no route"}), 404)
-        if request.method == "DELETE":
-            conn.execute("DELETE FROM journal.workout_routes WHERE workout_id = %s", (workout_id,))
-            return jsonify({"ok": True})
-        if workout["workout_type"] not in DISTANCE_TYPES:
-            return jsonify({"error": "Only cardio workouts and dog walks carry a route"}), 400
-        f = request.files.get("file")
-        content = f.read(routes.MAX_BYTES + 1) if f else b""
-        if not content:
-            return jsonify({"error": "Choose a GPX or TCX file"}), 400
-        try:
-            summary = routes.summarise(routes.parse(content))
-        except routes.RouteError as e:
-            return jsonify({"error": str(e)}), 400
-        name = os.path.basename(f.filename or "route.gpx")[:200]
-        ext = ".tcx" if name.lower().endswith(".tcx") else ".gpx"
-        asset = media.register(conn, f"private/health/routes/{hashlib.sha256(content).hexdigest()[:16]}{ext}", content,
-                               visibility="private")
-        conn.execute("""INSERT INTO journal.workout_routes (workout_id, points, distance_km, elevation_gain_m, started_at, ended_at,
-                                                             file_name, file_asset_id)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (workout_id) DO UPDATE SET points = EXCLUDED.points, distance_km = EXCLUDED.distance_km,
-                            elevation_gain_m = EXCLUDED.elevation_gain_m, started_at = EXCLUDED.started_at,
-                            ended_at = EXCLUDED.ended_at, file_name = EXCLUDED.file_name, file_asset_id = EXCLUDED.file_asset_id,
-                            created_at = now()""",
-                     (workout_id, db.jsonb(summary["points"]), summary["distance_km"], summary["elevation_gain_m"],
-                      summary["started_at"], summary["ended_at"], name, asset))
-        # Fill what the workout left blank from the track.
-        if workout["distance"] is None:
-            unit = workout["distance_unit"] or "mi"
-            km = summary["distance_km"]
-            conn.execute("UPDATE journal.workouts SET distance = %s WHERE workout_id = %s",
-                         (round(km / 1.609344 if unit == "mi" else km, 2), workout_id))
-        if workout["minutes"] is None and summary["started_at"] and summary["ended_at"]:
-            minutes = (summary["ended_at"] - summary["started_at"]).total_seconds() / 60
-            if 0 < minutes <= 1440:
-                conn.execute("UPDATE journal.workouts SET minutes = %s WHERE workout_id = %s", (round(minutes, 1), workout_id))
-        row = conn.execute("SELECT * FROM journal.workout_routes WHERE workout_id = %s", (workout_id,)).fetchone()
-        return jsonify(plain(row)), 201
 records.Resource(bp, "/api/v1/health/meals", "journal.meals", "meal_id", [
     F("meal_date", "date", required=True), F("slot", choices=SLOTS_V1, default="meal"),
     F("status", choices={"eaten", "planned"}, default="eaten"), F("description", max_length=300), F("note", max_length=2000),

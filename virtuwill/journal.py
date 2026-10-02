@@ -142,11 +142,11 @@ SELECT e.entry_id, e.entry_date, e.quote, e.quote_author, e.free_write, e.source
        COALESCE((SELECT jsonb_agg(jsonb_build_object('institution', s.institution_text, 'name', s.account_text,
                                                      'balance', s.balance) ORDER BY s.position)
                  FROM finance.balance_snapshots s WHERE s.source = 'journal' AND s.source_ref = e.entry_id), '[]') AS accounts,
-       COALESCE((SELECT jsonb_agg(jsonb_build_object('activity', COALESCE(NULLIF(w.activity, ''), w.workout_type),
-                                                    'type', w.workout_type, 'minutes', w.minutes, 'note', w.note,
-                                                    'dogWalk', NOT wt.counts_toward_goal, 'source', w.source) ORDER BY w.workout_id)
-                 FROM journal.workouts w JOIN journal.workout_types wt USING (workout_type)
-                 WHERE w.workout_date = e.entry_date), '[]') AS workouts,
+       COALESCE((SELECT jsonb_agg(jsonb_build_object('activity', w.name, 'type', w.category_label,
+                                                    'activityType', w.activity_type, 'minutes', w.minutes, 'note', w.note,
+                                                    'distance', w.distance, 'distanceUnit', w.distance_unit,
+                                                    'dogWalk', NOT w.counts_toward_goal, 'source', w.source) ORDER BY w.workout_id)
+                 FROM fitness.workout_sessions w WHERE w.workout_date = e.entry_date), '[]') AS workouts,
        COALESCE((SELECT jsonb_object_agg(d.habit, d.done) FROM journal.derived_habits d
                  WHERE d.day = e.entry_date AND d.done), '{}') AS derived_habits,
        COALESCE((SELECT jsonb_agg(jsonb_build_object('slot', m.slot, 'status', m.status, 'description', m.description,

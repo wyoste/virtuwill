@@ -15,16 +15,14 @@ from virtuwill import runkeeper_synced as rk
 class MappingTests(unittest.TestCase):
     def test_durations_types_and_dates(self):
         self.assertEqual((rk.minutes("28:30"), rk.minutes("1:05:12"), rk.minutes(""), rk.minutes("abc")), (28.5, 65.2, None, None))
-        self.assertEqual((rk.workout_type("Running"), rk.workout_type("Strength Training"), rk.workout_type("Yoga"),
-                          rk.workout_type("Circuit Training"), rk.workout_type("Kayaking")),
-                         ("Cardio", "Strength", "Mobility / recovery", "HIIT", "Cardio"))
         w = rk.workout({"activity_id": "a1", "activity_date": "2019-05-04 23:35:09", "type": "Running", "distance": "3.10",
                         "distance_unit": "mi", "duration": "28:30", "calories_burned": "350"})
-        self.assertEqual((str(w["workout_date"]), w["minutes"], w["distance"]), ("2019-05-04", 28.5, 3.1))
-        self.assertEqual(w["details"]["runkeeper"]["calories_burned"], 350)
+        self.assertEqual((str(w["workout_date"]), w["minutes"], w["what"], w["cardio"]["distance"]), ("2019-05-04", 28.5, "Running", 3.1))
+        self.assertEqual((w["details"]["runkeeper"]["calories_burned"], w["cardio"]["calories"]), (350, 350))
+        self.assertEqual(w["started_at"].isoformat()[:19], "2019-05-04T23:35:09")      # in the app's time zone
         strength = rk.workout({"activity_id": "a2", "activity_date": "2019-05-06 06:10:00", "type": "Strength Training",
                                "distance": "0.00", "duration": "45:00"})
-        self.assertIsNone(strength["distance"])
+        self.assertIsNone(strength["cardio"]["distance"])
         self.assertIsNone(rk.workout({"activity_id": "x", "activity_date": "not a date"}))
         # A stopwatch left running: the time is left blank, not 25 hours.
         self.assertIsNone(rk.workout({"activity_id": "x", "activity_date": "2026-06-23 07:41:18", "duration": "25:51:49"})["minutes"])
@@ -128,12 +126,12 @@ class SyncTests(unittest.TestCase):
         report = self.sync()
         self.assertEqual((report["workouts_added"], report["routes"], report["tracks_without_activity"]), (3, 2, 1))
         [run] = self.day("2019-05-04")
-        self.assertEqual((run["activity"], run["workout_type"], float(run["distance"]), float(run["minutes"]), run["note"],
-                          run["has_route"], run["source"]), ("Running", "Cardio", 3.1, 28.5, "Easy", True, "runkeeper"))
+        self.assertEqual((run["name"], run["activity_type"], run["category"], float(run["distance"]), float(run["minutes"]),
+                          run["note"], run["has_route"], run["source"]), ("Run", "run", "cardio", 3.1, 28.5, "Easy", True, "runkeeper"))
         route = self.owner.get(f"/api/v1/health/workouts/{run['workout_id']}/route").get_json()
         self.assertEqual((len(route["points"]), route["file_name"]), (5, "2019-05-04-163509.gpx"))
         [lift] = self.day("2019-05-06")
-        self.assertEqual((lift["workout_type"], lift["distance"], lift["has_route"]), ("Strength", None, False))
+        self.assertEqual((lift["category"], lift["distance"], lift["has_route"]), ("strength", None, False))
         [ride] = self.day("2019-05-07")
         self.assertAlmostEqual(float(ride["distance"]), 1.0, delta=0.02)                # from the track: 1.6 km
 
@@ -172,7 +170,7 @@ class SyncTests(unittest.TestCase):
         self.activities([self.activity("a1", "2019-05-04 16:35:09", duration="30:00")], RUN1 + timedelta(days=1))
         self.assertEqual(self.sync()["workouts_updated"], 1)
         [run] = self.day("2019-05-04")
-        self.assertEqual((run["activity"], run["note"], float(run["minutes"])), ("Long run", "Felt great", 30.0))
+        self.assertEqual((run["name"], run["note"], float(run["minutes"])), ("Long run", "Felt great", 30.0))
 
     def test_a_long_history_loads_in_batches_and_reload_reads_it_again(self):
         self.activities([self.activity(f"a{i:03}", f"2018-01-{i % 28 + 1:02} 07:00:00") for i in range(7)], RUN1)

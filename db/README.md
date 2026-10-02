@@ -16,7 +16,8 @@ module per schema. `virtuwill/migrate.py` moved the earlier Lakebase layout in o
 | Schema | Holds | Visibility |
 |---|---|---|
 | `core` | `calendar` (conformed date dimension, 1900–2100), `media_assets` (every file), `daily_summary` view | shared |
-| `journal` | `entries` (one per date), `entry_tags`, `habits`, `habit_logs`, `meals`, `workout_types`, `workouts`, `workout_routes` (cardio and dog walks), `lifts`, `workout_lifts` (strength: lifts and sets), `workout_circuits` (HIIT) + `derived_habits`, `day_habits` views | private |
+| `journal` | `entries` (one per date), `entry_tags`, `habits` (the list, and what ticks each), `daily_habits` (one row per day, a column per habit), `meals`, `runkeeper_bronze_load` + `derived_habits`, `day_habits` (a row per day and habit), `habit_days` (a column per habit) views | private |
+| `fitness` | `categories`, `activity_types` (run, walk, dog walk, bike … each in one category), `workouts` (one row per session, any kind), and a fact table per kind: `workout_cardio` (distance, climbing, calories, heart rate), `workout_routes` (the GPS line, under a cardio row), `workout_strength` (lifts: sets, reps, weight), `workout_hiit` (the circuit); `lifts` (the catalogue) + `workout_sessions` view (a workout with all its facts; every screen reads it) | private |
 | `health` | `body_measurements` (many weigh-ins per date), `alcohol`, `daily_logs`, `foods`, `recipes`, `recipe_ingredients`, `profile`, `profile_history`, `goals` + 4 views | private |
 | `finance` | `account_types`, `accounts`, `account_aliases`, `import_profiles`, `import_batches`, `source_documents`, `statements`, `categories`, `movement_types`, `transactions`, `transaction_sources`, `receipts`, `item_categories`, `item_catalog`, `receipt_items`, `receipt_payments`, `shopping_list`, `budgets`, `budget_categories`, `recurring_expenses`, `pay_profile`, `paycheck_deposits`, `other_incomes`, `allocations`, `savings_goals`, `balance_snapshots`, `retirement_plan` + 18 views | private |
 | `garden` | `settings`, `species`, `health_levels`, `beds`, `seasons`, `plantings`, `plant_observations`, `photos`, `photo_subjects` + 2 views | public read |
@@ -42,9 +43,18 @@ module per schema. `virtuwill/migrate.py` moved the earlier Lakebase layout in o
 - **Unknown is not zero**: missing calories, minutes, prices or balances stay `NULL`.
 - **Single owner**: there is no `user_id`; every row belongs to the site owner.
 - **Settings**: `core.settings` holds owner switches such as `site.chat_enabled`.
-- **Derived habits**: `journal.habits.derived_from` ties run, lift and drink to the day's
-  records (`journal.derived_habits`); `journal.day_habits` shows each day's habits, where a
-  `habit_logs` row set by the owner wins over the derivation.
+- **Habits** are one row per day (`journal.daily_habits`), a nullable column per habit, and
+  need no journal entry. `NULL` follows the day's records: `journal.habits.derived_from` ticks
+  run (a workout whose activity type is `run`), lift (a `strength` workout) and drink (a drink
+  logged), in `journal.derived_habits`. `true`/`false` is the owner's own answer and wins.
+  `journal.day_habits` (a row per habit) and `journal.habit_days` (a column per habit) show the
+  result. Adding a habit: a `journal.habits` row, its column, then `SELECT journal.make_habit_days()`.
+- **Workouts** are one base row in `fitness.workouts`, whatever the kind, plus a row in the
+  fact table of its category. Each fact table carries its category and points at
+  `(workout_id, category)`, so the database refuses a cardio row on a lifting session; a
+  trigger sets the category from the activity type and drops the old kind's facts when it
+  changes. `fitness.activity_type_for(type, text)` reads an older description ("Cardio",
+  "Running") into an activity type, for the move from `journal.workouts` and the importers.
 - **One editor per record**: workspace screens write through `/api/v1`. Both embedded
   trackers are retired, so the rows they once projected are edited like any other:
   Money edits budgets, bills, other income, set-asides, paycheck deposits, pay and the
@@ -101,8 +111,8 @@ For credit cards and loans the balance is the amount owed, so charges raise it
 
 | Today | Model |
 |---|---|
-| `data/journal_entries.json` | `journal.entries`, `entry_tags`, `habit_logs`, `meals` (source `journal`); each entry's account list → `finance.balance_snapshots` (source `journal`) |
-| Health tracker state (`yoste-health-v1`) | workouts → `journal.workouts`; meals → `journal.meals`; weights → `health.body_measurements`; beers → `health.alcohol`; complete → `health.daily_logs`; foods → `health.foods`; settings → `health.profile` + derived `health.goals` |
+| `data/journal_entries.json` | `journal.entries`, `entry_tags`, `daily_habits`, `meals` (source `journal`); each entry's account list → `finance.balance_snapshots` (source `journal`) |
+| Health tracker state (`yoste-health-v1`) | workouts → `fitness.workouts`; meals → `journal.meals`; weights → `health.body_measurements`; beers → `health.alcohol`; complete → `health.daily_logs`; foods → `health.foods`; settings → `health.profile` + derived `health.goals` |
 | Health tracker seed | recipes → `health.recipes`, `recipe_ingredients` |
 | Finance tracker state (`yoste-finance-spa-v1`) | transactions + movements → `finance.transactions`, with the statement each row names (`file.pdf, p. 5`) → `source_documents` + `transaction_sources`; receipts/items → `receipts`, `receipt_items`, and each receipt's payment → `receipt_payments` matched to its bank charge; catalog → `item_catalog`; budgets + groceryBudget → `budgets`, `budget_categories`; expenses → `recurring_expenses`; payroll → `pay_profile`; deposits → `paycheck_deposits`; incomes → `other_incomes`; allocations → `allocations`; goals → `savings_goals` + `balance_snapshots`; retirement → accounts + `balance_snapshots`; retirementPlan → `retirement_plan`; shopping → `shopping_list` |
 | `data/garden.json` + species in `garden.js` | `garden.settings`, `species`, `beds`, `seasons` (one "Current" season per bed), `plantings` |
