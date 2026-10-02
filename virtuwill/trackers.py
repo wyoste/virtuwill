@@ -5,7 +5,7 @@ The original HTML contains personal seed data. It belongs in the database
 opaque-origin sandbox; only the parent admin page can call the persistence API.
 
 The tracker document stays the editing format. Every save is projected into
-the relational model (health.*, journal.workouts/meals, finance.*), replacing
+the relational model (health.*, fitness.workouts, journal.meals, finance.*), replacing
 the rows the tracker produced before; the outcome is kept in
 virtuwill.sync_reports.
 """

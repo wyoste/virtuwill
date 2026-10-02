@@ -195,7 +195,8 @@ async function editor(view, date, navigate) {
         h('div', { class: 'ws-stats' },
           h('div', {}, h('div', { class: 'ws-stat-value' }, fmt.num(hd.workout_minutes ?? 0)), h('div', { class: 'ws-stat-sub' }, 'workout minutes')),
           h('div', {}, h('div', { class: 'ws-stat-value' }, hd.weight != null ? fmt.num(hd.weight, 1) : '—'), h('div', { class: 'ws-stat-sub' }, 'lb'))),
-        section('Workouts', day.workouts.map(w => `${w.activity || w.workout_type}${w.minutes != null ? ' · ' + Math.round(w.minutes) + ' min' : ''}`)),
+        section('Workouts', day.workouts.map(w => [w.name, w.distance != null ? `${Number(w.distance)} ${w.distance_unit || 'mi'}` : null,
+                                                   w.minutes != null ? Math.round(w.minutes) + ' min' : null].filter(Boolean).join(' · '))),
         section('Weigh-ins', day.weighIns.map(w => `${w.value} ${w.unit}${w.is_morning ? ' · morning' : ''}`)))));
 }
 

@@ -53,7 +53,7 @@ class WorkoutKindTests(unittest.TestCase):
         self.assertEqual(float(self.log(workout_type="HIIT", minutes=30, circuit=circuit).json["minutes"]), 30)
         for bad in ({**circuit, "rounds": 0}, {**circuit, "work_seconds": None}, {**circuit, "round_rest_seconds": -5}):
             self.assertEqual(self.log(workout_type="HIIT", circuit=bad).status_code, 400)
-        self.assertIn("HIIT", [w["workout_type"] for w in self.owner.get("/api/v1/health/workouts").json])
+        self.assertIn("hiit", [w["category"] for w in self.owner.get("/api/v1/health/workouts").json])
 
     def test_distance_and_routes_only_for_cardio_and_dog_walks(self):
         self.assertEqual(float(self.log(workout_type="Dog walk", distance=1.2).json["distance"]), 1.2)

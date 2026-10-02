@@ -12,7 +12,7 @@ committed under data/. Nothing it reads is deleted.
 import json
 import logging
 
-from . import career, content, finance, garden, health, journal, media, music, travel
+from . import career, content, finance, fitness, garden, health, journal, media, music, travel
 
 log = logging.getLogger(__name__)
 DATA_DIR = media.db.ROOT / "data"
@@ -148,10 +148,10 @@ def _move_health_manual(conn):
     moved = {"workouts": 0, "weighIns": 0}
     if _exists(conn, schema + ".workouts"):
         for w in conn.execute(f"SELECT * FROM {schema}.workouts WHERE source = 'manual'").fetchall():
-            kind = "Dog walk" if w["is_dog_walk"] else health._workout_type(conn, w["activity"])
-            conn.execute("""INSERT INTO journal.workouts (workout_date, workout_type, activity, minutes, note, source)
+            kind = "dog_walk" if w["is_dog_walk"] else fitness.activity_type_for(conn, None, w["activity"])
+            conn.execute("""INSERT INTO fitness.workouts (workout_date, activity_type, title, minutes, note, source)
                             VALUES (%s, %s, %s, %s, %s, 'manual')""",
-                         (w["workout_date"], kind, "" if kind == w["activity"] else w["activity"], w["minutes"], w["note"]))
+                         (w["workout_date"], kind, w["activity"] or "", w["minutes"], w["note"] or ""))
             moved["workouts"] += 1
     schema = LEGACY["health"]
     if _exists(conn, schema + ".body_measurements"):

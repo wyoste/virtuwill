@@ -1,9 +1,9 @@
 """Record-level API resources: list, create, update and delete one table's rows
 with the same validation, errors and response shape everywhere.
 
-    Resource(bp, "/api/v1/health/workouts", "journal.workouts", "workout_id",
-             [Field("workout_date", "date", required=True), Field("minutes", "number", low=0, high=1440)],
-             date_column="workout_date")
+    Resource(bp, "/api/v1/health/weigh-ins", "health.body_measurements", "measurement_id",
+             [Field("measured_on", "date", required=True), Field("value", "number", low=20, high=1000)],
+             date_column="measured_on")
 
 registers GET (with ?date= or ?from=&to=), POST, PUT /<id> and DELETE /<id>,
 all owner-only. Field names are the column names, so the API reads like the model.

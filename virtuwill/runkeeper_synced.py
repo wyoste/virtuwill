@@ -8,9 +8,11 @@ into this database's bronze schema, read-only (TABLES).
 
 Every RUNKEEPER_SYNC_MINUTES the app reads what was written to them since its last load:
 
-- each activity becomes a workout in journal.workouts (source 'runkeeper',
-  source_ref = RunKeeper's Activity Id) on the date it started, with its track
-  in journal.workout_routes if the track has landed;
+- each activity becomes a workout in fitness.workouts (source 'runkeeper',
+  source_ref = RunKeeper's Activity Id) on the date it started. Its type ("Running",
+  "Strength Training") picks the activity type (fitness.activity_type_for); a cardio
+  one gets its distance, calories, heart rate and climb in fitness.workout_cardio, and
+  its track in fitness.workout_routes if the track has landed;
 - each track that lands later is added to its activity's workout.
 
 A track belongs to the activity whose GPX File column names it, else to the one whose
@@ -18,8 +20,8 @@ start time is in its file name. Today, Health and the journal show the workouts 
 their dates like any other.
 
 When an activity is loaded again, the app updates its numbers (time, distance and the
-RunKeeper details) and its route. It keeps the type, name, note and date you gave it in
-the app. The track table is optional: until it can be read, workouts load without routes.
+RunKeeper details) and its route. It keeps the activity, name, note and date you gave it
+in the app. The track table is optional: until it can be read, workouts load without routes.
 
     RUNKEEPER_SYNC_MINUTES      how often to check (0, the default, turns the loop off)
 
@@ -32,12 +34,13 @@ import re
 import threading
 import time
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, jsonify, request
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
-from . import db, routes
+from . import db, fitness, routes
 from .auth import admin_required
 
 log = logging.getLogger(__name__)
@@ -52,15 +55,6 @@ COLUMNS = {"activities": {"activity_id", "activity_date", "gpx_file", "_ingested
            "gpx": {"gpx_file", "activity_start", "gpx", "_ingested_at"}}
 BATCH = 200                               # rows per transaction; a track carries its whole GPX file
 NUMBERS = ("calories_burned", "average_heart_rate_bpm", "climb", "average_speed")
-DISTANCE_TYPES = {"Cardio", "Dog walk"}   # as health.DISTANCE_TYPES: the only workouts with a distance or a route
-
-# RunKeeper's activity types → the app's workout types. Anything not named here is cardio.
-TYPES = {
-    "strength training": "Strength", "weight training": "Strength",
-    "circuit training": "HIIT", "crossfit": "HIIT", "bootcamp": "HIIT", "boxing / mma": "HIIT", "boxing/mma": "HIIT",
-    "yoga": "Mobility / recovery", "pilates": "Mobility / recovery", "stretching": "Mobility / recovery",
-    "meditation": "Mobility / recovery", "other": "Other",
-}
 
 
 class SyncedTableUnavailable(Exception):
@@ -95,29 +89,36 @@ def minutes(text):
     return round(seconds / 60, 2)
 
 
-def workout_type(activity_type):
-    return TYPES.get(str(activity_type or "").strip().lower(), "Cardio")
+def _within(value, low, high):
+    return value if value is not None and low <= value <= high else None
 
 
 def workout(row):
-    """A synced row as journal.workouts values, or None when it has no usable date."""
+    """A synced row as fitness.workouts values (what: RunKeeper's type, for fitness.activity_type_for) and the
+    cardio facts it carries, or None when it has no usable date."""
     start = start_of(row.get("activity_date"))
     if not start or not date(1900, 1, 1) <= start.date() <= date(2100, 12, 31):
         return None
-    kind = workout_type(row.get("type"))
     unit = "km" if str(row.get("distance_unit") or "").strip().lower() == "km" else "mi"
     distance = _number(row.get("distance"))
     mins = minutes(row.get("duration"))
+    climb = _number(row.get("climb"))
+    if climb is not None and str(row.get("climb_unit") or "ft").strip().lower() == "ft":
+        climb = round(climb * 0.3048, 1)
     details = {"runkeeper": {k: v for k, v in {
         "activity_id": row.get("activity_id"), "type": row.get("type"), "route_name": row.get("route_name"),
         "started_at": start.isoformat(), "duration": row.get("duration"), "average_pace": row.get("average_pace"),
         "speed_unit": row.get("speed_unit"), "climb_unit": row.get("climb_unit"), "gpx_file": row.get("gpx_file"),
         **{k: _number(row.get(k)) for k in NUMBERS}}.items() if v not in (None, "")}}
-    return {"workout_date": start.date(), "workout_type": kind, "activity": (row.get("type") or "")[:100],
-            "minutes": mins if mins is not None and 0 <= mins <= 1440 else None,
-            "distance": round(distance, 2) if kind in DISTANCE_TYPES and distance and 0 < distance <= 1000 else None,
-            "distance_unit": unit, "note": (row.get("notes") or "")[:2000], "source_ref": row["activity_id"],
-            "details": details}
+    tz = ZoneInfo(os.environ.get("APP_TIMEZONE", "America/Chicago"))       # where RunKeeper's local times were
+    return {"workout_date": start.date(), "started_at": start.replace(tzinfo=tz), "what": (row.get("type") or "")[:100],
+            "title": (row.get("route_name") or "")[:100],
+            "minutes": _within(mins, 0, 1440), "note": (row.get("notes") or "")[:2000], "source_ref": row["activity_id"],
+            "details": details,
+            "cardio": {"distance": round(distance, 2) if distance and 0 < distance <= 1000 else None, "distance_unit": unit,
+                       "calories": _within(_number(row.get("calories_burned")), 0, 20000),
+                       "avg_heart_rate": _within(_number(row.get("average_heart_rate_bpm")), 20, 250),
+                       "elevation_gain_m": _within(climb, 0, 20000)}}
 
 
 def route(row):
@@ -189,12 +190,12 @@ def read_tracks(conn, after, limit):
     whether that workout's route was already drawn from this track since it landed (drawn)."""
     a, g = (sql.Identifier(*TABLES[k]) for k in ("activities", "gpx"))
     return conn.execute(sql.SQL(f"""
-        SELECT g.gpx_file, g.gpx, g._ingested_at, a.activity_id, w.workout_id, w.workout_type, w.distance, w.distance_unit,
+        SELECT g.gpx_file, g.gpx, g._ingested_at, a.activity_id, w.workout_id, w.category,
                r.file_name = g.gpx_file AND r.created_at >= g._ingested_at::timestamptz AS drawn
         FROM {{g}} g
         LEFT JOIN LATERAL (SELECT a.activity_id, a.gpx_file FROM {{a}} a WHERE {_MATCH} {_FIRST} LIMIT 1) a ON true
-        LEFT JOIN journal.workouts w ON w.source = 'runkeeper' AND w.source_ref = a.activity_id
-        LEFT JOIN journal.workout_routes r ON r.workout_id = w.workout_id
+        LEFT JOIN fitness.workouts w ON w.source = 'runkeeper' AND w.source_ref = a.activity_id
+        LEFT JOIN fitness.workout_routes r ON r.workout_id = w.workout_id
         WHERE {_AFTER.format(t="g", k="gpx_file")}
         ORDER BY g._ingested_at::timestamptz, g.gpx_file LIMIT %(limit)s""").format(a=a, g=g),
                         _after(after) | {"limit": limit}).fetchall()
@@ -202,28 +203,13 @@ def read_tracks(conn, after, limit):
 
 # ── Loading ──────────────────────────────────────────────────────────────────
 
-def attach(conn, workout_id, kind, distance, unit, gpx, file_name):
-    """Draw a workout's route from its track. Returns 1 if stored, 0 if not (no usable track, not cardio, or a
-    route you uploaded yourself, which is never replaced). A blank distance is filled from the track."""
-    if kind not in DISTANCE_TYPES:
+def attach(conn, workout_id, category, gpx, file_name):
+    """Draw a cardio workout's route from its track. Returns 1 if stored, 0 if not (no usable track, not cardio, or
+    a route you uploaded yourself, which is never replaced). Blank distance, minutes and start come from the track."""
+    if category != "cardio":
         return 0
     r = route({"gpx": gpx})
-    if not r:
-        return 0
-    stored = conn.execute("""
-        INSERT INTO journal.workout_routes (workout_id, points, distance_km, elevation_gain_m, started_at, ended_at, file_name)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (workout_id) DO UPDATE SET points = EXCLUDED.points, distance_km = EXCLUDED.distance_km,
-            elevation_gain_m = EXCLUDED.elevation_gain_m, started_at = EXCLUDED.started_at, ended_at = EXCLUDED.ended_at,
-            file_name = EXCLUDED.file_name, created_at = now()
-        WHERE journal.workout_routes.file_asset_id IS NULL""",
-                          (workout_id, db.jsonb(r["points"]), r["distance_km"], r["elevation_gain_m"],
-                           r["started_at"], r["ended_at"], (file_name or "")[:200])).rowcount
-    if stored and distance is None and r["distance_km"]:
-        km = r["distance_km"]
-        conn.execute("UPDATE journal.workouts SET distance = %s WHERE workout_id = %s",
-                     (round(km / 1.609344 if unit == "mi" else km, 2), workout_id))
-    return stored
+    return int(bool(r) and fitness.save_route(conn, workout_id, r, file_name))
 
 
 def apply(conn, rows):
@@ -235,21 +221,20 @@ def apply(conn, rows):
             out["skipped"].append(row.get("activity_id"))
             continue
         saved = conn.execute("""
-            INSERT INTO journal.workouts (workout_date, workout_type, activity, minutes, distance, distance_unit, note,
-                                          source, source_ref, details)
-            VALUES (%(workout_date)s, %(workout_type)s, %(activity)s, %(minutes)s, %(distance)s, %(distance_unit)s, %(note)s,
-                    'runkeeper', %(source_ref)s, %(details)s)
+            INSERT INTO fitness.workouts (workout_date, started_at, activity_type, title, minutes, note, source, source_ref,
+                                          details)
+            VALUES (%(workout_date)s, %(started_at)s, fitness.activity_type_for(NULL, %(what)s), %(title)s, %(minutes)s,
+                    %(note)s, 'runkeeper', %(source_ref)s, %(details)s)
             ON CONFLICT (source_ref) WHERE source = 'runkeeper' DO UPDATE
-                SET minutes = EXCLUDED.minutes, distance_unit = EXCLUDED.distance_unit,
-                    distance = CASE WHEN journal.workouts.workout_type IN ('Cardio', 'Dog walk')
-                                    THEN EXCLUDED.distance ELSE journal.workouts.distance END,
-                    details = journal.workouts.details || EXCLUDED.details
-            RETURNING workout_id, workout_type, distance, distance_unit, (xmax = 0) AS added""",
+                SET minutes = EXCLUDED.minutes, started_at = EXCLUDED.started_at,
+                    details = fitness.workouts.details || EXCLUDED.details
+            RETURNING workout_id, category, (xmax = 0) AS added""",
                              {**w, "details": Jsonb(w["details"])}).fetchone()
         out["workouts_added" if saved["added"] else "workouts_updated"] += 1
+        if saved["category"] == "cardio":
+            fitness.write_cardio(conn, saved["workout_id"], w["cardio"])
         if row.get("gpx"):
-            out["routes"] += attach(conn, saved["workout_id"], saved["workout_type"], saved["distance"],
-                                    saved["distance_unit"], row["gpx"], row.get("track_file"))
+            out["routes"] += attach(conn, saved["workout_id"], saved["category"], row["gpx"], row.get("track_file"))
     return out
 
 
@@ -261,8 +246,7 @@ def apply_tracks(conn, rows):
             out["tracks_without_activity"] += 1
         # Not loaded yet: the activity brings its track when it loads. Already drawn: its activity just brought it.
         elif row["workout_id"] is not None and not row["drawn"]:
-            out["routes"] += attach(conn, row["workout_id"], row["workout_type"], row["distance"], row["distance_unit"],
-                                    row["gpx"], row["gpx_file"])
+            out["routes"] += attach(conn, row["workout_id"], row["category"], row["gpx"], row["gpx_file"])
     return out
 
 
@@ -345,7 +329,7 @@ def status(conn):
         out["gpx"] = {"available": False, "error": gpx_problem}
     workouts = conn.execute("""SELECT COUNT(*) AS n, COUNT(r.workout_id) AS routes, MIN(workout_date) AS first,
                                       MAX(workout_date) AS last
-                               FROM journal.workouts w LEFT JOIN journal.workout_routes r USING (workout_id)
+                               FROM fitness.workouts w LEFT JOIN fitness.workout_routes r USING (workout_id)
                                WHERE w.source = 'runkeeper'""").fetchone()
     last = conn.execute("SELECT report, synced_at FROM virtuwill.sync_reports WHERE source = %s", (SOURCE,)).fetchone()
     return out | {"available": True,
