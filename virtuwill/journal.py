@@ -1,5 +1,8 @@
 """The journal: one entry per calendar date, with tags, habits and meals.
 
+Habits belong to the day, not the entry: journal.daily_habits has a row per day and
+a column per habit, NULL until set (set_habits). A day needs no entry to have them.
+
 The journal page's API shape is unchanged (camelCase, meals as {B, L, D, S},
 accounts as [{institution, name, balance}]). An entry's account list is kept
 as finance.balance_snapshots on the entry's date.
@@ -9,6 +12,7 @@ import uuid
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
+from psycopg import sql
 
 import config
 from . import db, finance
@@ -21,6 +25,43 @@ SLOTS = {"B": "breakfast", "L": "lunch", "D": "dinner", "S": "snack"}   # S: sna
 
 class DateTaken(Exception):
     """Another journal entry already exists for that calendar date."""
+
+
+class BadHabits(ValueError):
+    """Habits that aren't in journal.habits, or a value that isn't true, false or null."""
+
+
+# ── Habits: one row per day, a column per habit ──────────────────────────────
+
+def habit_names(conn):
+    return [r["habit"] for r in conn.execute("SELECT habit FROM journal.habits ORDER BY position, habit")]
+
+
+def set_habits(conn, day, habits, replace=False):
+    """Set the owner's answer for a day's habits: true or false, or None to clear it (the day's records decide).
+    With replace, the habits not given are cleared too. Raises BadHabits for an unknown habit or value."""
+    if not isinstance(habits, dict):
+        raise BadHabits("habits must be an object of {habit: true | false | null}")
+    known = habit_names(conn)
+    unknown = sorted(str(h) for h in habits if h not in known)
+    if unknown:
+        raise BadHabits(f"Unknown habit: {', '.join(unknown)} (known: {', '.join(known)})")
+    if any(v is not None and not isinstance(v, bool) for v in habits.values()):
+        raise BadHabits("A habit is true, false, or null to clear it")
+    values = {h: habits.get(h) for h in (known if replace else habits)}
+    if not values:
+        return
+    names = [sql.Identifier(h) for h in values]
+    conn.execute(sql.SQL("""INSERT INTO journal.daily_habits (day, {cols}) VALUES (%s, {marks})
+                            ON CONFLICT (day) DO UPDATE SET {sets}, updated_at = now()""").format(
+        cols=sql.SQL(", ").join(names), marks=sql.SQL(", ").join(sql.Placeholder() * len(names)),
+        sets=sql.SQL(", ").join(sql.SQL("{c} = EXCLUDED.{c}").format(c=c) for c in names)), [day, *values.values()])
+
+
+def day_habits(conn, day):
+    """The day's habits for the screens: each with its label, whether it's done, and whether set or ticked."""
+    return [dict(r) for r in conn.execute("""SELECT habit, label, polarity, derived_from, done, origin FROM journal.day_habits
+                                             WHERE day = %s ORDER BY position, habit""", (day,))]
 
 
 # ── Repository ────────────────────────────────────────────────────────────────
@@ -70,12 +111,12 @@ def write(conn, entry):
     for position, tag in enumerate(tags):
         conn.execute("INSERT INTO journal.entry_tags (entry_date, tag, position) VALUES (%s, %s, %s)", (day, tag, position))
 
-    conn.execute("DELETE FROM journal.habit_logs WHERE entry_date = %s", (day,))
-    # Only habits the owner set; the rest follow the day's records (journal.day_habits).
-    for habit, done in (entry.get("habits") or {}).items():
-        conn.execute("INSERT INTO journal.habits (habit, label) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-                     (str(habit), str(habit).title()))
-        conn.execute("INSERT INTO journal.habit_logs (entry_date, habit, done) VALUES (%s, %s, %s)", (day, str(habit), bool(done)))
+    # The habits the owner set on the page, when sent; the rest follow the day's records (journal.day_habits).
+    # A habit no longer in journal.habits (an older store's) is left out rather than made up.
+    if "habits" in entry:
+        known = set(habit_names(conn))
+        set_habits(conn, day, {h: bool(v) for h, v in (entry.get("habits") or {}).items() if h in known and v is not None},
+                   replace=True)
 
     # Meals are recorded in Health › Food now; older entries' meal notes are kept unless sent.
     if "meals" in entry:
@@ -94,7 +135,8 @@ def write(conn, entry):
 SELECT = """
 SELECT e.entry_id, e.entry_date, e.quote, e.quote_author, e.free_write, e.source, e.created_at,
        COALESCE((SELECT jsonb_agg(t.tag ORDER BY t.position) FROM journal.entry_tags t WHERE t.entry_date = e.entry_date), '[]') AS tags,
-       COALESCE((SELECT jsonb_object_agg(h.habit, h.done) FROM journal.habit_logs h WHERE h.entry_date = e.entry_date), '{}') AS habits,
+       COALESCE((SELECT jsonb_strip_nulls(to_jsonb(dh) - 'day' - 'updated_at') FROM journal.daily_habits dh
+                 WHERE dh.day = e.entry_date), '{}') AS habits,
        COALESCE((SELECT jsonb_object_agg(m.slot, m.description) FROM journal.meals m
                  WHERE m.source = 'journal' AND m.source_ref = e.entry_id), '{}') AS meals,
        COALESCE((SELECT jsonb_agg(jsonb_build_object('institution', s.institution_text, 'name', s.account_text,
@@ -192,13 +234,14 @@ def save_route():
         "quote": (data.get("quote") or "").strip(),
         "quoteAuthor": (data.get("quoteAuthor") or "").strip(),
         "freeWrite": data.get("freeWrite") or "",
-        "habits": data.get("habits") or {},
         "tags": data.get("tags") or [],
         "source": data.get("source", "manual"),
         "createdAt": data.get("createdAt"),
     }
-    # Meal notes and balance check-ins are replaced only when sent, so a
-    # screen that edits part of an entry (e.g. habits on Today) keeps the rest.
+    # Habits, meal notes and balance check-ins are replaced only when sent, so a
+    # screen that edits part of an entry keeps the rest.
+    if "habits" in data:
+        entry["habits"] = data.get("habits") or {}
     if "meals" in data:
         meals = data.get("meals") or {}
         entry["meals"] = {k: (meals.get(k) or "").strip() for k in SLOTS}

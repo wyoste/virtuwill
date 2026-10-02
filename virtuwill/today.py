@@ -32,8 +32,7 @@ def today():
         return jsonify({
             "date": day.isoformat(),
             "entry": journal.to_api(entry) if entry else None,
-            "habits": _rows(conn, """SELECT habit, label, polarity, derived_from, done, origin FROM journal.day_habits
-                                     WHERE day = %s ORDER BY polarity, label""", day),
+            "habits": journal.day_habits(conn, day),
             "activity": plain(activity) if activity else None,
             "week": plain(conn.execute("SELECT * FROM health.weekly_workout_progress WHERE week_start = %s",
                                        (week_start,)).fetchone() or {"week_start": week_start}),
@@ -55,3 +54,19 @@ def today():
                     WHERE t.posted_on = %s ORDER BY t.amount DESC""", day),
             },
         })
+
+
+@bp.route("/api/v1/days/<day>/habits", methods=["PUT"])
+@admin_required
+def set_habits(day):
+    """Set some of a day's habits: {"run": true, "drink": false}; null clears one, so the day's records decide.
+    Returns the day's habits as Today shows them. The day needs no journal entry."""
+    day = parse_date(day)
+    if not in_calendar(day):
+        return jsonify({"error": "date must be YYYY-MM-DD"}), 400
+    with db.tx() as conn:
+        try:
+            journal.set_habits(conn, day, request.get_json(silent=True))
+        except journal.BadHabits as e:
+            return jsonify({"error": str(e)}), 400
+        return jsonify(journal.day_habits(conn, day))

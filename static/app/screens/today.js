@@ -48,12 +48,8 @@ export async function render(view, { params, navigate }) {
       title: habit.origin === 'derived' ? 'Ticked from what you logged today; click to set it yourself' : null },
       habit.label, habit.origin === 'derived' ? h('small', {}, 'auto') : null);
     btn.onclick = async () => {
-      // Setting a habit writes it on the day's journal entry (created if needed).
-      const habits = Object.fromEntries(data.habits.filter(x => x.origin === 'manual').map(x => [x.habit, x.done]));
-      habits[habit.habit] = !habit.done;
-      const body = entry ? { ...entry, habits } : { id: 'e' + Date.now(), date, habits, freeWrite: '', quote: '', quoteAuthor: '', tags: [] };
-      delete body.meals; delete body.accounts; delete body.health; delete body.derivedHabits;
-      try { await api('/api/journal/entry', { method: 'POST', body }); reload(); }
+      // A habit belongs to the day: setting one needs no journal entry.
+      try { await api(`/api/v1/days/${date}/habits`, { method: 'PUT', body: { [habit.habit]: !habit.done } }); reload(); }
       catch (e) { toast(e.message, 'error'); }
     };
     return btn;
