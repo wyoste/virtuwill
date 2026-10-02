@@ -2,8 +2,9 @@
 // (Today, Health, Journal). Each resolves true when something was saved.
 import { h, api, dialog, field, values, toast, isoToday, confirmDelete } from './lib.js';
 
-const WORKOUT_TYPES = ['Strength', 'Cardio', 'HIIT', 'Mobility / recovery', 'Dog walk', 'Other'];
-const DISTANCE_TYPES = new Set(['Cardio', 'Dog walk']);      // the only workouts with a distance or a route
+// What a workout can be (run, dog walk, lifting …), each in one kind: cardio, strength, hiit, mobility, other.
+let activityTypes = null;
+const loadActivityTypes = () => (activityTypes = activityTypes || api('/api/v1/health/activity-types').catch(e => { activityTypes = null; throw e; }));
 const CIRCUIT = [['rounds', 'Rounds', 1, 100], ['exercises_per_round', 'Exercises per round', 1, 50],
                  ['work_seconds', 'Seconds per exercise', 1, 3600], ['exercise_rest_seconds', 'Rest between exercises (s)', 0, 3600],
                  ['round_rest_seconds', 'Rest between rounds (s)', 0, 3600]];
@@ -37,7 +38,8 @@ export function circuitText(c) {
           c.exercise_rest_seconds ? `${c.exercise_rest_seconds}s rest` : null,
           c.round_rest_seconds ? `${c.round_rest_seconds}s between rounds` : null].filter(Boolean).join(' · ');
 }
-export const liftsText = lifts => (lifts || []).map(l => `${l.lift} ${l.sets}×`).join(', ');
+export const liftsText = lifts => (lifts || []).map(l =>
+  `${l.lift} ${l.sets}×${l.reps ? l.reps : ''}${l.weight_lb ? ` @ ${l.weight_lb} lb` : ''}`).join(', ');
 
 // Strength: pick lifts (a filtered checklist, plus any lift typed in), then the sets of each.
 function liftPicker(catalog, chosen) {
@@ -82,32 +84,40 @@ function liftPicker(catalog, chosen) {
   };
 }
 
-// A cardio workout or dog walk can carry its distance and the route it took (a GPX or TCX file from
-// Strava, Garmin Connect or a running app); the route fills in a blank distance and time.
-// A strength workout lists its lifts and sets; a HIIT workout describes its circuit.
+// A workout is what was done (an activity type); its kind decides what else it records.
+// Cardio (run, walk, dog walk, bike …) carries its distance, calories and heart rate, and the route it took
+// (a GPX or TCX file from Strava, Garmin Connect or a running app, which fills in a blank distance and time).
+// Lifting lists its lifts and sets; HIIT describes its circuit.
 export async function workout(date, record = null) {
-  const r = record || { workout_date: date, workout_type: 'Strength' };
-  const catalog = await api('/api/v1/health/lifts').catch(() => []);
+  const r = record || { workout_date: date, activity_type: 'strength' };
+  const [types, catalog] = await Promise.all([loadActivityTypes(), api('/api/v1/health/lifts').catch(() => [])]);
+  const kindOf = Object.fromEntries(types.map(t => [t.activity_type, t.category]));
+  const groups = [...new Map(types.map(t => [t.category, t.category_label]))];
+  const select = h('select', { name: 'activity_type', id: 'f-activity-type' }, groups.map(([category, label]) =>
+    h('optgroup', { label }, types.filter(t => t.category === category).map(t =>
+      h('option', { value: t.activity_type, selected: t.activity_type === r.activity_type }, t.label)))));
+  const activity = h('label', { class: 'ws-field', for: 'f-activity-type' }, h('span', {}, 'Activity'), select);
   const route = h('input', { type: 'file', accept: '.gpx,.tcx,application/gpx+xml,application/vnd.garmin.tcx+xml', 'aria-label': 'Route file' });
-  const type = field('Type', 'workout_type', { kind: 'select', options: WORKOUT_TYPES, value: r.workout_type });
   const minutes = field('Minutes', 'minutes', { kind: 'number', value: r.minutes ?? '', min: 0, max: 1440, step: 1 });
   const lifts = liftPicker(catalog, r.lifts || []);
   const total = h('p', { class: 'ws-note wide', 'aria-live': 'polite' });
   const circuitFields = CIRCUIT.map(([key, label, min, max]) => field(label, 'circuit_' + key, { kind: 'number', min, max, step: 1,
     value: r.circuit?.[key] ?? (min === 0 ? 0 : '') }));
   const part = (...children) => h('div', { class: 'ws-part' }, children);
-  const distancePart = part(
+  const cardioPart = part(
     field('Distance', 'distance', { kind: 'number', value: r.distance ?? '', min: 0, max: 1000, step: 0.01, placeholder: 'e.g. 3.1' }),
     field('Unit', 'distance_unit', { kind: 'select', options: [['mi', 'miles'], ['km', 'kilometres']], value: r.distance_unit || 'mi' }),
+    field('Calories', 'calories', { kind: 'number', value: r.calories ?? '', min: 0, max: 20000, step: 1 }),
+    field('Average heart rate', 'avg_heart_rate', { kind: 'number', value: r.avg_heart_rate ?? '', min: 20, max: 250, step: 1 }),
     h('label', { class: 'ws-field wide' }, h('span', {}, r.has_route ? 'Replace the route (GPX or TCX)' : 'Route map (GPX or TCX file, optional)'), route,
       h('small', { class: 'ws-note' }, 'Export the activity from Strava, Garmin Connect or your running app. A blank distance or time is filled in from it.')));
   const liftPart = part(lifts.el);
   const circuitPart = part(h('p', { class: 'ws-note wide' }, 'The circuit. Leave Minutes blank to use its length.'), ...circuitFields, total);
   const f = form(
     field('Date', 'workout_date', { kind: 'date', value: r.workout_date, required: true }),
-    type, minutes,
-    field('Activity', 'activity', { value: r.activity, placeholder: 'e.g. Run, Bike, Upper body' }),
-    distancePart, liftPart, circuitPart,
+    activity, minutes,
+    field('Name', 'title', { value: r.title, placeholder: 'Optional, e.g. Long run, Upper body' }),
+    cardioPart, liftPart, circuitPart,
     field('Note', 'note', { value: r.note, wide: true }));
   const circuit = () => {
     const v = values(f), c = {};
@@ -115,10 +125,10 @@ export async function workout(date, record = null) {
     return c;
   };
   const show = () => {
-    const kind = type.querySelector('select').value;
-    distancePart.hidden = !DISTANCE_TYPES.has(kind);
-    liftPart.hidden = kind !== 'Strength';
-    circuitPart.hidden = kind !== 'HIIT';
+    const kind = kindOf[select.value];
+    cardioPart.hidden = kind !== 'cardio';
+    liftPart.hidden = kind !== 'strength';
+    circuitPart.hidden = kind !== 'hiit';
     const secs = circuitSeconds(circuit());
     total.textContent = secs ? `Circuit length: ${clock(secs)}` : 'Fill in rounds, exercises and seconds to see the length.';
   };
@@ -128,14 +138,14 @@ export async function workout(date, record = null) {
   // Once the workout exists, a retry (say, after a route file was refused) updates it rather than logging it twice.
   let id = record?.workout_id;
   return edit(record ? 'Edit workout' : 'Log a workout', f, async body => {
-    const kind = body.workout_type;
+    const kind = kindOf[body.activity_type];
     for (const [key] of CIRCUIT) delete body['circuit_' + key];
-    if (!DISTANCE_TYPES.has(kind)) body.distance = null;
-    body.lifts = kind === 'Strength' ? lifts.value() : [];
-    body.circuit = kind === 'HIIT' ? circuit() : null;
+    if (kind !== 'cardio') for (const key of ['distance', 'distance_unit', 'calories', 'avg_heart_rate']) delete body[key];
+    if (kind === 'strength') body.lifts = lifts.value();
+    if (kind === 'hiit') body.circuit = circuit();
     const saved = await api(id ? `/api/v1/health/workouts/${id}` : '/api/v1/health/workouts', { method: id ? 'PUT' : 'POST', body });
     id = saved.workout_id;
-    if (DISTANCE_TYPES.has(kind) && route.files.length) {
+    if (kind === 'cardio' && route.files.length) {
       const file = new FormData();
       file.append('file', route.files[0]);
       await api(`/api/v1/health/workouts/${id}/route`, { method: 'POST', form: file });
@@ -144,7 +154,7 @@ export async function workout(date, record = null) {
 }
 
 // ── Distance, pace and the route map ────────────────────────────────────────
-const isRide = w => /bik|cycl|ride|spin/i.test(`${w.activity} ${w.note}`);
+const isRide = w => w.activity_type === 'bike';
 export function pace(w) {
   if (!w.distance || !w.minutes) return null;
   const unit = w.distance_unit || 'mi';
@@ -180,7 +190,7 @@ export async function routeMap(w) {
   const map = h('div', { class: 'ws-route-map', role: 'img', 'aria-label': 'Map of the route' });
   const body = h('div', {}, map, h('dl', { class: 'ws-route-facts' }, facts.map(([k, v]) => h('div', {}, h('dt', {}, k), h('dd', {}, v)))),
     route.file_name ? h('p', { class: 'ws-note' }, 'From ' + route.file_name) : null);
-  const shown = dialog(`${w.activity || w.workout_type} · ${w.workout_date}`, body, [['Close', null]]);
+  const shown = dialog(`${w.name} · ${w.workout_date}`, body, [['Close', null]]);
   try {
     const L = await loadLeaflet();
     const m = L.map(map, { scrollWheelZoom: false });
@@ -579,10 +589,12 @@ export function quickAdd(date, onSaved) {
 export function recordRow(kind, r, onChange) {
   const spec = {
     workouts: { id: r.workout_id, label: 'workout', editor: workout, date: r.workout_date,
-                title: [r.activity || r.workout_type, r.distance != null ? `${Number(r.distance)} ${r.distance_unit || 'mi'}` : null,
+                title: [r.name, r.distance != null ? `${Number(r.distance)} ${r.distance_unit || 'mi'}` : null,
                         r.minutes != null ? Math.round(r.minutes) + ' min' : null].filter(Boolean).join(' · '),
-                meta: [r.activity ? r.workout_type : null, pace(r), liftsText(r.lifts), circuitText(r.circuit),
-                       r.is_dog_walk ? "doesn't count toward the workout goal" : null, r.note].filter(Boolean).join(' · '),
+                meta: [r.title ? r.activity_label : null, pace(r), r.calories != null ? Math.round(r.calories) + ' kcal' : null,
+                       liftsText(r.lifts), circuitText(r.circuit),
+                       r.counts_toward_goal === false ? "doesn't count toward the workout goal" : null,
+                       r.source === 'runkeeper' ? 'RunKeeper' : null, r.note].filter(Boolean).join(' · '),
                 extra: r.has_route ? h('button', { class: 'btn small', 'aria-label': 'Route map', onclick: () => routeMap(r).catch(e => toast(e.message, 'error')) }, '🗺 Map') : null },
     meals: { id: r.meal_id, label: 'meal', editor: meal, date: r.meal_date,
              title: (r.description || '(meal)') + (r.items?.length > 1 ? ` · ${r.items.length} foods` : ''),

@@ -116,15 +116,15 @@ class TrackerTests(unittest.TestCase):
             with db.tx() as conn:
                 return trackers.project(conn, 'health', state, document('health'))
         project(health_state())
-        ids = lambda: {r["note"] or r["workout_type"]: r["workout_id"] for r in
-                       db.all("SELECT workout_id, workout_type, note FROM journal.workouts WHERE source = 'health_tracker'")}
+        ids = lambda: {r["note"] or r["activity_type"]: r["workout_id"] for r in
+                       db.all("SELECT workout_id, activity_type, note FROM fitness.workouts WHERE source = 'health_tracker'")}
         before = ids()
-        self.assertEqual(set(before), {"Strength", "Dog walk"})
+        self.assertEqual(set(before), {"strength", "dog_walk"})
         workouts = [health_state()["workouts"][0], {"date": "2026-09-23", "type": "Cardio", "minutes": 45, "note": "bike"}]
         project(health_state(workouts=workouts))
         after = ids()
-        self.assertEqual(after["Strength"], before["Strength"])
-        self.assertEqual(set(after), {"Strength", "bike"})
+        self.assertEqual(after["strength"], before["strength"])
+        self.assertEqual(set(after), {"strength", "bike"})
         project(health_state(workouts=workouts))
         self.assertEqual(ids(), after)
         self.assertEqual(db.one("SELECT COUNT(*) AS n FROM health.body_measurements")["n"], 2)
